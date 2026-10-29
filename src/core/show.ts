@@ -70,19 +70,31 @@ export function pickTier(cls: FactClass, rng: Rng): Tier {
   return rng.weighted(TIER_TABLE[cls]) as Tier
 }
 
+// 1 回の抽選の時間割（ms、「次へ」から）。番号は各自のスマホで先に開け、大画面はあとから答え合わせをする:
+//   0 〜 charge         手元のスロットを回して溜める（連打しても、これより早くは STOP できない）
+//   charge 〜 deadline  STOP の受付（押さなかった人は deadline で自動で止まる）
+//   reveal              大画面の答え合わせ（金・虹は、ここから MC の PUSH を待つ）
+//   total               結果を見せ終わる
 export interface Timing {
-  total: number // ms
-  reveal: number // 公開の予定時刻。金・虹は、ここから MC の PUSH を待つ
+  charge: number
+  deadline: number
+  reveal: number
+  total: number
   push: boolean
 }
 
-const TOTAL = [5000, 6500, 8000, 9500, 12000]
-const REVEAL = [2600, 4000, 5600, 6800, 8500]
+const CHARGE = [3500, 4500, 5500, 6500, 7500]
+const STOP_WINDOW = 3500
+const RESULT = [3200, 3600, 4000, 4400, 5000]
+const RAINBOW_REVEAL = 8500 // 虹（全員確定の流れ）の拍の基準
 
 export function timing(tier: Tier, size: number): Timing {
-  // 少人数は抽選回数が多くなるので、尺を縮める
-  const k = size <= 100 ? 0.8 : 1
-  return { total: TOTAL[tier] * k, reveal: REVEAL[tier] * k, push: tier >= 3 }
+  // 少人数は抽選回数が多くなるので、尺を少し縮める
+  const k = size <= 100 ? 0.85 : 1
+  const charge = CHARGE[tier] * k
+  const deadline = charge + STOP_WINDOW
+  const reveal = deadline + 400
+  return { charge, deadline, reveal, total: reveal + RESULT[tier] * k, push: tier >= 3 }
 }
 
 export interface Plan {
@@ -203,7 +215,7 @@ export function schedule(plan: Plan, t: Timing): Beat[] {
 
   if (plan.tier === 4 && !plan.upgrade) {
     // 虹: すべてを止める → ヒビ → 確定ロゴ → 全台が虹色 → PUSH 待ち
-    const k = r / REVEAL[4]
+    const k = r / RAINBOW_REVEAL
     heat = 4
     add(0, 'freeze')
     add(1500 * k, 'crack')

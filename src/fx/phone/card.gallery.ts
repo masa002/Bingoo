@@ -44,11 +44,11 @@ function mockPhone(host: HTMLElement, tl: Timeline, o: { size?: 5 | 3; chip?: st
       <div style="min-height:38px;margin:0 14px">${
         o.chip ? `<div style="border-radius:10px;padding:6px 10px;font-weight:900;background:linear-gradient(90deg,#ff7a3d,#ef4444)">${o.chip}</div>` : ''
       }</div>
-      <div class="fxg-slot" style="position:relative;margin-top:6px"></div>
+      <div class="fxc-gal-slot" style="position:relative;margin-top:6px"></div>
       <div style="margin-top:8px;text-align:center"><small style="display:block;color:#8a93b8">最新の番号</small><b style="font-size:40px;font-weight:900">I20</b></div>
     </div>`,
   )
-  const card = new CardView(host.querySelector<HTMLElement>('.fxg-slot')!, { size, speed: tl.speed })
+  const card = new CardView(host.querySelector<HTMLElement>('.fxc-gal-slot')!, { size, speed: tl.speed })
   if (o.width) card.el.style.setProperty('--fxc-w', o.width)
   card.setCells(size === 5 ? CARD5 : CARD3)
   card.setMarks(size === 5 ? bits(12) : bits(4))

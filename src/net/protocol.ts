@@ -86,6 +86,9 @@ export type Msg =
       beats: Beat[]
       personal: { tier: Tier; waiting: string[] } // 本人宛て
     }
+  // STOP の受付が始まった。n は本人宛て（本番では本人にだけ送る）で、大画面には答え合わせまで出さない
+  | { type: 'drawOpen'; drawNo: number; n: number }
+  | { type: 'stopCount'; drawNo: number; count: number; total: number }
   | { type: 'awaitPush'; drawNo: number; ms: number }
   | {
       type: 'numberRevealed'
@@ -126,5 +129,6 @@ export type MsgOf<T extends Msg['type']> = Extract<Msg, { type: T }>
 // 端末（スマホ）から権威へのコマンド
 export type PhoneCommand =
   | { type: 'join' }
+  | { type: 'stop'; drawNo: number }
   | { type: 'choice'; kind: 'receive' | 'challenge' }
   | { type: 'entry' }

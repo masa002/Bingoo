@@ -8,7 +8,7 @@ import { DrawMachine } from '../fx/stage/draw'
 import { playAllKakutei, playFinalBall, playLastOne, playMole } from '../fx/stage/events'
 import type { LocalHub } from '../net/hub'
 import type { Msg, MsgOf, PrizeEntry, Totals } from '../net/protocol'
-import { countUp, esc, fit, fmt, h, q } from './dom'
+import { countUp, esc, fit, fmt, h, q, replay } from './dom'
 
 // 会場の大画面（1920×1080 で組んで縮小表示する）。抽選機・イベント・ダブルチャンスの演出は fx/ の部品で、
 // この画面は HUD・結果・会場ビュー・番号の盤と、メッセージから部品への振り分けを受け持つ。音（PA）はこの画面だけが鳴らす
@@ -36,6 +36,12 @@ const STAGE_HTML = `
   </div>
   <ol class="st-names"></ol>
 </section>
+<section class="st-stops">
+  <div class="st-stops-head"></div>
+  <div class="st-stops-count"><b>0</b><small></small></div>
+  <div class="st-stops-bar"><i></i></div>
+  <p class="st-stops-note"></p>
+</section>
 <section class="st-venue"><canvas width="610" height="236"></canvas><span class="st-venue-label">会場ビュー</span></section>
 <div class="st-board"></div>
 <canvas class="st-fx" width="1920" height="1080"></canvas>
@@ -55,6 +61,9 @@ export class StageView {
   private last = 0
   private scene: BgmScene = 'reception'
   private firstBingo = false
+  private size = 0
+  private stopShown = 0
+  private stopRaf = 0
 
   constructor(
     host: HTMLElement,
@@ -94,6 +103,10 @@ export class StageView {
         return
       case 'drawScheduled':
         return this.onScheduled(m)
+      case 'drawOpen':
+        return this.onDrawOpen()
+      case 'stopCount':
+        return this.onStopCount(m)
       case 'awaitPush':
         this.machine.awaitPush()
         return
@@ -144,6 +157,8 @@ export class StageView {
     this.dc?.destroy()
     this.dc = null
     this.firstBingo = false
+    this.size = m.size
+    this.hideStops()
     this.machine.setSpeed(this.clock.speed)
     this.machine.reset()
     this.drawn = new Set(m.drawn)
@@ -216,6 +231,7 @@ export class StageView {
   private onEvent(m: MsgOf<'eventPlay'>): void {
     this.hideOverlay()
     this.cancelAll()
+    this.hideStops()
     this.clearResult()
     const o = { speed: this.clock.speed, total: m.total }
     if (m.kind === 'wild') {
@@ -241,6 +257,7 @@ export class StageView {
     this.machine.reset()
     this.machine.setPool(Array.from({ length: 75 }, (_, i) => i + 1).filter((n) => !this.drawn.has(n)))
     this.machine.start(m.beats, m.plan)
+    this.showStops()
     // 会場ビュー（デモ専用）は、赤以上の溜めでリーチの人のスマホが光る様子を見せる
     this.cancelBeats = this.clock.run(
       m.beats.filter((b) => b.kind === 'sea'),
@@ -248,8 +265,72 @@ export class StageView {
     )
   }
 
+  // ---- 手元の STOP（番号は各自のスマホで先に開く。大画面は止めた人数を見せてから答え合わせ） ----
+
+  private showStops(): void {
+    const box = this.$('.st-stops')
+    box.dataset.mode = 'charge'
+    box.style.setProperty('--fill', '0')
+    this.$('.st-stops-head').textContent = 'いま、手元のスマホで回しています'
+    this.setStopCount(0, false)
+    this.$('.st-stops-count small').textContent = ` / ${fmt(this.size)} 人`
+    this.$('.st-stops-note').textContent = '連打でゲージを溜めて、STOP で自分の番号を開けよう'
+    box.classList.add('on')
+    this.$('.st-result').classList.add('hidden')
+    this.venue.stops(0)
+  }
+
+  private onDrawOpen(): void {
+    const box = this.$('.st-stops')
+    box.dataset.mode = 'open'
+    replay(box, 'flash')
+    this.$('.st-stops-head').textContent = 'STOP 受付中！'
+    this.$('.st-stops-note').textContent = '押さなかった人も、締め切りで自動で止まります'
+  }
+
+  private onStopCount(m: MsgOf<'stopCount'>): void {
+    const box = this.$('.st-stops')
+    if (!box.classList.contains('on')) return
+    this.setStopCount(m.count, true)
+    box.style.setProperty('--fill', String(m.count / Math.max(1, m.total)))
+    this.venue.stops(m.count / Math.max(1, m.total))
+    if (m.count >= m.total) {
+      box.dataset.mode = 'closed'
+      this.$('.st-stops-head').textContent = '全員の番号が開きました'
+      this.$('.st-stops-note').textContent = 'では、答え合わせ！'
+    }
+  }
+
+  // 止めた人数は、届くたびに数字を転がして見せる
+  private setStopCount(to: number, roll: boolean): void {
+    cancelAnimationFrame(this.stopRaf)
+    const b = this.$('.st-stops-count b')
+    const from = this.stopShown
+    this.stopShown = to
+    if (!roll) {
+      b.textContent = fmt(to)
+      return
+    }
+    const start = performance.now()
+    const ms = this.clock.scale(240)
+    const step = (now: number) => {
+      const k = Math.min(1, (now - start) / ms)
+      b.textContent = fmt(Math.round(from + (to - from) * k))
+      if (k < 1) this.stopRaf = requestAnimationFrame(step)
+    }
+    this.stopRaf = requestAnimationFrame(step)
+  }
+
+  private hideStops(): void {
+    cancelAnimationFrame(this.stopRaf)
+    this.$('.st-stops').classList.remove('on')
+    this.$('.st-result').classList.remove('hidden')
+    this.venue.stops(-1)
+  }
+
   private onRevealed(m: MsgOf<'numberRevealed'>): void {
     this.cancelBeats()
+    this.hideStops()
     void this.machine.reveal(m.n, m.tier)
     this.drawn.add(m.n)
     this.last = m.n
@@ -392,6 +473,7 @@ class Venue {
   private flashDraw = 0
   private flashUntil = 0
   private spotUntil = 0
+  private stopRatio = -1 // 手元の STOP を受付中なら、止めた人の割合（それ以外は -1）
   private until = 0
   private raf = 0
 
@@ -419,6 +501,12 @@ class Venue {
   rainbow(): void {
     this.mode = 'rainbow'
     this.run(5000)
+  }
+
+  // 回している間は全員のスマホを暗くし、STOP した人から明るく戻す（止める順はばらばらに見せる）
+  stops(ratio: number): void {
+    this.stopRatio = ratio
+    if (!this.raf) this.refresh()
   }
 
   reveal(n: number, drawNo: number): void {
@@ -486,8 +574,15 @@ class Venue {
       }
       const x = ox + (k % cols) * pitch + (pitch - dot) / 2
       const y = oy + Math.floor(k / cols) * pitch + (pitch - dot) / 2
+      if (this.stopRatio >= 0) {
+        // 止めた順はばらばらに見せる（番号から決まる疑似乱数と割合を比べる）
+        const stopped = ((Math.imul(k + 1, 2654435761) >>> 0) % 1000) / 1000 < this.stopRatio
+        if (!stopped) ctx.globalAlpha = 0.35
+        else if (color === '#1c2445') color = '#3f74b8'
+      }
       ctx.fillStyle = color
       ctx.fillRect(x, y, dot, dot)
+      ctx.globalAlpha = 1
       if (p.isMe) {
         ctx.strokeStyle = '#ffffff'
         ctx.lineWidth = 2

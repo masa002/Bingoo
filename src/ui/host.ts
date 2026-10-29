@@ -34,6 +34,7 @@ const HOST_HTML = `
   <div class="dp-ev">
     <button data-ev="wild">🌈 全員確定（虹玉）</button><button data-ev="mole">モグラ</button><button data-ev="moleMe">モグラ（自分に当てる）</button>
   </div>
+  <p class="dp-note">指定しなくても、景品の減り方に合わせて自動で出ます（ビンゴが速すぎればモグラ、静かすぎれば虹玉）</p>
   <h4>次の番号 <label class="dp-spoil-label"><input type="checkbox" class="dp-spoil" /> ネタバレ表示</label></h4>
   <div class="dp-grid"></div>
   <p class="dp-legend">数字をクリックで次の番号に指定。ネタバレ: <b class="b">B</b>=新規ビンゴ人数 <b class="r">R</b>=新規リーチ人数 ★=あなたがビンゴ ●=あなたがリーチ ・=あなたにヒット</p>
@@ -72,6 +73,7 @@ const HOST_HTML = `
 export class HostView {
   private readonly root: HTMLDivElement
   private pushReady = false
+  private tier = ''
 
   constructor(
     host: HTMLElement,
@@ -187,8 +189,16 @@ export class HostView {
         break
       case 'drawScheduled':
         this.$('.dp-msg').textContent = ''
-        this.status(`抽選中 ${TIER_SHAPE[m.tier]} ${TIER_NAME[m.tier]}`)
+        this.tier = `${TIER_SHAPE[m.tier]} ${TIER_NAME[m.tier]}`
+        this.status(`抽選中 ${this.tier} — 各自のスマホで回しています`)
         break
+      case 'drawOpen':
+        this.status(`抽選中 ${this.tier} — STOP 受付中`)
+        return
+      case 'stopCount':
+        // 0.25 秒ごとに届くので、盤の描き直しはしない
+        this.status(`抽選中 ${this.tier} — STOP ${m.count.toLocaleString('ja-JP')} / ${m.total.toLocaleString('ja-JP')} 人`)
+        return
       case 'awaitPush':
         this.pushReady = true
         this.status('PUSH を押してください（3 秒で自動）')
