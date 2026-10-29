@@ -1,0 +1,950 @@
+/* スマホの手元のあおり（.fxa-、z-index 10〜19）と単発の演出（.fxo-、z-index 20〜29）。aori.ts */
+
+.fxa,
+.fxo {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  color: #fff;
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.fxa {
+  z-index: 10;
+}
+
+.fxo {
+  z-index: 22;
+}
+
+.fxa *,
+.fxo * {
+  box-sizing: border-box;
+}
+
+/* 縁取りした大きな文字: i が縁（下）、b が塗り（上） */
+.fxa-txt {
+  position: relative;
+  display: inline-block;
+  font-weight: 900;
+  line-height: 1.05;
+  white-space: nowrap;
+  filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.45));
+}
+
+.fxa-txt i,
+.fxa-txt b {
+  display: block;
+  font-style: inherit;
+  font-weight: 900;
+}
+
+.fxa-txt i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--stroke, #fff);
+  -webkit-text-stroke: var(--sw, 0.2em) var(--stroke, #fff);
+}
+
+.fxa-txt b {
+  position: relative;
+  background: var(--fill, linear-gradient(180deg, #fff, #dfe6ff));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ---- あおりの層 ---------------------------------------------------------- */
+
+.fxa-dim,
+.fxa-px,
+.fxo-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.fxa-dim {
+  opacity: 0;
+}
+
+.fxa-edge {
+  position: absolute;
+  inset: 0;
+  opacity: 0.9;
+}
+
+.fxa[data-tier='1'] .fxa-edge {
+  box-shadow: inset 0 0 36px 4px rgba(34, 197, 94, 0.55);
+}
+
+.fxa[data-tier='2'] .fxa-edge {
+  box-shadow: inset 0 0 50px 8px rgba(239, 68, 68, 0.55);
+}
+
+.fxa[data-tier='3'] .fxa-edge {
+  box-shadow: inset 0 0 56px 10px rgba(245, 197, 66, 0.6);
+  animation: fxa-breathe var(--fxa-breathe-ms, 2400ms) ease-in-out infinite;
+}
+
+.fxa[data-tier='4'] .fxa-edge {
+  box-shadow: inset 0 0 50px 8px rgba(255, 255, 255, 0.35);
+}
+
+@keyframes fxa-breathe {
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* 虹: 背景の色だけを回す（明るさは一定） */
+.fxa-wash {
+  position: absolute;
+  inset: 0;
+  opacity: 0.18;
+  background: linear-gradient(160deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
+  animation: fxa-hue var(--fxa-hue-ms, 12000ms) linear infinite;
+}
+
+@keyframes fxa-hue {
+  to {
+    filter: hue-rotate(360deg);
+  }
+}
+
+/* 後光（画面の 1/3 以下の円で、10 秒に 1 周より遅く回す） */
+.fxa-rays,
+.fxo-rays {
+  position: absolute;
+  left: 50%;
+  top: var(--fxa-center, 37%);
+  width: 320px;
+  height: 320px;
+  margin: -160px 0 0 -160px;
+  opacity: 0.5;
+}
+
+.fxa-rays i,
+.fxo-rays i {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff, #ff5a5a);
+  -webkit-mask:
+    repeating-conic-gradient(#000 0deg 9deg, transparent 9deg 18deg),
+    radial-gradient(circle, #000 16%, transparent 70%);
+  -webkit-mask-composite: source-in;
+  mask:
+    repeating-conic-gradient(#000 0deg 9deg, transparent 9deg 18deg),
+    radial-gradient(circle, #000 16%, transparent 70%);
+  mask-composite: intersect;
+  animation: fxa-spin var(--fxa-spin-ms, 20000ms) linear infinite;
+}
+
+@keyframes fxa-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 画面上部の小さなバー（スマホの「段階のバー」の位置に重ねる） */
+.fxa-bar {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: var(--fxa-bar-top, 34px);
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  overflow: hidden;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  background: #151c3d;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  transition: filter 0.4s;
+}
+
+.fxa[data-tier='0'] .fxa-bar {
+  background: linear-gradient(180deg, #2f5fb8, #1e3f86);
+}
+
+.fxa[data-tier='1'] .fxa-bar {
+  background: linear-gradient(180deg, #2fd56c, #15803d);
+  box-shadow: 0 0 16px rgba(34, 197, 94, 0.45);
+}
+
+.fxa[data-tier='2'] .fxa-bar {
+  background: linear-gradient(180deg, #ff6450, #b91c1c);
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.5);
+}
+
+.fxa[data-tier='3'] .fxa-bar {
+  background: linear-gradient(180deg, #fff1b8, #f5c542 50%, #c99212);
+  color: #2a1a00;
+  box-shadow: 0 0 22px rgba(245, 197, 66, 0.6);
+}
+
+.fxa[data-tier='4'] .fxa-bar {
+  background: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
+  color: #1a1400;
+  box-shadow: 0 0 22px rgba(255, 255, 255, 0.45);
+}
+
+.fxa[data-tier='4'] .fxa-bar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: inherit;
+  animation: fxa-hue var(--fxa-hue-ms, 12000ms) linear infinite;
+}
+
+.fxa-bar > * {
+  position: relative;
+}
+
+.fxa-shape {
+  font-size: 15px;
+}
+
+.fxa-bar-wait {
+  position: absolute !important;
+  right: 12px;
+  font-size: 13px;
+  letter-spacing: 0;
+  opacity: 0.95;
+}
+
+.fxa-meter {
+  position: absolute !important;
+  left: 10px;
+  right: 10px;
+  bottom: 4px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.fxa-meter i {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 50%;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.fxa-bar.is-push,
+.fxa.is-push .fxa-bar {
+  animation: fxa-push var(--fxa-push-ms, 1600ms) ease-in-out infinite;
+}
+
+@keyframes fxa-push {
+  50% {
+    box-shadow: 0 0 30px rgba(255, 236, 170, 0.85);
+  }
+}
+
+.fxa.is-fail .fxa-bar {
+  filter: grayscale(1) brightness(0.8);
+}
+
+/* 段階の文字（はじめは画面の中央に叩きつけ、そのあとバーの下の定位置に移る） */
+.fxa-emblem {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--fxa-emblem-top, 500px);
+  height: 86px;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.fxa-emblem::before {
+  content: '';
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 4%;
+  bottom: 4%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(4, 6, 16, 0.75), rgba(4, 6, 16, 0) 70%);
+}
+
+.fxa-emblem small {
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.fxa[data-tier='1'] .fxa-emblem .fxa-txt,
+.fxa-hero[data-tier='1'] .fxa-txt {
+  --stroke: #fff;
+  --fill: linear-gradient(180deg, #eafff0 10%, #5aff8c 50%, #15803d 100%);
+  font-size: 44px;
+  font-style: italic;
+}
+
+.fxa[data-tier='2'] .fxa-emblem .fxa-txt,
+.fxa-hero[data-tier='2'] .fxa-txt {
+  --stroke: #fff6d6;
+  --fill: linear-gradient(180deg, #fff2a8 0%, #ffb03a 35%, #ff4d2e 70%, #c4161c 100%);
+  font-size: 52px;
+}
+
+.fxa[data-tier='3'] .fxa-emblem .fxa-txt,
+.fxa-hero[data-tier='3'] .fxa-txt {
+  --stroke: #3b2600;
+  --fill: linear-gradient(180deg, #fffbe6 0%, #ffe08a 30%, #f5c542 50%, #b8860b 75%, #ffe08a 100%);
+  font-size: 44px;
+}
+
+.fxa[data-tier='3'] .fxa-emblem .fxa-txt + .fxa-txt {
+  font-size: 26px;
+  margin-top: -2px;
+  letter-spacing: 3px;
+}
+
+.fxa[data-tier='4'] .fxa-emblem .fxa-txt,
+.fxa-hero[data-tier='4'] .fxa-txt,
+.fxa-txt.is-rainbow {
+  --stroke: #fff;
+  --fill: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
+  font-size: 60px;
+}
+
+.fxa[data-tier='4'] .fxa-emblem .fxa-txt b,
+.fxa-hero[data-tier='4'] .fxa-txt b,
+.fxa-txt.is-rainbow b {
+  animation: fxa-hue var(--fxa-hue-ms, 12000ms) linear infinite;
+}
+
+/* あと 1 つの番号（画面の下のほう） */
+.fxa-chip {
+  position: absolute;
+  left: 50%;
+  bottom: var(--fxa-chip-bottom, 70px);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 20px 10px;
+  border-radius: 18px;
+  background: rgba(8, 10, 24, 0.85);
+  border: 2px solid #ff7a3d;
+  box-shadow: 0 0 18px rgba(255, 122, 61, 0.45);
+  translate: -50% 0;
+  white-space: nowrap;
+}
+
+.fxa-chip small {
+  font-size: 16px;
+  font-weight: 900;
+  color: #ffd9c2;
+}
+
+.fxa-chip b {
+  font-size: 38px;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.fxa[data-tier='3'] .fxa-chip {
+  border-color: #f5c542;
+  box-shadow: 0 0 22px rgba(245, 197, 66, 0.6);
+}
+
+.fxa[data-tier='3'] .fxa-chip small {
+  color: #ffe08a;
+}
+
+.fxa[data-tier='4'] .fxa-chip {
+  border-color: #fff;
+  box-shadow:
+    0 0 0 3px rgba(168, 90, 255, 0.6),
+    0 0 22px rgba(90, 210, 255, 0.6);
+}
+
+/* 全面のやわらかい光（1 回の演出で 1 回まで。明るさの変化は 20% 以下） */
+.fxa-flash,
+.fxo-flash {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: radial-gradient(circle at 50% 46%, #fffbe8, rgba(255, 251, 232, 0.7) 60%, rgba(255, 251, 232, 0.45));
+}
+
+/* 虹の前ぶれのヒビ */
+.fxa-crack {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 0 5px #fff) drop-shadow(0 0 12px rgba(180, 200, 255, 0.85));
+}
+
+.fxa-crack path {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 3;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+/* 当たりの番号 */
+.fxa-hero {
+  position: absolute;
+  left: 50%;
+  top: var(--fxa-center, 37%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+
+.fxa-hero .fxa-txt {
+  font-size: 96px !important;
+  font-style: normal !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.fxa-hero[data-tier='0'] .fxa-txt {
+  --stroke: #1e3f86;
+  --fill: linear-gradient(180deg, #fff, #bcd3ff);
+  font-size: 72px !important;
+}
+
+.fxa-hero-text {
+  margin-top: 6px;
+  padding: 4px 18px;
+  border-radius: 999px;
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  background: rgba(8, 10, 24, 0.75);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
+}
+
+.fxa-hero[data-power='3'] .fxa-hero-text,
+.fxa-hero[data-power='4'] .fxa-hero-text {
+  font-size: 30px;
+  color: #1a1400;
+  background: linear-gradient(180deg, #fff1b8, #f5c542 55%, #c99212);
+}
+
+/* 失敗: しぼんで砕けた後の、ちょっと情けない文字 */
+.fxa-shard {
+  will-change: transform;
+}
+
+.fxa-fail {
+  position: absolute;
+  left: 50%;
+  top: var(--fxa-center, 37%);
+  min-width: 220px;
+  padding: 16px 28px 14px;
+  border-radius: 20px;
+  text-align: center;
+  white-space: nowrap;
+  background: rgba(10, 14, 30, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  transform: translate(-50%, -50%);
+}
+
+.fxa-fail b {
+  display: block;
+  font-size: 42px;
+  font-weight: 900;
+  color: #c7cfe6;
+  letter-spacing: 2px;
+}
+
+.fxa-fail small {
+  display: block;
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #8a93b8;
+}
+
+.fxa-sweat {
+  position: absolute;
+  right: 16px;
+  top: 10px;
+  width: 13px;
+  height: 13px;
+  border-radius: 0 50% 50% 50%;
+  background: linear-gradient(135deg, #e6f6ff, #7cc7ff);
+  transform: rotate(45deg);
+}
+
+.fxa-onoma {
+  position: absolute;
+  font-style: italic;
+  font-weight: 900;
+  font-size: 20px;
+  white-space: nowrap;
+  color: #c7cfe6;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
+}
+
+/* あおりの間、あと 1 つのマスを照らす（カード側のマスに付ける） */
+.fxc .fxc-cell.fxa-lit .fxc-frame {
+  --c: #fff3c4;
+  filter: drop-shadow(0 0 5px rgba(255, 215, 94, 1));
+}
+
+.fxc .fxc-cell.fxa-lit-2 .fxc-face {
+  box-shadow:
+    inset 0 0 0 2px #ffd75e,
+    0 0 18px rgba(255, 170, 60, 0.6);
+}
+
+.fxc .fxc-cell.fxa-lit-3 .fxc-face {
+  box-shadow:
+    inset 0 0 0 2px #ffe08a,
+    0 0 24px rgba(245, 197, 66, 0.85);
+}
+
+.fxc .fxc-cell.fxa-lit-4 .fxc-face {
+  box-shadow:
+    inset 0 0 0 2px #fff,
+    0 0 20px rgba(255, 255, 255, 0.7);
+}
+
+.fxc .fxc-cell.fxa-lit-4 .fxc-face::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  z-index: 5;
+  padding: 3px;
+  border-radius: 15px;
+  background: conic-gradient(from 0deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff, #ff5a5a);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+  animation: fxa-hue var(--fxa-hue-ms, 12000ms) linear infinite;
+}
+
+/* ---- 単発: リーチ ---------------------------------------------------------- */
+
+.fxo-band {
+  position: absolute;
+  left: -20px;
+  right: -20px;
+  top: 38%;
+  height: 128px;
+  margin-top: -64px;
+  transform: rotate(-7deg);
+  background: linear-gradient(180deg, rgba(255, 122, 61, 0.95), rgba(200, 24, 24, 0.95));
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.85),
+    0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.fxo-reach[data-kind='double'] .fxo-band {
+  background: linear-gradient(180deg, rgba(255, 236, 160, 0.97), rgba(245, 197, 66, 0.97) 50%, rgba(201, 146, 18, 0.97));
+}
+
+.fxo-reach-word {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 38%;
+  display: flex;
+  justify-content: center;
+  transform: translateY(-50%) rotate(-7deg);
+}
+
+.fxo-reach-word .fxa-txt {
+  --stroke: #5a0a0a;
+  --fill: linear-gradient(180deg, #ffffff 30%, #ffe08a 100%);
+  font-size: 76px;
+}
+
+.fxo-reach[data-kind='double'] .fxo-reach-word .fxa-txt {
+  --stroke: #7a1a00;
+  --fill: linear-gradient(180deg, #ffffff 20%, #ffd2c2 60%, #ff5a3d 100%);
+  font-size: 46px;
+}
+
+.fxo-reach-wait {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 57%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.fxo-reach-wait small {
+  font-size: 22px;
+  font-weight: 900;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.fxo-reach-wait b {
+  padding: 6px 16px;
+  border-radius: 14px;
+  font-size: 42px;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: #1a1400;
+  background: linear-gradient(180deg, #fff8dc, #ffe08a);
+  box-shadow:
+    0 0 0 3px #f5c542,
+    0 0 20px rgba(245, 197, 66, 0.7);
+}
+
+.fxo-reach-count {
+  position: absolute;
+  left: 50%;
+  top: 70%;
+  padding: 4px 16px;
+  border-radius: 999px;
+  font-size: 18px;
+  font-weight: 900;
+  background: rgba(8, 10, 24, 0.8);
+  box-shadow: 0 0 0 2px #f5c542;
+  translate: -50% 0;
+}
+
+/* ---- 単発: ビンゴ ---------------------------------------------------------- */
+
+.fxo-dim {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 6, 16, 0.6);
+}
+
+.fxo-balls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 34%;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+
+.fxo-ball {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.95) 0 10%, rgba(255, 255, 255, 0) 36%),
+    radial-gradient(circle at 50% 60%, var(--c) 0 55%, color-mix(in srgb, var(--c) 60%, #000) 100%);
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.45),
+    inset 0 -4px 8px rgba(0, 0, 0, 0.25);
+}
+
+.fxo-ball b {
+  font-size: 38px;
+  font-weight: 900;
+  color: #fff;
+  -webkit-text-stroke: 1.5px rgba(0, 0, 0, 0.55);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.4);
+}
+
+.fxo-rank {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 52%;
+  display: flex;
+  justify-content: center;
+}
+
+.fxo-rank .fxa-txt {
+  --stroke: #3b2600;
+  --fill: linear-gradient(180deg, #fffbe6 0%, #ffe08a 30%, #f5c542 50%, #b8860b 75%, #ffe08a 100%);
+  font-size: 54px;
+}
+
+/* ---- 単発: モグラ ---------------------------------------------------------- */
+
+.fxo-mole .fxo-dim {
+  background: rgba(20, 10, 2, 0.55);
+}
+
+.fxo-mole-box {
+  position: absolute;
+  left: 28px;
+  right: 28px;
+  top: 32%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 16px 20px;
+  border-radius: 24px;
+  text-align: center;
+  background: linear-gradient(180deg, #3a2614, #22160b);
+  border: 2px solid #6e4a2a;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+}
+
+.fxo-mole-hole {
+  position: relative;
+  width: 150px;
+  height: 120px;
+  margin-top: -70px;
+}
+
+.fxo-mole-pit {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 36px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, #0d0703 0 45%, #4a2f19 70%, rgba(74, 47, 25, 0) 72%);
+}
+
+.fxo-mole-clip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -40px;
+  bottom: 18px;
+  overflow: hidden;
+}
+
+.fxo-mole-pop {
+  position: absolute;
+  left: 25px;
+  width: 100px;
+  bottom: 0;
+  transform: translateY(105%);
+}
+
+.fxo-mole-pop svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  transform-origin: 50% 90%;
+}
+
+.fxo-mole-main {
+  margin-top: 6px;
+  font-size: 28px;
+  font-weight: 900;
+  color: #ffe2c4;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+}
+
+.fxo-mole-main.is-safe {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 46px;
+  color: #eafff0;
+  text-shadow:
+    0 0 14px rgba(34, 197, 94, 0.8),
+    0 3px 0 rgba(0, 0, 0, 0.5);
+}
+
+.fxo-mole-main.is-safe i {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  font-style: normal;
+  font-size: 30px;
+  color: #fff;
+  background: #22c55e;
+  box-shadow: 0 0 0 3px #eafff0;
+  text-shadow: none;
+}
+
+.fxo-mole-sub {
+  margin-top: 6px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #d8b48e;
+}
+
+.fxo-mole-lost {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 20px;
+  font-weight: 900;
+  color: #ffd2c2;
+}
+
+.fxo-mole-chip {
+  position: relative;
+  padding: 4px 14px;
+  border-radius: 10px;
+  font-size: 20px;
+  background: linear-gradient(90deg, #ff7a3d, #ef4444);
+  color: #fff;
+}
+
+.fxo-strike {
+  position: absolute;
+  left: -6px;
+  right: -6px;
+  top: 50%;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 2px;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+  transform: rotate(-12deg) scaleX(0);
+  transform-origin: 0 50%;
+}
+
+.fxo-say {
+  position: absolute;
+  right: -46px;
+  top: -6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 900;
+  white-space: nowrap;
+  color: #3b2412;
+  background: #fff4e6;
+  opacity: 0;
+}
+
+.fxo-say::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  bottom: -6px;
+  border: 6px solid transparent;
+  border-top-color: #fff4e6;
+  border-left-width: 0;
+}
+
+/* ---- 単発: 虹玉 ------------------------------------------------------------ */
+
+.fxo-wild-orb {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  width: 112px;
+  height: 112px;
+  margin: -56px 0 0 -56px;
+}
+
+.fxo-wild-orb i {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 30%, #fff 0 12%, rgba(255, 255, 255, 0) 38%),
+    conic-gradient(from 0deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff, #ff5a5a);
+  box-shadow:
+    0 0 24px rgba(255, 255, 255, 0.7),
+    0 0 50px rgba(168, 90, 255, 0.5);
+  animation: fxa-hue var(--fxa-hue-ms, 12000ms) linear infinite;
+}
+
+.fxo-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 4px solid #fff;
+  box-shadow:
+    0 0 16px rgba(90, 210, 255, 0.8),
+    inset 0 0 16px rgba(255, 90, 210, 0.6);
+}
+
+.fxo-wild-text {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 43%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.fxo-wild-text .fxa-txt {
+  font-size: 64px;
+}
+
+.fxo-wild-text p {
+  margin: 0;
+  padding: 6px 18px;
+  border-radius: 999px;
+  font-size: 22px;
+  font-weight: 900;
+  background: rgba(8, 10, 24, 0.8);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8);
+}
+
+.fxo-wild-text p b {
+  font-size: 30px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fxo-wild-reach {
+  position: absolute;
+  left: 50%;
+  top: 64%;
+  padding: 6px 22px 8px;
+  border-radius: 16px;
+  background: linear-gradient(90deg, #ff7a3d, #ef4444);
+  box-shadow:
+    0 0 0 3px #fff,
+    0 10px 24px rgba(0, 0, 0, 0.5);
+  transform: translate(-50%, -50%) rotate(-8deg);
+}
+
+.fxo-wild-reach .fxa-txt {
+  --stroke: #5a0a0a;
+  --fill: linear-gradient(180deg, #ffffff 30%, #ffe08a 100%);
+  font-size: 44px;
+}
+
+/* 動きを減らす設定では、くり返しの動きを止める */
+@media (prefers-reduced-motion: reduce) {
+  .fxa *,
+  .fxo *,
+  .fxa *::before,
+  .fxo *::before,
+  .fxc .fxc-cell.fxa-lit-4 .fxc-face::after {
+    animation: none !important;
+  }
+}

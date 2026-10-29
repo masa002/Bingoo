@@ -1,55 +1,54 @@
-import { FREE_CELL, FREE_MASK, LETTERS, bingoCells, deriveCard, labelOf, lineState, maskOf, waitingCells } from '../core/card'
-import { TIER_SHAPE, TIER_WORD, type Tier } from '../core/show'
+import { FREE_MASK, bingoCells, deriveCard, labelOf, lineState, popcount, waitingCells } from '../core/card'
+import { CH_FREE, CH_LINES, challengeBingo } from '../core/game'
+import type { Rarity } from '../core/prizes'
 import type { Clock } from '../demo/clock'
+import { Aori, playBingo, playMoleResult, playReach, playWildResult, type AoriOutcome } from '../fx/phone/aori'
+import { CardView } from '../fx/phone/card'
+import { askEntry, playGarapon } from '../fx/phone/garapon'
+import { askChoice, playChallengeResult, playChallengeStart, playPackOpen } from '../fx/phone/prize'
 import type { LocalHub } from '../net/hub'
-import type { Msg, MsgOf, PrizeEntry } from '../net/protocol'
+import type { Msg, MsgOf, PhoneCommand, PrizeEntry } from '../net/protocol'
 import { esc, fit, fmt, h, q, replay } from './dom'
-import { GOLD, Particles, RAINBOW } from './particles'
 
-// 参加者のスマホ（390×844 で組んで縮小表示する）。
-// 自分のカードはシードとカード番号から手元で作り、届いた番号で自分で塗る（本番と同じ）。
-// 本番の方針どおり、スマホは音を出さない
-
-export type PhoneCommand = { type: 'join' } | { type: 'openPack' }
+// 参加者のスマホ（390×844 で組んで縮小表示する）。カード・あおり・景品・ガラポンの演出は fx/ の部品。
+// 自分のカードはシードとカード番号から手元で作り、届いた番号で自分で塗る（本番と同じ）
 
 const PHONE_HTML = `
-<div class="ph-glow"></div>
 <div class="ph-status"><span class="ph-time">9:41</span><span>●●● 100%</span></div>
-<div class="ph-tier" data-heat="-1"><span class="ph-shape"></span><span class="ph-word">待機中</span></div>
 <div class="ph-head"><div><b class="ph-name">あなた</b><small class="ph-no"></small></div><div class="ph-count"></div></div>
-<div class="ph-chips"><div class="ph-wait"></div><div class="ph-notice"></div></div>
-<div class="ph-card">
-  <div class="ph-letters">${LETTERS.map((l) => `<span>${l}</span>`).join('')}</div>
-  <div class="ph-grid"></div>
-</div>
+<div class="ph-chips"><div class="ph-wait"></div></div>
+<div class="ph-cardhost"></div>
 <div class="ph-latest"><small>最新の番号</small><b>--</b></div>
-<div class="ph-history"></div>
+<div class="ph-sub"><div class="ph-history"></div></div>
 <div class="ph-toast"></div>
-<canvas class="ph-fx" width="390" height="844"></canvas>
 <div class="ph-overlay"></div>
 `
 
-const BPM = [0, 72, 96, 120, 140]
+interface MyChallenge {
+  cells: number[]
+  mask: number
+  target: Rarity
+  view: CardView
+}
 
 export class PhoneView {
   private readonly root: HTMLDivElement
-  private readonly fx: Particles
+  private readonly card: CardView
+  private readonly aori: Aori
   private cells: number[] = []
   private mask = FREE_MASK
+  private filled = 0
+  private wild = 0
   private won = false
   private joined = false
   private rank = 0
   private name = 'あなた'
   private cardNo = 0
   private history: number[] = []
-  private stats = { hits: 0, maxReach: 0, nearMiss: 0 }
-  private timers: number[] = []
-  private intervals: number[] = []
-  private cancelBeats: () => void = () => {}
-  private pulse: Animation | null = null
-  private myPrize: PrizeEntry | null = null
-  private packOpened = false
-  private bingoDoneAt = 0 // ビンゴの演出が終わる時刻（パックはその後に出す）
+  private stats = { hits: 0, maxReach: 0, nearMiss: 0, won: undefined as string | undefined }
+  private challenge: MyChallenge | null = null
+  private busyUntil = 0 // ビンゴなどの演出が終わる時刻（景品パックはその後に出す）
+  private generation = 0
 
   constructor(
     host: HTMLElement,
@@ -57,15 +56,23 @@ export class PhoneView {
     private readonly clock: Clock,
     private readonly send: (cmd: PhoneCommand) => void,
   ) {
+    // 画面の中身がちょうど 390×844 になるように、枠は外側の要素で描く
+    const frame = h('div', 'phone-frame')
     this.root = h('div', 'phone', PHONE_HTML)
-    host.append(this.root)
-    fit(this.root, 390, 844)
-    this.fx = new Particles(this.$<HTMLCanvasElement>('.ph-fx'), 600)
+    frame.append(this.root)
+    host.append(frame)
+    fit(frame, 410, 864)
+    this.card = new CardView(this.$('.ph-cardhost'), { size: 5, speed: clock.speed })
+    this.aori = new Aori(this.root, { speed: clock.speed })
     hub.subscribe((m) => this.on(m))
   }
 
   private $<T extends HTMLElement = HTMLElement>(selector: string): T {
     return q<T>(this.root, selector)
+  }
+
+  private get speed(): number {
+    return this.clock.speed
   }
 
   private on(m: Msg): void {
@@ -75,63 +82,81 @@ export class PhoneView {
       case 'joined':
         this.$('.ph-count').textContent = `参加 ${fmt(m.count)}人`
         return
+      case 'eventPlay':
+        if (!this.joined) this.join()
+        return this.onEvent(m)
       case 'drawScheduled':
         if (!this.joined) this.join() // 受付を締め切ったら自動で参加する
-        return this.onScheduled(m)
+        this.syncSpeed()
+        this.aori.start({ tier: m.personal.tier, revealIn: m.timing.reveal, waiting: m.personal.waiting })
+        return
       case 'awaitPush':
-        this.$('.ph-word').textContent = 'PUSH 待ち…'
+        this.aori.awaitPush()
         return
       case 'numberRevealed':
-        return this.onRevealed(m)
+        void this.onRevealed(m)
+        return
       case 'bulkDrawn':
         return this.onBulk(m.numbers)
       case 'prizeTime': {
         const mine = m.entries.find((e) => e.isMe)
-        if (mine) {
-          this.myPrize = mine
-          this.packOpened = false
-          const wait = Math.max(this.clock.scale(500), this.bingoDoneAt - performance.now())
-          this.timers.push(window.setTimeout(() => this.showPack(mine), wait))
-        }
+        if (mine) void this.onMyPrize(mine)
         return
       }
-      case 'packOpened':
-        if (this.myPrize && m.idx === this.myPrize.idx) this.openPack(false)
+      case 'challengeDeal':
+        void this.onChallengeDeal(m)
         return
-      case 'prizeEnd':
-        if (this.myPrize) this.closePack()
+      case 'challengeEnd':
+        void this.onChallengeEnd()
         return
       case 'gameOver':
-        this.later(1200, () => this.showResult())
+        this.toast('景品がなくなりました。このあとダブルチャンスです')
         return
-      case 'idle':
-      case 'prizeSpotlight':
-      case 'notice':
+      case 'dcEntry':
+        void this.onDcEntry(m)
+        return
+      case 'dcSpin':
+        void this.onDcSpin(m)
+        return
+      default:
         return
     }
+  }
+
+  private syncSpeed(): void {
+    this.card.setSpeed(this.speed)
+    this.aori.setSpeed(this.speed)
+    this.challenge?.view.setSpeed(this.speed)
   }
 
   // ---- 参加とカード ---------------------------------------------------------
 
   private onSnapshot(m: MsgOf<'snapshot'>): void {
-    this.cancelAll()
-    this.fx.clear()
+    this.generation++
+    this.aori.cancel()
+    // 前のゲームで残った景品・ガラポンの画面を片付ける
+    this.root.querySelectorAll('.fxg, .fxp').forEach((n) => n.remove())
+    this.challenge?.view.destroy()
+    this.challenge = null
     this.name = m.me.name
     this.cardNo = m.me.cardNo
     this.cells = deriveCard(m.seed, m.me.cardNo)
-    this.mask = maskOf(this.cells, m.drawn)
-    this.won = lineState(this.mask).bingo > 0
+    this.mask = FREE_MASK
+    this.filled = 0
+    this.wild = 0
+    this.won = false
     this.rank = 0
-    this.history = [...m.drawn]
-    this.stats = { hits: 0, maxReach: 0, nearMiss: 0 }
-    this.myPrize = null
+    this.history = []
+    this.stats = { hits: 0, maxReach: 0, nearMiss: 0, won: undefined }
     this.joined = false
+    this.busyUntil = 0
     this.$('.ph-name').textContent = this.name
     this.$('.ph-no').textContent = `No.${String(this.cardNo).padStart(5, '0')}`
-    this.$('.ph-count').textContent = `参加 0人`
+    this.$('.ph-count').textContent = '参加 0人'
     this.$('.ph-latest b').textContent = '--'
-    this.setTier(-1, '待機中')
-    this.renderGrid()
+    this.syncSpeed()
+    this.card.setCells(this.cells)
+    this.renderCard()
     this.renderHistory()
     this.overlay(`
       <div class="ph-join">
@@ -148,51 +173,38 @@ export class PhoneView {
     this.joined = true
     this.send({ type: 'join' })
     this.closeOverlay()
-    this.root.querySelectorAll<HTMLElement>('.ph-cell').forEach((cell, i) => {
-      cell.animate([{ transform: 'rotateY(90deg)', opacity: 0 }, { transform: 'rotateY(0)', opacity: 1 }], {
-        duration: this.clock.scale(260),
-        delay: this.clock.scale(i * 25),
-        fill: 'backwards',
-      })
+    void this.card.deal()
+  }
+
+  private renderCard(): void {
+    const bits = (x: number) => [...Array(25).keys()].filter((i) => x & (1 << i))
+    this.card.setMarks(this.mask, {
+      waiting: this.won ? [] : waitingCells(this.mask),
+      line: bingoCells(this.mask),
+      filled: bits(this.filled),
+      wild: bits(this.wild & this.mask),
     })
-  }
-
-  private renderGrid(): void {
-    const waiting = new Set(this.won ? [] : waitingCells(this.mask))
-    const line = new Set(bingoCells(this.mask))
-    this.$('.ph-grid').innerHTML = this.cells
-      .map((n, i) => {
-        const cls = ['ph-cell']
-        if (i === FREE_CELL) cls.push('free')
-        if (this.mask & (1 << i)) cls.push('on')
-        if (waiting.has(i)) cls.push('wait')
-        if (line.has(i)) cls.push('line')
-        return `<div class="${cls.join(' ')}" data-cell="${i}"><span>${i === FREE_CELL ? 'FREE' : n}</span></div>`
-      })
-      .join('')
-    this.renderWait()
-  }
-
-  private renderWait(): void {
     const el = this.$('.ph-wait')
+    const lines = lineState(this.mask).reach
     if (this.won) {
       el.className = 'ph-wait done'
       el.textContent = `BINGO！ 第 ${this.rank || '-'} 位`
-      return
-    }
-    const lines = lineState(this.mask).reach
-    const cells = waitingCells(this.mask)
-    if (!lines) {
+    } else if (lines) {
+      el.className = 'ph-wait on'
+      const kind = lines >= 3 ? 'トリプルリーチ' : lines === 2 ? 'ダブルリーチ' : 'リーチ'
+      el.textContent = `${kind}　あと ${this.waitingLabels().join('・')}`
+    } else {
       el.className = 'ph-wait'
       el.textContent = ''
-      return
     }
-    el.className = 'ph-wait on'
-    const kind = lines >= 3 ? 'トリプルリーチ' : lines === 2 ? 'ダブルリーチ' : 'リーチ'
-    el.textContent = `${kind}　あと ${cells.map((c) => labelOf(this.cells[c])).join('・')}`
+  }
+
+  private waitingLabels(): string[] {
+    return waitingCells(this.mask).map((c) => labelOf(this.cells[c]))
   }
 
   private renderHistory(): void {
+    if (this.challenge) return
     this.$('.ph-history').innerHTML = this.history
       .slice(-12)
       .reverse()
@@ -200,107 +212,88 @@ export class PhoneView {
       .join('')
   }
 
-  private setTier(heat: number, word?: string): void {
-    const el = this.$('.ph-tier')
-    el.dataset.heat = String(heat)
-    this.$('.ph-shape').textContent = heat >= 0 ? TIER_SHAPE[heat as Tier] : ''
-    this.$('.ph-word').textContent = word ?? (heat <= 0 ? '抽選中' : TIER_WORD[heat as Tier])
-  }
+  // ---- イベント（全員確定・モグラ）の自分の結果 -----------------------------
 
-  // ---- 抽選中 ---------------------------------------------------------------
-
-  private onScheduled(m: MsgOf<'drawScheduled'>): void {
-    this.cancelAll()
-    this.glow(null)
-    this.$('.ph-notice').className = 'ph-notice'
-    this.setTier(0)
-    const inReach = !this.won && lineState(this.mask).reach > 0
-    const heatKinds = new Set(['appear', 'holdChange', 'step', 'cutin', 'goldEdge', 'freeze', 'crack'])
-    let heat = 0
-    this.cancelBeats = this.clock.run(m.beats, (b) => {
-      if (heatKinds.has(b.kind)) {
-        this.setTier(b.heat)
-        if (inReach && b.heat !== heat) this.heartbeat(b.heat)
-        heat = b.heat
+  private onEvent(m: MsgOf<'eventPlay'>): void {
+    const gen = this.generation
+    window.setTimeout(async () => {
+      if (gen !== this.generation) return
+      const { cell, label, reachBefore, reachAfter } = m.me
+      if (m.kind === 'wild') {
+        if (cell === null) return
+        await this.card.wildOpen(cell)
+        this.mask |= 1 << cell
+        this.wild |= 1 << cell
+        this.filled &= ~(1 << cell)
+        this.stats.maxReach = Math.max(this.stats.maxReach, reachAfter)
+        this.renderCard()
+        await playWildResult(this.root, { label, newReach: reachAfter > reachBefore, speed: this.speed })
+      } else if (!this.won) {
+        if (cell !== null) {
+          await this.card.moleFill(cell)
+          this.mask &= ~(1 << cell)
+          this.wild &= ~(1 << cell)
+          this.filled |= 1 << cell
+          this.renderCard()
+        }
+        await playMoleResult(this.root, { hit: cell !== null, lostReach: reachAfter < reachBefore, label, speed: this.speed })
       }
-      if (b.kind === 'sea' && inReach) this.glow('sea') // リーチの海: リーチの人のスマホだけ光る
-      if (b.kind === 'rainbowPhones') this.glow('rainbow') // 確定: 全台が虹色
-      if (b.kind === 'push') this.$('.ph-word').textContent = 'PUSH 待ち…'
-    })
-    if (m.notice !== 'none') {
-      this.later(m.timing.reveal - 2000, () => this.notice('chance'))
-      if (m.notice === 'kakutei') this.later(m.timing.reveal - 1000, () => this.notice('kakutei'))
-    }
-  }
-
-  // リーチの人は「あと B12」が鼓動する。段階が上がるほど速くなる
-  private heartbeat(heat: number): void {
-    this.stopPulse()
-    const bpm = BPM[heat] ?? 0
-    if (!bpm) return
-    this.pulse = this.$('.ph-wait').animate([{ transform: 'scale(1)' }, { transform: 'scale(1.06)' }, { transform: 'scale(1)' }], {
-      duration: this.clock.scale(60000 / bpm),
-      iterations: Infinity,
-    })
-  }
-
-  private stopPulse(): void {
-    this.pulse?.cancel()
-    this.pulse = null
-  }
-
-  private notice(kind: 'chance' | 'kakutei'): void {
-    const el = this.$('.ph-notice')
-    el.textContent = kind === 'chance' ? 'チャンス' : '確定'
-    el.className = `ph-notice ${kind}`
-    replay(el, 'pop')
-  }
-
-  private glow(kind: 'sea' | 'rainbow' | 'hit' | null, ms = 0): void {
-    const el = this.$('.ph-glow')
-    el.className = kind ? `ph-glow ${kind}` : 'ph-glow'
-    if (kind && ms) this.later(ms, () => (el.className = 'ph-glow'))
+    }, this.clock.scale(m.resultAt))
   }
 
   // ---- 公開 -----------------------------------------------------------------
 
-  private onRevealed(m: MsgOf<'numberRevealed'>): void {
-    this.cancelBeats()
-    this.stopPulse()
-    this.$('.ph-notice').className = 'ph-notice'
-    this.setTier(-1, `${m.label} が出ました`)
+  private async onRevealed(m: MsgOf<'numberRevealed'>): Promise<void> {
+    const gen = this.generation
     this.$('.ph-latest b').textContent = m.label
     replay(this.$('.ph-latest'), 'pop')
     this.history.push(m.n)
     this.renderHistory()
 
+    // 自分のカードにとっての結果を、手元で計算する
     const before = lineState(this.mask)
-    const cell = this.cells.indexOf(m.n)
-    if (cell < 0) {
-      if (!this.won && before.reach > 0) this.stats.nearMiss++
-      this.glow(null)
-      return
-    }
-    this.mask |= 1 << cell
-    this.stats.hits++
-    const after = lineState(this.mask)
-    const justWon = !this.won && after.bingo > 0
+    const cell = this.won ? -1 : this.cells.indexOf(m.n)
+    const after = cell >= 0 ? lineState(this.mask | (1 << cell)) : before
+    const justWon = cell >= 0 && after.bingo > 0
+    const ch = this.challenge
+    const chCell = ch ? ch.cells.indexOf(m.n) : -1
+    const chWon = !!ch && chCell >= 0 && challengeBingo(ch.mask | (1 << chCell))
+    let outcome: AoriOutcome = 'none'
+    if (justWon || chWon) outcome = 'bingo'
+    else if (cell >= 0 && after.reach > before.reach) outcome = after.reach >= 2 ? 'double' : 'reach'
+    else if (cell >= 0 || chCell >= 0) outcome = 'hit'
     if (justWon) {
-      this.won = true
       this.rank = m.totals.winners - m.newBingo + 1
+      // あおりの成功 → スタンプ → ラインの光 → BINGO の文字（×1 で約 7 秒）が終わってから景品パックを出す
+      this.busyUntil = performance.now() + this.clock.scale(7600)
     }
-    this.renderGrid()
-    replay(this.$(`[data-cell="${cell}"]`), 'stamp')
-    if (justWon) {
-      this.bingoDoneAt = performance.now() + this.clock.scale(3900)
-      this.glow('rainbow', 5000)
-      this.later(300, () => this.bingoSequence())
-    } else {
-      this.glow('hit', 700)
-      if (!this.won && after.reach > before.reach) {
-        this.stats.maxReach = Math.max(this.stats.maxReach, after.reach)
-        this.later(300, () => this.banner(after.reach >= 2 ? 'ダブルリーチ！' : 'リーチ！'))
+    if (chWon) this.busyUntil = performance.now() + this.clock.scale(3000)
+    if (outcome === 'none' && !this.won && before.reach > 0) this.stats.nearMiss++
+
+    await this.aori.resolve({ outcome, label: m.label, rank: justWon ? this.rank : undefined })
+    if (gen !== this.generation) return
+
+    if (cell >= 0) {
+      this.mask |= 1 << cell
+      this.filled &= ~(1 << cell)
+      this.stats.hits++
+      this.stats.maxReach = Math.max(this.stats.maxReach, after.reach)
+      if (justWon) this.won = true
+      await this.card.stamp(cell)
+      this.renderCard()
+      if (justWon) {
+        await this.card.celebrateLine(bingoCells(this.mask))
+        await playBingo(this.root, { rank: this.rank, speed: this.speed })
+      } else if (after.reach > before.reach) {
+        await playReach(this.root, { lines: after.reach, waiting: this.waitingLabels(), speed: this.speed })
       }
+    }
+    if (ch && chCell >= 0) {
+      ch.mask |= 1 << chCell
+      this.stats.hits++
+      await ch.view.stamp(chCell)
+      this.renderChallenge()
+      if (chWon) await ch.view.celebrateLine(challengeLineCells(ch.mask))
     }
   }
 
@@ -309,179 +302,141 @@ export class PhoneView {
     for (const n of numbers) {
       this.history.push(n)
       const cell = this.cells.indexOf(n)
-      if (cell >= 0) {
+      if (cell >= 0 && !this.won) {
         this.mask |= 1 << cell
+        this.filled &= ~(1 << cell)
         mine++
       }
+      const ch = this.challenge
+      const c = ch ? ch.cells.indexOf(n) : -1
+      if (ch && c >= 0) ch.mask |= 1 << c
     }
     this.stats.hits += mine
     this.stats.maxReach = Math.max(this.stats.maxReach, lineState(this.mask).reach)
-    this.renderGrid()
+    this.renderCard()
+    this.renderChallenge()
     this.renderHistory()
     this.$('.ph-latest b').textContent = labelOf(numbers[numbers.length - 1])
     this.toast(`早送り: ${numbers.length} 個（あなたのカードに ${mine} 個）`)
   }
 
-  private banner(text: string): void {
-    const el = h('div', 'ph-banner', text)
-    this.root.append(el)
-    el.animate(
-      [
-        { transform: 'translateY(-50%) scale(.6)', opacity: 0 },
-        { transform: 'translateY(-50%) scale(1.05)', opacity: 1, offset: 0.2 },
-        { transform: 'translateY(-50%) scale(1)', opacity: 1, offset: 0.8 },
-        { transform: 'translateY(-50%) scale(1)', opacity: 0 },
-      ],
-      { duration: this.clock.scale(1400) },
-    ).finished.then(() => el.remove(), () => el.remove())
-  }
+  // ---- 景品と上位チャレンジ -------------------------------------------------
 
-  private bingoSequence(): void {
-    this.overlay(`
-      <div class="ph-bingo">
-        <div class="ph-bingo-letters">${'BINGO'
-          .split('')
-          .map((c, i) => `<span style="animation-delay:${this.clock.scale(800 + 150 * i)}ms">${c}</span>`)
-          .join('')}</div>
-        <p class="ph-rank" style="animation-delay:${this.clock.scale(1800)}ms">第 ${this.rank} 位</p>
-      </div>`)
-    this.fx.speed = this.clock.speed
-    this.later(1800, () => this.fx.burst(195, 380, { count: 150, colors: RAINBOW, speed: 9 }))
-    // 景品パックがあるときは、開封のあとで証明画面を出す
-    this.later(3600, () => {
-      if (!this.myPrize) this.proof()
-    })
-  }
-
-  // 係員に見せる証明画面。動く時計と変わるコードで、スクリーンショットの使い回しを防ぐ
-  private proof(): void {
-    const line = new Set(bingoCells(this.mask))
-    const mini = this.cells
-      .map((n, i) => `<i class="${line.has(i) ? 'line' : this.mask & (1 << i) ? 'on' : ''}">${i === FREE_CELL ? '★' : n}</i>`)
-      .join('')
-    this.overlay(`
-      <div class="ph-proof">
-        <div class="ph-holo"></div>
-        <h3>BINGO 証明</h3>
-        <p class="ph-proof-name">${esc(this.name)} <small>No.${String(this.cardNo).padStart(5, '0')}</small></p>
-        <p class="ph-proof-rank">第 ${this.rank} 位</p>
-        <div class="ph-mini">${mini}</div>
-        <p class="ph-proof-clock"></p>
-        <p class="ph-proof-code">照合コード <b></b></p>
-        <p class="ph-proof-note">係員にこの画面を見せてください</p>
-        <button class="ph-close">カードに戻る</button>
-      </div>`)
-    const clockEl = this.$('.ph-proof-clock')
-    const codeEl = this.$('.ph-proof-code b')
-    const tick = () => {
-      const now = new Date()
-      clockEl.textContent = now.toLocaleTimeString('ja-JP')
-      // デモでは 30 秒ごとに変わる番号を手元で作る（本番はサーバーが発行する）
-      codeEl.textContent = String(1000 + ((Math.floor(now.getTime() / 30000) * 7919 + this.cardNo) % 9000))
+  private async onMyPrize(e: PrizeEntry): Promise<void> {
+    const gen = this.generation
+    const wait = this.busyUntil - performance.now()
+    if (wait > 0) await new Promise((r) => window.setTimeout(r, wait))
+    if (gen !== this.generation) return
+    if (e.kind === 'challenge') {
+      this.clearChallenge()
+      await playChallengeResult(this.root, { speed: this.speed, success: true, rarity: e.rarity ?? undefined, prize: e.prize ?? undefined })
+    } else {
+      await playPackOpen(this.root, {
+        speed: this.speed,
+        rarity: e.rarity,
+        prize: e.prize ?? 'ダブルチャンス券（ガラポン 3 回）',
+        glow: e.glow,
+        upgrade: e.upgrade,
+        rankUp: e.rankUp,
+      })
     }
-    tick()
-    this.intervals.push(window.setInterval(tick, 1000))
-    q(this.root, '.ph-close').addEventListener('click', () => this.closeOverlay())
+    if (gen !== this.generation || !e.rarity) return
+    let kind: 'receive' | 'challenge' = 'receive'
+    if (e.choice) {
+      kind = await askChoice(this.root, {
+        speed: this.speed,
+        rarity: e.rarity,
+        prize: e.prize ?? '',
+        seconds: 10,
+        challenge: e.choice,
+      })
+    }
+    if (gen !== this.generation) return
+    if (kind === 'receive') {
+      this.stats.won = e.prize ?? undefined
+      this.toast(`景品: ${e.prize}（${e.rarity}）`)
+    }
+    this.send({ type: 'choice', kind })
   }
 
-  // ---- 景品パック -----------------------------------------------------------
-
-  private showPack(e: PrizeEntry): void {
-    const edge = e.rarity ? e.edge : 'none'
-    this.overlay(`
-      <div class="ph-pack" data-glow="${e.glow}">
-        <h3>景品パック</h3>
-        <div class="ph-packbox">
-          <div class="ph-prizecard" data-edge="${edge}"><b>${e.rarity ?? '券'}</b><span>${esc(e.prize ?? 'ダブルチャンス券 2 口')}</span>${e.lastOne ? '<i>ラストワン賞</i>' : ''}</div>
-          <div class="ph-packart"><b>BINGOO</b><small>PACK</small><i class="ph-tear"></i></div>
-        </div>
-        <p class="ph-hint">横にスワイプ、またはタップ 3 回で開封</p>
-        <p class="ph-auto">あと <b>10</b> 秒で自動で開きます</p>
-        <p class="ph-code"></p>
-      </div>`)
-    const box = this.$('.ph-packbox')
-    let startX: number | null = null
-    let taps = 0
-    box.addEventListener('pointerdown', (ev) => (startX = ev.clientX))
-    box.addEventListener('pointermove', (ev) => {
-      if (startX !== null && Math.abs(ev.clientX - startX) > 60) this.openPack(true)
-    })
-    box.addEventListener('pointerup', () => {
-      startX = null
-      if (++taps >= 3) this.openPack(true)
-    })
-    let left = 10
-    const id = window.setInterval(() => {
-      left--
-      const b = this.root.querySelector('.ph-auto b')
-      if (b) b.textContent = String(Math.max(0, left))
-      if (left <= 0) window.clearInterval(id)
-    }, this.clock.scale(1000))
-    this.intervals.push(id)
+  private async onChallengeDeal(m: MsgOf<'challengeDeal'>): Promise<void> {
+    const gen = this.generation
+    await playChallengeStart(this.root, { speed: this.speed, target: m.target })
+    if (gen !== this.generation) return
+    this.clearChallenge()
+    const sub = this.$('.ph-sub')
+    sub.classList.add('challenge')
+    sub.replaceChildren()
+    const view = new CardView(sub, { size: 3, speed: this.speed })
+    this.challenge = { cells: m.cells, mask: 1 << CH_FREE, target: m.target, view }
+    view.setCells(m.cells)
+    this.renderChallenge()
+    await view.deal()
   }
 
-  // 自分で開けたときは権威に伝える。10 秒たって権威が開けたときは表示だけ
-  private openPack(byMe: boolean): void {
-    const e = this.myPrize
-    if (!e || this.packOpened) return
-    this.packOpened = true
-    if (byMe) this.send({ type: 'openPack' })
-    const pack = this.root.querySelector<HTMLElement>('.ph-pack')
-    if (!pack) return
-    pack.classList.add('open')
-    this.root.querySelector('.ph-hint')?.remove()
-    this.root.querySelector('.ph-auto')?.remove()
-    const wait = { C: 500, R: 900, SR: 1800, UR: 3200 }[e.rarity ?? 'C']
-    if (e.rarity === 'UR') this.later(900, () => pack.classList.add('freeze'))
-    this.later(wait, () => {
-      pack.classList.remove('freeze')
-      pack.classList.add('flip')
-      this.fx.speed = this.clock.speed
-      if (e.rarity === 'SR' || e.rarity === 'UR') {
-        this.fx.burst(195, 420, { count: e.rarity === 'UR' ? 260 : 140, colors: e.rarity === 'UR' ? RAINBOW : GOLD, speed: 8, shape: 'spark' })
-      }
-      if (e.upgrade) this.later(700, () => this.root.querySelector('.ph-prizecard')?.setAttribute('data-edge', 'rainbow'))
-      const code = this.root.querySelector('.ph-code')
-      if (code) code.innerHTML = e.prize ? `受け取りコード <b>${e.code}</b>` : '最後のダブルチャンス抽選に参加できます'
-    })
+  private async onChallengeEnd(): Promise<void> {
+    if (!this.challenge) return
+    this.clearChallenge()
+    await playChallengeResult(this.root, { speed: this.speed, success: false })
   }
 
-  private closePack(): void {
-    const e = this.myPrize
-    this.myPrize = null
-    if (!e) return
-    this.toast(e.prize ? `景品: ${e.prize}（受け取りコード ${e.code}）` : 'ダブルチャンス券 2 口を獲得')
-    if (this.won) this.proof()
-    else this.closeOverlay()
+  private renderChallenge(): void {
+    const ch = this.challenge
+    if (!ch) return
+    const waiting = CH_LINES.filter((l) => popcount(l & ~ch.mask) === 1).map((l) => 31 - Math.clz32(l & ~ch.mask))
+    ch.view.setMarks(ch.mask, { waiting: [...new Set(waiting)], line: challengeLineCells(ch.mask) })
   }
 
-  private showResult(): void {
+  private clearChallenge(): void {
+    if (!this.challenge) return
+    this.challenge.view.destroy()
+    this.challenge = null
+    const sub = this.$('.ph-sub')
+    sub.classList.remove('challenge')
+    sub.innerHTML = '<div class="ph-history"></div>'
+    this.renderHistory()
+  }
+
+  // ---- ダブルチャンス -------------------------------------------------------
+
+  private async onDcEntry(m: MsgOf<'dcEntry'>): Promise<void> {
+    if (!m.meEligible) {
+      this.toast('あなたは景品を獲得済みです。ダブルチャンスは見守りましょう')
+      return
+    }
+    const entered = await askEntry(this.root, { speed: this.speed, seconds: m.seconds })
+    if (entered) this.send({ type: 'entry' })
+  }
+
+  private async onDcSpin(m: MsgOf<'dcSpin'>): Promise<void> {
+    if (m.balls.length) {
+      const win = m.balls.find((b) => b.color !== 'white')
+      await playGarapon(this.root, { speed: this.speed, balls: m.balls, stats: { ...this.stats, won: win?.prize ?? this.stats.won } })
+      return
+    }
+    // エントリーしないまま締め切られたときは、残っているエントリー画面を閉じてから結果を出す
+    this.root.querySelectorAll('.fxg').forEach((n) => n.remove())
     this.overlay(`
       <div class="ph-result">
-        <h3>あなたの結果</h3>
+        <h3>おつかれさまでした</h3>
         <ul>
           <li>カードに出た番号<b>${this.stats.hits} 個</b></li>
           <li>最大のリーチ<b>${this.stats.maxReach} 本</b></li>
           <li>「あと 1 つ」で外れた回数<b>${this.stats.nearMiss} 回</b></li>
         </ul>
-        <p class="ph-result-main">${this.won ? `ビンゴ 第 ${this.rank} 位` : '今回はビンゴならず…'}</p>
-        <p class="muted">外れた人向けのダブルチャンスは次の版で入れます</p>
+        <p class="ph-result-main">${this.stats.won ? `景品: ${esc(this.stats.won)}` : this.won ? `ビンゴ 第 ${this.rank} 位` : 'またの機会に！'}</p>
       </div>`)
   }
 
   // ---- 共通 -----------------------------------------------------------------
 
   private overlay(html: string): void {
-    this.intervals.forEach((t) => window.clearInterval(t))
-    this.intervals = []
     const ov = this.$('.ph-overlay')
     ov.innerHTML = html
     ov.classList.add('on')
   }
 
   private closeOverlay(): void {
-    this.intervals.forEach((t) => window.clearInterval(t))
-    this.intervals = []
     this.$('.ph-overlay').classList.remove('on')
   }
 
@@ -490,15 +445,10 @@ export class PhoneView {
     el.textContent = text
     replay(el, 'on')
   }
+}
 
-  private later(ms: number, fn: () => void): void {
-    this.timers.push(window.setTimeout(fn, this.clock.scale(ms)))
-  }
-
-  private cancelAll(): void {
-    this.cancelBeats()
-    this.stopPulse()
-    this.timers.forEach((t) => window.clearTimeout(t))
-    this.timers = []
-  }
+function challengeLineCells(mask: number): number[] {
+  let all = 0
+  for (const line of CH_LINES) if ((mask & line) === line) all |= line
+  return [...Array(9).keys()].filter((i) => all & (1 << i))
 }

@@ -1,0 +1,500 @@
+/* ダブルチャンス（ガラポン）の大画面。クラスは fxdc- で始める。
+   1 回きりの動きの長さは --fxdc-k（= 1 / 速度）を掛ける。繰り返す動きは速度で速くしない（光過敏への配慮）。
+   熱を冷ます締めくくりなので、動きはゆっくり、光は控えめにする */
+
+.fxdc {
+  --fxdc-k: 1;
+  position: absolute;
+  inset: 0;
+  z-index: 52;
+  overflow: hidden;
+  color: #f6efe4;
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
+  background:
+    radial-gradient(90% 70% at 50% 0%, rgba(22, 32, 74, 0.95) 0%, rgba(22, 32, 74, 0) 70%),
+    linear-gradient(180deg, #0c1232 0%, #080b1d 60%, #05070f 100%);
+  opacity: 0;
+  transition: opacity calc(700ms * var(--fxdc-k)) ease;
+}
+
+.fxdc[data-phase] {
+  opacity: 1;
+}
+
+/* 熱が冷めると、青い灯りに替わる */
+.fxdc::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(60% 55% at 50% 50%, rgba(110, 150, 255, 0.16), rgba(110, 150, 255, 0) 70%);
+  opacity: 0;
+  transition: opacity calc(2000ms * var(--fxdc-k)) ease;
+}
+
+.fxdc[data-phase='fin']::after {
+  opacity: 1;
+}
+
+/* ---- 見出し ---- */
+
+.fxdc-head {
+  position: absolute;
+  top: 56px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  transition: opacity calc(800ms * var(--fxdc-k)) ease;
+}
+
+.fxdc-kicker {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.42em;
+  color: #f5c542;
+}
+
+.fxdc-title {
+  margin-top: 4px;
+  font-size: 84px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1.15;
+}
+
+.fxdc-sub {
+  margin-top: 6px;
+  font-size: 34px;
+  font-weight: 700;
+  color: #dfe4f5;
+}
+
+.fxdc[data-phase='fin'] .fxdc-head {
+  opacity: 0;
+}
+
+/* ---- 抽選器（場面ごとに位置と大きさを変える） ---- */
+
+.fxdc-mwrap {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 640px;
+  height: 640px;
+  transform: translate(640px, 300px) scale(1);
+  transition:
+    transform calc(1400ms * var(--fxdc-k)) cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity calc(1400ms * var(--fxdc-k)) ease;
+}
+
+.fxdc-mwrap::before {
+  content: '';
+  position: absolute;
+  inset: -200px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 170, 80, 0.3), rgba(255, 140, 60, 0.1) 55%, rgba(255, 140, 60, 0) 100%);
+  transition: opacity calc(1600ms * var(--fxdc-k)) ease;
+}
+
+.fxdc[data-phase='entry'] .fxdc-mwrap {
+  transform: translate(250px, 330px) scale(0.86);
+}
+
+.fxdc[data-phase='spin'] .fxdc-mwrap {
+  transform: translate(640px, 300px) scale(1);
+}
+
+.fxdc[data-phase='winners'] .fxdc-mwrap {
+  transform: translate(150px, 330px) scale(0.84);
+}
+
+.fxdc[data-phase='fin'] .fxdc-mwrap {
+  opacity: 0.16;
+  transform: translate(640px, 240px) scale(0.9);
+}
+
+.fxdc[data-phase='fin'] .fxdc-mwrap::before {
+  opacity: 0;
+}
+
+/* ---- エントリー受付 ---- */
+
+.fxdc-entry,
+.fxdc-spin,
+.fxdc-win,
+.fxdc-fin {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity calc(800ms * var(--fxdc-k)) ease,
+    transform calc(800ms * var(--fxdc-k)) ease;
+}
+
+.fxdc-entry {
+  left: 1000px;
+  top: 300px;
+  width: 760px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translateX(40px);
+}
+
+.fxdc[data-phase='entry'] .fxdc-entry {
+  opacity: 1;
+  transform: none;
+}
+
+.fxdc-count {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 360px;
+  height: 360px;
+}
+
+.fxdc-count svg {
+  position: absolute;
+  inset: 0;
+  transform: rotate(-90deg);
+}
+
+.fxdc-count circle {
+  fill: none;
+  stroke-width: 14;
+}
+
+.fxdc-count .bg {
+  stroke: rgba(255, 255, 255, 0.08);
+}
+
+.fxdc-count .fg {
+  stroke: #f5c542;
+  stroke-linecap: round;
+  transition: stroke calc(600ms * var(--fxdc-k)) ease;
+}
+
+.fxdc-count.soon .fg {
+  stroke: #ffa24d;
+}
+
+.fxdc-count-num {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.fxdc-count-num b {
+  font-size: 170px;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.fxdc-count-num small {
+  font-size: 40px;
+  font-weight: 700;
+  color: #c9cfe6;
+}
+
+.fxdc-count.closed .fxdc-count-num b {
+  font-size: 72px;
+}
+
+.fxdc-entrants {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-top: 26px;
+  font-size: 34px;
+  color: #c9cfe6;
+}
+
+.fxdc-entrants b {
+  font-size: 96px;
+  font-weight: 900;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.fxdc-howto {
+  margin: 10px 0 0;
+  font-size: 30px;
+  color: #ffe2b8;
+}
+
+/* ---- 全員で回している ---- */
+
+.fxdc-spin {
+  left: 0;
+  right: 0;
+  top: 960px;
+  text-align: center;
+  font-size: 34px;
+  color: #ffe2b8;
+  transform: translateY(20px);
+}
+
+.fxdc-spin small {
+  margin-left: 26px;
+  font-size: 28px;
+  color: #c9cfe6;
+}
+
+.fxdc-spin small b {
+  margin: 0 6px;
+  font-size: 36px;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.fxdc[data-phase='spin'] .fxdc-spin {
+  opacity: 1;
+  transform: none;
+}
+
+.fxdc-pops {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.fxdc-pop {
+  position: absolute;
+  font-size: 40px;
+  font-weight: 900;
+  white-space: nowrap;
+  color: #ffd9a8;
+  text-shadow: 0 3px 0 rgba(90, 40, 0, 0.55);
+  animation: fxdc-pop calc(1600ms * var(--fxdc-k)) ease-out forwards;
+}
+
+@keyframes fxdc-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0) rotate(var(--r, 0deg)) scale(0.8);
+  }
+  25% {
+    opacity: 0.85;
+    transform: translate(-50%, -10px) rotate(var(--r, 0deg)) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -60px) rotate(var(--r, 0deg)) scale(1);
+  }
+}
+
+/* ---- 当選者 ---- */
+
+.fxdc-win {
+  left: 880px;
+  top: 250px;
+  width: 960px;
+  height: 780px;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(60px);
+}
+
+.fxdc[data-phase='winners'] .fxdc-win,
+.fxdc[data-phase='fin'] .fxdc-win {
+  opacity: 1;
+  transform: none;
+}
+
+.fxdc[data-phase='fin'] .fxdc-win {
+  opacity: 0.12;
+}
+
+.fxdc-win-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 8px 14px;
+  border-bottom: 2px solid rgba(245, 197, 66, 0.35);
+}
+
+.fxdc-win-head b {
+  font-size: 44px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.fxdc-win-head span {
+  font-size: 28px;
+  color: #c9cfe6;
+}
+
+.fxdc-win-head span b {
+  margin-right: 6px;
+  font-size: 44px;
+  letter-spacing: 0;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.fxdc-more {
+  min-height: 34px;
+  padding: 8px 8px 0;
+  font-size: 22px;
+  color: #8a93b8;
+}
+
+.fxdc-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fxdc-row {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 22px;
+  max-height: 84px;
+  margin-bottom: 10px;
+  padding: 10px 22px 10px 14px;
+  overflow: hidden;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  opacity: 0;
+  transform: translateX(40px);
+  transition:
+    opacity calc(700ms * var(--fxdc-k)) ease-out,
+    transform calc(700ms * var(--fxdc-k)) ease-out,
+    max-height calc(500ms * var(--fxdc-k)) ease,
+    margin calc(500ms * var(--fxdc-k)) ease,
+    padding calc(500ms * var(--fxdc-k)) ease;
+}
+
+.fxdc-row.on {
+  opacity: 1;
+  transform: none;
+}
+
+.fxdc-row.leaving {
+  max-height: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;
+}
+
+.fxdc-row .fxg-ball {
+  --d: 60px;
+}
+
+.fxdc-row[data-color='gold'] .fxg-ball {
+  box-shadow:
+    0 0 22px rgba(245, 197, 66, 0.45),
+    inset 0 -4px 7px rgba(0, 0, 0, 0.22);
+}
+
+.fxdc-row[data-color='rainbow'] .fxg-ball {
+  box-shadow:
+    0 0 22px rgba(200, 160, 255, 0.45),
+    inset 0 -4px 7px rgba(0, 0, 0, 0.22);
+}
+
+.fxdc-who {
+  overflow: hidden;
+  font-size: 40px;
+  font-weight: 900;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.fxdc-who i {
+  display: inline-block;
+  margin-right: 14px;
+  padding: 2px 14px;
+  border-radius: 999px;
+  vertical-align: 6px;
+  font-size: 22px;
+  font-style: normal;
+  font-weight: 900;
+  color: #3a2600;
+  background: #f5c542;
+}
+
+.fxdc-prize {
+  max-width: 420px;
+  overflow: hidden;
+  font-size: 30px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #ffe2b8;
+}
+
+.fxdc-prize span {
+  margin-right: 10px;
+  font-size: 24px;
+  color: #c9cfe6;
+}
+
+/* 自分の行は、金の縁とあたたかい背景で目立たせる（点滅はしない） */
+.fxdc-row.me {
+  background: linear-gradient(90deg, rgba(245, 197, 66, 0.22), rgba(245, 197, 66, 0.06));
+  border: 2px solid rgba(245, 197, 66, 0.8);
+  box-shadow: 0 0 30px rgba(245, 197, 66, 0.25);
+}
+
+/* ---- おつかれさまでした ---- */
+
+.fxdc-fin {
+  left: 0;
+  right: 0;
+  top: 380px;
+  text-align: center;
+  transform: translateY(30px) scale(0.98);
+  transition-duration: calc(1800ms * var(--fxdc-k));
+}
+
+.fxdc[data-phase='fin'] .fxdc-fin {
+  opacity: 1;
+  transform: none;
+}
+
+.fxdc-fin b {
+  display: block;
+  font-size: 150px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 60px rgba(160, 190, 255, 0.45);
+}
+
+.fxdc-fin small {
+  display: block;
+  margin-top: 24px;
+  font-size: 40px;
+  color: #c9cfe6;
+}
+
+.fxdc-fin p {
+  margin: 26px 0 0;
+  font-size: 30px;
+  color: #ffe2b8;
+}
+
+.fxdc-fx {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* 動きを減らす設定: 動きを止めて、色と文字だけで伝える */
+@media (prefers-reduced-motion: reduce) {
+  .fxdc,
+  .fxdc *,
+  .fxdc *::before,
+  .fxdc *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -1,0 +1,1818 @@
+/* 大画面の特別なイベント（events.ts）。1920×1080 の大画面全体に重ねる（z-index 30〜49、粒子の canvas は 60）。
+   時間は --u（演出上の 1 秒を、今の速度での実際の長さにしたもの）の倍数で書く。
+   繰り返す光（--pulse）と色の回転（--hue）は、速度を上げても安全な周期にとどめてある（events.ts で決める）。
+   入場のアニメーションは fill-mode を backwards にして、終わった後の見た目はクラスの値で持つ
+   （forwards にすると、後からクラスで変えた値がアニメーションに負けるため） */
+
+.fxe {
+  --u: 1000ms;
+  --pulse: 1400ms;
+  --hue: 3600ms;
+  --rainbow: conic-gradient(from 0deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff, #ff5a5a);
+  --rainbow-x: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff, #ff5a5a);
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  color: #fff;
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
+  transition: opacity calc(var(--u) * 0.5) ease;
+}
+
+.fxe *,
+.fxe *::before,
+.fxe *::after {
+  box-sizing: border-box;
+}
+
+.fxe.fxe-out,
+.fxe-canvas.fxe-out {
+  opacity: 0;
+}
+
+/* 揺らす層（暗転は揺らさない） */
+.fxe-body {
+  position: absolute;
+  inset: 0;
+}
+
+.fxe-dim {
+  position: absolute;
+  inset: 0;
+  background: #05070f;
+  opacity: 0;
+}
+
+/* 全面の光。1 回の演出につき 1 回まで、不透明度 0.16 まで（立ち上がりは events.ts で 150ms 以上にする） */
+.fxe-glow {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+}
+
+.fxe-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 60;
+  pointer-events: none;
+  transition: opacity calc(var(--u) * 0.5) ease;
+}
+
+/* 動きを減らす設定: 動きを止めて、色と文字だけで伝える（暗転だけは、急に暗くならないようになめらかに変える） */
+.fxe-rm *:not(.fxe-dim),
+.fxe-rm *::before,
+.fxe-rm *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* 虹の文字（明るさは変えず、色だけを回す） */
+.fxe-rbtext {
+  display: inline-block;
+  background: var(--rainbow-x);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: fxe-hue var(--hue) linear infinite;
+}
+
+@keyframes fxe-hue {
+  to {
+    filter: hue-rotate(360deg);
+  }
+}
+
+@keyframes fxe-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fxe-pop {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes fxe-rise {
+  from {
+    transform: translateY(46px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+/* ==== 全員確定（大画面の虹） ============================================== */
+
+/* 虹のヒビ（SVG）。線は伸びるだけで明るさは一定、色だけが回る */
+.fxe-k-crack {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  animation: fxe-k-crackhue var(--hue) linear infinite;
+  transition: opacity calc(var(--u) * 0.6) ease;
+}
+
+.fxe-k-crack path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.fxe-k-crack.on path {
+  animation: fxe-k-draw calc(var(--u) * 0.85) cubic-bezier(0.25, 0.7, 0.2, 1) forwards;
+  animation-delay: calc(var(--u) * var(--dk, 0));
+}
+
+.fxe-k-crack.fade {
+  opacity: 0.3;
+}
+
+.fxe-k-crack.gone {
+  opacity: 0;
+}
+
+@keyframes fxe-k-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes fxe-k-crackhue {
+  from {
+    filter: drop-shadow(0 0 7px rgba(255, 255, 255, 0.5)) hue-rotate(0deg);
+  }
+  to {
+    filter: drop-shadow(0 0 7px rgba(255, 255, 255, 0.5)) hue-rotate(360deg);
+  }
+}
+
+/* ヒビが割れて飛ぶ破片 */
+.fxe-k-shard {
+  position: absolute;
+  width: var(--w);
+  height: var(--h);
+  margin: calc(var(--h) / -2) 0 0 calc(var(--w) / -2);
+  background: var(--rainbow);
+  clip-path: polygon(50% 0, 100% 72%, 18% 100%);
+  opacity: 0;
+}
+
+.fxe-k-shard.on {
+  animation: fxe-k-shard calc(var(--u) * 1.1) cubic-bezier(0.2, 0.6, 0.4, 1) forwards, fxe-hue var(--hue) linear infinite;
+}
+
+@keyframes fxe-k-shard {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(0.6);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate(var(--dx), var(--dy)) rotate(var(--rot)) scale(1);
+    opacity: 0;
+  }
+}
+
+/* 1 本だけ広がる虹の輪（ヒビの始まりと、虹玉が弾けたとき） */
+.fxe-k-ring {
+  position: absolute;
+  width: 1500px;
+  height: 1500px;
+  margin: -750px 0 0 -750px;
+  border-radius: 50%;
+  background: var(--rainbow);
+  -webkit-mask: radial-gradient(circle, transparent 60%, #000 61.5%, #000 64%, transparent 66%);
+  mask: radial-gradient(circle, transparent 60%, #000 61.5%, #000 64%, transparent 66%);
+  opacity: 0;
+  transform: scale(0.05);
+}
+
+.fxe-k-ring.on {
+  animation: fxe-k-ring calc(var(--u) * 1.3) cubic-bezier(0.15, 0.7, 0.3, 1) forwards, fxe-hue var(--hue) linear infinite;
+}
+
+@keyframes fxe-k-ring {
+  0% {
+    transform: scale(0.05);
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+/* ヒビの起点のきらめき */
+.fxe-k-star {
+  position: absolute;
+  width: 170px;
+  height: 170px;
+  margin: -85px 0 0 -85px;
+  background: radial-gradient(circle, #fff 0 12%, rgba(255, 255, 255, 0.6) 22%, transparent 60%);
+  clip-path: polygon(50% 0, 58% 42%, 100% 50%, 58% 58%, 50% 100%, 42% 58%, 0 50%, 42% 42%);
+  opacity: 0;
+}
+
+.fxe-k-star.on {
+  animation: fxe-k-star calc(var(--u) * 1.4) ease-out forwards;
+}
+
+@keyframes fxe-k-star {
+  0% {
+    transform: scale(0.1) rotate(0deg);
+    opacity: 0;
+  }
+  25% {
+    transform: scale(1) rotate(20deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.5) rotate(45deg);
+    opacity: 0;
+  }
+}
+
+/* ロゴの後ろの光（虹のオーラと、ゆっくり回る光の筋。筋は直径 900px で画面の 1/3 以下） */
+.fxe-k-aura,
+.fxe-k-rays {
+  position: absolute;
+  left: 960px;
+  top: 400px;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity calc(var(--u) * 0.8) ease;
+}
+
+.fxe-k-aura {
+  width: 1100px;
+  height: 1100px;
+  margin: -550px 0 0 -550px;
+  background: var(--rainbow);
+  -webkit-mask: radial-gradient(circle, #000 0%, rgba(0, 0, 0, 0.55) 30%, transparent 68%);
+  mask: radial-gradient(circle, #000 0%, rgba(0, 0, 0, 0.55) 30%, transparent 68%);
+  animation: fxe-hue var(--hue) linear infinite;
+}
+
+.fxe-k-rays {
+  width: 900px;
+  height: 900px;
+  margin: -450px 0 0 -450px;
+  background: repeating-conic-gradient(from 0deg, rgba(255, 255, 255, 0.24) 0deg 5deg, rgba(255, 255, 255, 0) 5deg 15deg);
+  -webkit-mask: radial-gradient(circle, transparent 0 8%, #000 18%, rgba(0, 0, 0, 0.45) 40%, transparent 50%);
+  mask: radial-gradient(circle, transparent 0 8%, #000 18%, rgba(0, 0, 0, 0.45) 40%, transparent 50%);
+  /* 1 周 36 秒（1 秒に 0.03 回転）。速度を上げても変えない */
+  animation: fxe-spin 36s linear infinite;
+}
+
+.fxe-k-aura.on {
+  opacity: 0.5;
+}
+
+.fxe-k-rays.on {
+  opacity: 1;
+}
+
+.fxe-k-aura.low {
+  opacity: 0.22;
+}
+
+.fxe-k-rays.low {
+  opacity: 0.35;
+}
+
+/* 「全員確定」のロゴ */
+.fxe-k-logo {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 250px;
+  text-align: center;
+  transform-origin: 50% 0;
+  transition: transform calc(var(--u) * 0.6) cubic-bezier(0.5, 0, 0.2, 1);
+}
+
+.fxe-k-logo.up {
+  transform: translateY(-205px) scale(0.5);
+}
+
+.fxe-k-title {
+  position: relative;
+  display: inline-block;
+  font-size: 250px;
+  font-weight: 900;
+  line-height: 1.08;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  opacity: 0;
+}
+
+.fxe-k-title.on {
+  opacity: 1;
+  animation: fxe-k-slam calc(var(--u) * 0.6) cubic-bezier(0.2, 1.3, 0.4, 1) backwards;
+}
+
+@keyframes fxe-k-slam {
+  0% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(0.95);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* 白いふちと影（文字の後ろに同じ文字を太く描く） */
+.fxe-k-title::before {
+  content: attr(data-text);
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: #fff;
+  -webkit-text-stroke: 28px #fff;
+  filter: drop-shadow(0 12px 0 #2b0f63) drop-shadow(0 0 34px rgba(255, 255, 255, 0.5));
+}
+
+.fxe-k-title b {
+  position: relative;
+  font-weight: 900;
+}
+
+/* 文字の上を通る光（2 回だけ。周期は --pulse で、1 秒に 3 回を超えない） */
+.fxe-k-title i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-style: normal;
+  background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.95) 50%, transparent 58%);
+  background-size: 300% 100%;
+  background-position: 100% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.fxe-k-title.on i {
+  animation: fxe-k-shine calc(var(--pulse) * 1.2) ease-in-out calc(var(--u) * 0.45) 2;
+}
+
+@keyframes fxe-k-shine {
+  0% {
+    background-position: 100% 0;
+  }
+  60%,
+  100% {
+    background-position: 0 0;
+  }
+}
+
+.fxe-k-sub {
+  margin-top: 10px;
+  font-size: 84px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  text-shadow: 0 6px 0 #2b0f63, 0 0 30px rgba(168, 90, 255, 0.85);
+  opacity: 0;
+  transition: opacity calc(var(--u) * 0.3) ease;
+}
+
+.fxe-k-sub.on {
+  opacity: 1;
+  animation: fxe-rise calc(var(--u) * 0.45) cubic-bezier(0.2, 1.3, 0.4, 1) backwards;
+}
+
+.fxe-k-sub span {
+  display: inline-block;
+  margin: 0 0.3em;
+  text-shadow: none;
+}
+
+.fxe-k-sub em {
+  display: inline-block;
+  margin-left: 0.5em;
+  padding: 0 0.5em;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 0.55em;
+  font-style: normal;
+  vertical-align: 0.25em;
+  text-shadow: none;
+}
+
+.fxe-k-logo.up .fxe-k-sub {
+  opacity: 0;
+}
+
+/* 虹玉 */
+.fxe-k-ball {
+  position: absolute;
+  left: 960px;
+  top: 560px;
+  width: 230px;
+  height: 230px;
+  margin: -115px 0 0 -115px;
+  opacity: 0;
+}
+
+.fxe-k-ball.on {
+  opacity: 1;
+}
+
+.fxe-k-ball.pop {
+  opacity: 0;
+  transform: scale(1.5);
+  transition: opacity calc(var(--u) * 0.26) ease-out, transform calc(var(--u) * 0.26) ease-out;
+}
+
+.fxe-k-ball-in {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 50px rgba(255, 255, 255, 0.5), 0 0 120px rgba(168, 90, 255, 0.55);
+  transition: transform calc(var(--u) * 0.4) ease-in;
+}
+
+.fxe-k-ball.land .fxe-k-ball-in {
+  animation: fxe-k-squash calc(var(--u) * 0.3) ease-out;
+}
+
+.fxe-k-ball.charge .fxe-k-ball-in {
+  transform: scale(1.08);
+}
+
+@keyframes fxe-k-squash {
+  0% {
+    transform: scale(1.14, 0.82);
+  }
+  50% {
+    transform: scale(0.95, 1.06);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+.fxe-k-ball-color,
+.fxe-k-ball-shade {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+
+.fxe-k-ball-color {
+  background: var(--rainbow);
+  animation: fxe-hue var(--hue) linear infinite;
+}
+
+.fxe-k-ball-shade {
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.95) 0 7%, rgba(255, 255, 255, 0.35) 18%, transparent 40%),
+    radial-gradient(circle at 50% 50%, transparent 55%, rgba(20, 8, 60, 0.45) 100%);
+}
+
+.fxe-k-ball-face {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 116px;
+  height: 116px;
+  margin: -58px 0 0 -58px;
+  border-radius: 50%;
+  background: #fff;
+  color: #2b0f63;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  box-shadow: inset 0 -6px 0 rgba(43, 15, 99, 0.15);
+}
+
+.fxe-k-ball-face b {
+  font-size: 56px;
+  line-height: 1;
+}
+
+.fxe-k-ball-face small {
+  font-size: 21px;
+  letter-spacing: 0.12em;
+}
+
+/* 「全員のカードが 1 マス開く！」と結果 */
+.fxe-k-panel {
+  position: absolute;
+  left: 50%;
+  top: 610px;
+  width: 1260px;
+  margin-left: -630px;
+  padding: 30px 48px 28px;
+  border-radius: 36px;
+  background: linear-gradient(180deg, rgba(22, 32, 74, 0.95), rgba(8, 11, 28, 0.95));
+  transform: translateY(-50%);
+  isolation: isolate;
+  opacity: 0;
+}
+
+.fxe-k-panel::before {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  z-index: -1;
+  border-radius: 42px;
+  background: var(--rainbow);
+  animation: fxe-hue var(--hue) linear infinite;
+}
+
+.fxe-k-panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 36px;
+  background: linear-gradient(180deg, #16204a, #080b1c);
+}
+
+.fxe-k-panel.on {
+  opacity: 1;
+  animation: fxe-k-panel calc(var(--u) * 0.5) cubic-bezier(0.2, 1.3, 0.4, 1) backwards;
+}
+
+@keyframes fxe-k-panel {
+  from {
+    transform: translateY(-50%) scale(0.6);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(-50%) scale(1);
+    opacity: 1;
+  }
+}
+
+.fxe-k-head {
+  text-align: center;
+  font-size: 72px;
+  font-weight: 900;
+  white-space: nowrap;
+  text-shadow: 0 5px 0 rgba(0, 0, 0, 0.35);
+}
+
+.fxe-k-head em {
+  font-style: normal;
+  text-shadow: none;
+}
+
+.fxe-k-row {
+  display: flex;
+  align-items: center;
+  gap: 44px;
+  margin-top: 22px;
+}
+
+/* 見本のカード（1 マスが虹で開く） */
+.fxe-k-card {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(5, 48px);
+  gap: 6px;
+  padding: 14px;
+  border-radius: 20px;
+  background: #f4f1ff;
+  box-shadow: 0 10px 0 rgba(0, 0, 0, 0.3);
+}
+
+.fxe-k-card i {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: #e2ddf5;
+  color: #6b6290;
+  font-size: 19px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.fxe-k-card i.o::after {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  background: rgba(245, 197, 66, 0.9);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.15);
+}
+
+.fxe-k-card i.w::after {
+  content: '✦';
+  position: absolute;
+  inset: -4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--rainbow);
+  color: #fff;
+  font-size: 28px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+}
+
+.fxe-k-card.go i.w::after {
+  opacity: 1;
+  animation: fxe-k-stamp calc(var(--u) * 0.4) cubic-bezier(0.2, 1.5, 0.4, 1) backwards, fxe-hue var(--hue) linear infinite;
+}
+
+@keyframes fxe-k-stamp {
+  from {
+    transform: scale(2.6) rotate(-30deg);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.fxe-k-stats {
+  flex: 1;
+  display: grid;
+  gap: 14px;
+}
+
+.fxe-k-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 8px 26px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.07);
+  white-space: nowrap;
+  opacity: 0;
+}
+
+.fxe-k-stat.on {
+  opacity: 1;
+  animation: fxe-rise calc(var(--u) * 0.4) ease-out backwards;
+}
+
+.fxe-k-sh {
+  font-size: 44px;
+  color: #fff15a;
+}
+
+.fxe-k-lb {
+  flex: 1;
+  font-size: 44px;
+  font-weight: 900;
+}
+
+.fxe-k-num {
+  display: inline-block;
+  font-size: 98px;
+  font-weight: 900;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 24px rgba(255, 241, 90, 0.55), 0 5px 0 rgba(0, 0, 0, 0.35);
+}
+
+.fxe-k-num small {
+  margin-left: 6px;
+  font-size: 40px;
+}
+
+.fxe-k-stat.done .fxe-k-num {
+  animation: fxe-k-bump calc(var(--u) * 0.35) ease-out;
+}
+
+@keyframes fxe-k-bump {
+  40% {
+    transform: scale(1.12);
+  }
+}
+
+.fxe-k-foot {
+  margin-top: 16px;
+  text-align: center;
+  font-size: 34px;
+  font-weight: 800;
+  color: #c9d2ff;
+}
+
+/* ==== モグラ（BAD。笑える雰囲気で） ========================================= */
+
+/* 文字のふち（後ろに同じ文字を太く描く）。--olc がふちの色 */
+.fxe-ol {
+  position: relative;
+  display: inline-block;
+}
+
+.fxe-ol::before {
+  content: attr(data-text);
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--olc, #3b2412);
+  -webkit-text-stroke: var(--olw, 24px) var(--olc, #3b2412);
+  filter: drop-shadow(0 9px 0 rgba(0, 0, 0, 0.35));
+}
+
+.fxe-ol > b {
+  position: relative;
+  font-weight: 900;
+}
+
+.fxe-m-title {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 80px;
+  text-align: center;
+  opacity: 0;
+  transition: opacity calc(var(--u) * 0.3) ease, transform calc(var(--u) * 0.3) ease;
+}
+
+.fxe-m-title.on {
+  opacity: 1;
+  animation: fxe-m-boing calc(var(--u) * 0.7) cubic-bezier(0.2, 1.6, 0.4, 1) backwards;
+}
+
+.fxe-m-title.on.off {
+  opacity: 0;
+  transform: translateY(-60px);
+}
+
+.fxe-m-title .fxe-ol {
+  font-size: 150px;
+  font-weight: 900;
+  color: #ffd23f;
+  white-space: nowrap;
+  animation: fxe-m-tilt calc(var(--u) * 1.1) ease-in-out infinite alternate;
+}
+
+.fxe-m-title small {
+  display: block;
+  margin-top: 6px;
+  font-size: 44px;
+  font-weight: 900;
+  color: #f3dcc0;
+  text-shadow: 0 4px 0 #3b2412;
+}
+
+@keyframes fxe-m-boing {
+  0% {
+    transform: scale(0.2, 1.6);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.15, 0.85);
+    opacity: 1;
+  }
+  75% {
+    transform: scale(0.95, 1.05);
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes fxe-m-tilt {
+  from {
+    transform: rotate(-4deg);
+  }
+  to {
+    transform: rotate(-1deg) translateY(-6px);
+  }
+}
+
+/* 画面下の土。穴はこの中に並ぶ */
+.fxe-m-soil {
+  position: absolute;
+  left: -20px;
+  right: -20px;
+  bottom: -10px;
+  height: 250px;
+  border-radius: 50% 50% 0 0 / 56px 56px 0 0;
+  background:
+    radial-gradient(circle at 30% 40%, rgba(255, 230, 200, 0.08) 0 5px, transparent 6px) 0 0 / 96px 72px,
+    radial-gradient(circle at 70% 70%, rgba(0, 0, 0, 0.2) 0 6px, transparent 7px) 0 0 / 74px 64px,
+    linear-gradient(180deg, #6e4727, #3e2614 75%);
+  box-shadow: 0 -12px 34px rgba(0, 0, 0, 0.45);
+  transform: translateY(110%);
+  transition: transform calc(var(--u) * 0.5) cubic-bezier(0.2, 1.1, 0.4, 1);
+}
+
+.fxe-m-soil.on {
+  transform: none;
+}
+
+.fxe-m-soil.on.off {
+  transform: translateY(110%);
+  transition-timing-function: cubic-bezier(0.6, 0, 0.8, 0.4);
+}
+
+.fxe-m-hole {
+  position: absolute;
+  width: 300px;
+  height: 380px;
+  margin-left: -150px;
+  transform: scale(var(--s, 1));
+  transform-origin: 50% 100%;
+}
+
+/* 穴の奥の盛り土 → 穴 → モグラ → 手前の盛り土 の順に重ねる */
+.fxe-m-mound {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 12px;
+  height: 116px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 30%, #9a6a40, #6b4423 70%);
+}
+
+.fxe-m-pit {
+  position: absolute;
+  left: 30px;
+  right: 30px;
+  bottom: 38px;
+  height: 64px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 40%, #0b0502 0 55%, #24130a 82%, #3f2513 100%);
+}
+
+.fxe-m-clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.fxe-m-mole {
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
+  width: 220px;
+  height: 250px;
+  margin-left: -110px;
+  transform: translateY(120%);
+  transition: transform calc(var(--u) * 0.38) cubic-bezier(0.2, 1.45, 0.4, 1);
+}
+
+.fxe-m-mole.up {
+  transform: none;
+}
+
+.fxe-m-mole.up.down {
+  transform: translateY(120%);
+  transition: transform calc(var(--u) * 0.32) cubic-bezier(0.6, -0.3, 0.8, 0.4);
+}
+
+.fxe-m-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform-origin: 50% 100%;
+}
+
+.fxe-m-mole.up .fxe-m-svg {
+  animation: fxe-m-wiggle calc(var(--u) * 1.5) ease-in-out infinite;
+}
+
+.fxe-m-mole.up.dig .fxe-m-svg {
+  animation: fxe-m-dig calc(var(--u) * 0.3) ease-in-out 4;
+}
+
+.fxe-m-mole.up.smug .fxe-m-svg {
+  animation: fxe-m-hop calc(var(--u) * 0.45) ease-out 2;
+}
+
+@keyframes fxe-m-wiggle {
+  0%,
+  100% {
+    transform: rotate(-3deg);
+  }
+  50% {
+    transform: rotate(3deg);
+  }
+}
+
+@keyframes fxe-m-dig {
+  0%,
+  100% {
+    transform: none;
+  }
+  50% {
+    transform: translateY(30px) scale(1.04, 0.94);
+  }
+}
+
+@keyframes fxe-m-hop {
+  0%,
+  100% {
+    transform: none;
+  }
+  40% {
+    transform: translateY(-22px) rotate(-4deg);
+  }
+}
+
+/* 表情（ふつう ● ● ／ 掘る > < ／ してやったり ^ ^） */
+.fxe-m-eye-d,
+.fxe-m-eye-s,
+.fxe-m-mole[data-face='dig'] .fxe-m-eye-n,
+.fxe-m-mole[data-face='smug'] .fxe-m-eye-n {
+  display: none;
+}
+
+.fxe-m-mole[data-face='dig'] .fxe-m-eye-d,
+.fxe-m-mole[data-face='smug'] .fxe-m-eye-s {
+  display: inline;
+}
+
+.fxe-m-eye-n {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: fxe-m-blink calc(var(--u) * 2.6) linear infinite;
+}
+
+@keyframes fxe-m-blink {
+  0%,
+  90%,
+  100% {
+    transform: none;
+  }
+  94% {
+    transform: scaleY(0.12);
+  }
+}
+
+.fxe-m-paw {
+  transform-box: fill-box;
+  transform-origin: 50% 90%;
+}
+
+.fxe-m-mole.dig .fxe-m-paw-l {
+  animation: fxe-m-scratch calc(var(--u) * 0.3) ease-in-out 4;
+}
+
+.fxe-m-mole.dig .fxe-m-paw-r {
+  animation: fxe-m-scratch calc(var(--u) * 0.3) ease-in-out 4 reverse;
+}
+
+@keyframes fxe-m-scratch {
+  0%,
+  100% {
+    transform: none;
+  }
+  50% {
+    transform: rotate(-28deg) translateY(-8px);
+  }
+}
+
+.fxe-m-lip {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 0;
+  height: 70px;
+  border-radius: 0 0 50% 50% / 0 0 60% 60%;
+  background: radial-gradient(ellipse 120px 32px at 50% 0, transparent 0 96%, #a87447 100%, #7a4d2b 135%, #5e3a1f 230%);
+}
+
+/* ふきだし */
+.fxe-m-bubble {
+  position: absolute;
+  left: 50%;
+  bottom: 250px;
+  padding: 8px 24px;
+  border-radius: 26px;
+  background: #fffaf0;
+  color: #3b2412;
+  font-size: 36px;
+  font-weight: 900;
+  white-space: nowrap;
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.3);
+  transform: translateX(-50%);
+  opacity: 0;
+}
+
+.fxe-m-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -16px;
+  margin-left: -12px;
+  border: 12px solid transparent;
+  border-top: 16px solid #fffaf0;
+  border-bottom: 0;
+}
+
+.fxe-m-bubble.on {
+  opacity: 1;
+  animation: fxe-m-bubble calc(var(--u) * 0.35) cubic-bezier(0.2, 1.6, 0.4, 1) backwards;
+}
+
+@keyframes fxe-m-bubble {
+  from {
+    transform: translateX(-50%) translateY(20px) scale(0.3);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%);
+    opacity: 1;
+  }
+}
+
+/* 土ぼこり */
+.fxe-m-dust {
+  position: absolute;
+  width: 150px;
+  height: 150px;
+  margin: -75px 0 0 -75px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(222, 190, 150, 0.85) 0 32%, rgba(222, 190, 150, 0.35) 52%, transparent 70%);
+  opacity: 0;
+  animation: fxe-m-puff calc(var(--u) * 0.95) ease-out forwards;
+}
+
+@keyframes fxe-m-puff {
+  0% {
+    transform: translate(0, 0) scale(0.3);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate(var(--dx, 0), -110px) scale(1.7);
+    opacity: 0;
+  }
+}
+
+/* 「ぽこっ」 */
+.fxe-m-poko {
+  position: absolute;
+  font-size: 66px;
+  font-weight: 900;
+  color: #fff3d6;
+  white-space: nowrap;
+  --olw: 16px;
+  opacity: 0;
+  transform: rotate(var(--r, -10deg));
+}
+
+.fxe-m-poko.on {
+  animation: fxe-m-poko calc(var(--u) * 1.1) ease-out forwards;
+}
+
+@keyframes fxe-m-poko {
+  0% {
+    transform: rotate(var(--r, -10deg)) scale(0.3);
+    opacity: 0;
+  }
+  20% {
+    transform: rotate(var(--r, -10deg)) scale(1.1);
+    opacity: 1;
+  }
+  75% {
+    transform: rotate(var(--r, -10deg)) translateY(-20px);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(var(--r, -10deg)) translateY(-40px);
+    opacity: 0;
+  }
+}
+
+/* 「モグラが穴を埋めた！」の木の看板（上からつり下がる） */
+.fxe-m-sign {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 1120px;
+  margin-left: -560px;
+  padding-top: 150px;
+  transform: translateY(-110%);
+  transform-origin: 50% 0;
+}
+
+.fxe-m-sign.on {
+  transform: none;
+  animation: fxe-m-swing calc(var(--u) * 1.3) ease-out backwards;
+}
+
+.fxe-m-sign.on.off {
+  transform: translateY(-110%);
+  transition: transform calc(var(--u) * 0.45) cubic-bezier(0.6, 0, 0.8, 0.4);
+}
+
+@keyframes fxe-m-swing {
+  0% {
+    transform: translateY(-110%);
+  }
+  35% {
+    transform: translateY(3%) rotate(3deg);
+  }
+  55% {
+    transform: translateY(-1%) rotate(-2.4deg);
+  }
+  78% {
+    transform: rotate(1.1deg);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+.fxe-m-rope {
+  position: absolute;
+  top: 0;
+  width: 10px;
+  height: 172px;
+  border-radius: 5px;
+  background: repeating-linear-gradient(160deg, #d8b47a 0 8px, #a9844c 8px 14px);
+}
+
+.fxe-m-rope.l {
+  left: 180px;
+}
+
+.fxe-m-rope.r {
+  right: 180px;
+}
+
+.fxe-m-board {
+  position: relative;
+  padding: 24px 56px 30px;
+  border: 8px solid #6e4524;
+  border-radius: 28px;
+  background:
+    radial-gradient(ellipse 60px 18px at 22% 38%, rgba(90, 52, 22, 0.35) 0 40%, transparent 70%),
+    radial-gradient(ellipse 50px 14px at 78% 72%, rgba(90, 52, 22, 0.3) 0 40%, transparent 70%),
+    repeating-linear-gradient(180deg, #b47d48 0 62px, #9a6738 62px 66px);
+  box-shadow: 0 18px 0 rgba(0, 0, 0, 0.35), inset 0 0 0 4px rgba(255, 255, 255, 0.12);
+  text-align: center;
+}
+
+.fxe-m-board::before,
+.fxe-m-board::after {
+  content: '';
+  position: absolute;
+  top: 14px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #e6e1d6, #8c8576);
+}
+
+.fxe-m-board::before {
+  left: 166px;
+}
+
+.fxe-m-board::after {
+  right: 166px;
+}
+
+.fxe-m-head {
+  font-size: 84px;
+  color: #fff7e0;
+  white-space: nowrap;
+  --olc: #5a3416;
+  --olw: 18px;
+}
+
+.fxe-m-rows {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.fxe-m-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 6px 28px 8px;
+  border-radius: 20px;
+  background: rgba(52, 29, 11, 0.85);
+  color: #fff3d6;
+  white-space: nowrap;
+  opacity: 0;
+}
+
+.fxe-m-row.on {
+  opacity: 1;
+  animation: fxe-pop calc(var(--u) * 0.4) cubic-bezier(0.2, 1.4, 0.4, 1) backwards;
+}
+
+.fxe-m-row span {
+  font-size: 38px;
+  font-weight: 900;
+}
+
+.fxe-m-row b {
+  display: inline-block;
+  min-width: 1.2em;
+  font-size: 86px;
+  font-weight: 900;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  color: #ffd23f;
+}
+
+.fxe-m-row small {
+  font-size: 36px;
+  font-weight: 900;
+}
+
+.fxe-m-row.safe b {
+  font-size: 54px;
+  color: #b6f2bf;
+}
+
+/* BAD のはんこ（赤は使わず紫で） */
+.fxe-m-stamp {
+  position: absolute;
+  right: -46px;
+  top: 112px;
+  width: 168px;
+  height: 168px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 7px solid #fffaf0;
+  border-radius: 50%;
+  background: #7c3aed;
+  color: #fffaf0;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 8px 0 rgba(0, 0, 0, 0.35);
+  transform: rotate(14deg);
+  opacity: 0;
+}
+
+.fxe-m-stamp b {
+  font-size: 58px;
+  letter-spacing: 0.04em;
+}
+
+.fxe-m-stamp small {
+  margin-top: 6px;
+  font-size: 24px;
+}
+
+.fxe-m-stamp.on {
+  opacity: 1;
+  animation: fxe-m-stamp calc(var(--u) * 0.4) cubic-bezier(0.3, 1.5, 0.5, 1) backwards;
+}
+
+@keyframes fxe-m-stamp {
+  from {
+    transform: rotate(40deg) scale(2.4);
+    opacity: 0;
+  }
+  to {
+    transform: rotate(14deg);
+    opacity: 1;
+  }
+}
+
+/* ==== 「この1球で景品が尽きる！」の予告（赤の点滅は使わず、金と白のゆっくりした脈動で） ==== */
+
+/* 上下の帯（金の地に、文字がゆっくり流れる） */
+.fxe-f-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 80px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #ffe08a, #f5c542 55%, #d9a520);
+  box-shadow: 0 0 34px rgba(245, 197, 66, 0.5);
+  transform: scaleY(0);
+  transition: transform calc(var(--u) * 0.3) ease-out;
+}
+
+.fxe-f-band.top {
+  top: 0;
+  transform-origin: 50% 0;
+}
+
+.fxe-f-band.bottom {
+  bottom: 0;
+  transform-origin: 50% 100%;
+}
+
+.fxe-f-band.on {
+  transform: none;
+}
+
+.fxe-f-track {
+  display: flex;
+  width: max-content;
+  height: 100%;
+  align-items: center;
+  animation: fxe-f-marq var(--marq, 9000ms) linear infinite;
+}
+
+.fxe-f-band.bottom .fxe-f-track {
+  animation-direction: reverse;
+}
+
+.fxe-f-track span {
+  padding-right: 64px;
+  color: #1b1200;
+  font-size: 44px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+@keyframes fxe-f-marq {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* 下から振れる 2 本の光（1 秒に 0.1 回転より遅く） */
+.fxe-f-beam {
+  position: absolute;
+  bottom: -40px;
+  width: 320px;
+  height: 1320px;
+  margin-left: -160px;
+  background: linear-gradient(0deg, rgba(255, 236, 170, 0.5), rgba(255, 236, 170, 0.12) 60%, transparent);
+  clip-path: polygon(44% 100%, 56% 100%, 100% 0, 0 0);
+  transform-origin: 50% 100%;
+  transform: rotate(var(--a0));
+  opacity: 0;
+  transition: opacity calc(var(--u) * 0.4) ease;
+}
+
+.fxe-f-beam.l {
+  left: 260px;
+  --a0: 10deg;
+  --a1: 36deg;
+}
+
+.fxe-f-beam.r {
+  left: 1660px;
+  --a0: -10deg;
+  --a1: -36deg;
+}
+
+.fxe-f-beam.on {
+  opacity: 1;
+  animation: fxe-f-sweep var(--sweep, 1400ms) ease-in-out infinite alternate;
+}
+
+@keyframes fxe-f-sweep {
+  from {
+    transform: rotate(var(--a0));
+  }
+  to {
+    transform: rotate(var(--a1));
+  }
+}
+
+/* 中央の金の後光（ゆっくり脈打つ） */
+.fxe-f-halo {
+  position: absolute;
+  left: 960px;
+  top: 470px;
+  width: 1400px;
+  height: 760px;
+  margin: -380px 0 0 -700px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(245, 197, 66, 0.55) 0%, rgba(245, 197, 66, 0.18) 45%, transparent 70%);
+  opacity: 0;
+  transition: opacity calc(var(--u) * 0.5) ease;
+}
+
+.fxe-f-halo.on {
+  opacity: 0.6;
+  animation: fxe-f-breathe var(--pulse) ease-in-out infinite;
+}
+
+@keyframes fxe-f-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+
+.fxe-f-center {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 230px;
+  text-align: center;
+}
+
+.fxe-f-pre {
+  font-size: 92px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: #fff4cc;
+  text-shadow: 0 6px 0 #3a2600, 0 0 26px rgba(245, 197, 66, 0.8);
+  opacity: 0;
+}
+
+.fxe-f-pre.on {
+  opacity: 1;
+  animation: fxe-rise calc(var(--u) * 0.35) ease-out backwards;
+}
+
+.fxe-f-main {
+  position: relative;
+  display: inline-block;
+  margin-top: 2px;
+  font-size: 176px;
+  font-weight: 900;
+  line-height: 1.12;
+  white-space: nowrap;
+  opacity: 0;
+}
+
+.fxe-f-main.on {
+  opacity: 1;
+  animation: fxe-f-slam calc(var(--u) * 0.38) cubic-bezier(0.3, 1.4, 0.5, 1) backwards;
+}
+
+@keyframes fxe-f-slam {
+  0% {
+    transform: scale(2.3);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(0.96);
+    opacity: 1;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.fxe-f-main::before {
+  content: attr(data-text);
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: #2a1a00;
+  -webkit-text-stroke: 26px #2a1a00;
+  filter: drop-shadow(0 10px 0 rgba(0, 0, 0, 0.45));
+}
+
+.fxe-f-main b {
+  position: relative;
+  font-weight: 900;
+  background: linear-gradient(180deg, #fffbe8 0%, #ffe08a 36%, #f5c542 58%, #b7860f 82%, #ffe9a8 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.fxe-f-main.pulse b {
+  animation: fxe-f-pulse var(--pulse) ease-in-out infinite;
+}
+
+/* 金 → 白のゆっくりした脈動（点滅ではなく、光の強さがなめらかに変わるだけ） */
+@keyframes fxe-f-pulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 6px rgba(245, 197, 66, 0.35));
+  }
+  50% {
+    filter: drop-shadow(0 0 30px rgba(255, 248, 220, 0.95));
+  }
+}
+
+.fxe-f-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 22px;
+  margin-top: 26px;
+  padding: 10px 44px;
+  border: 4px solid #f5c542;
+  border-radius: 999px;
+  background: rgba(14, 10, 0, 0.78);
+  box-shadow: 0 0 30px rgba(245, 197, 66, 0.45);
+  color: #fff4cc;
+  font-size: 54px;
+  font-weight: 900;
+  white-space: nowrap;
+  opacity: 0;
+}
+
+.fxe-f-left.on {
+  opacity: 1;
+  animation: fxe-pop calc(var(--u) * 0.4) cubic-bezier(0.2, 1.4, 0.4, 1) backwards;
+}
+
+.fxe-f-left b {
+  font-size: 100px;
+  line-height: 1.05;
+  color: #ffe08a;
+  font-variant-numeric: tabular-nums;
+}
+
+.fxe-f-gifts {
+  display: flex;
+  gap: 12px;
+  margin-left: 6px;
+}
+
+/* 景品の箱（CSS で描く） */
+.fxe-f-gift {
+  position: relative;
+  width: 46px;
+  height: 40px;
+  margin-top: 12px;
+  border-radius: 6px;
+  background: linear-gradient(#ffe08a, #f5c542 60%, #c99a1e);
+  animation: fxe-f-bob var(--pulse) ease-in-out infinite;
+  animation-delay: calc(var(--pulse) * var(--k, 0) * -0.15);
+}
+
+.fxe-f-gift::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -10px;
+  bottom: 0;
+  width: 9px;
+  margin-left: -4.5px;
+  background: #fff;
+}
+
+.fxe-f-gift::after {
+  content: '';
+  position: absolute;
+  left: -4px;
+  right: -4px;
+  top: -12px;
+  height: 14px;
+  border-radius: 4px;
+  background: linear-gradient(#fff4cc, #ffe08a);
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.12);
+}
+
+@keyframes fxe-f-bob {
+  0%,
+  100% {
+    transform: none;
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+/* ==== ラストワン争奪 ======================================================== */
+
+.fxe-l-rays {
+  position: absolute;
+  left: 960px;
+  top: 540px;
+  width: 860px;
+  height: 860px;
+  margin: -430px 0 0 -430px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, rgba(255, 224, 138, 0.2) 0deg 6deg, rgba(255, 224, 138, 0) 6deg 18deg);
+  -webkit-mask: radial-gradient(circle, transparent 0 10%, #000 20%, rgba(0, 0, 0, 0.4) 40%, transparent 50%);
+  mask: radial-gradient(circle, transparent 0 10%, #000 20%, rgba(0, 0, 0, 0.4) 40%, transparent 50%);
+  opacity: 0;
+  transition: opacity calc(var(--u) * 0.6) ease;
+  /* 1 周 40 秒（速度によらず一定） */
+  animation: fxe-spin 40s linear infinite;
+}
+
+.fxe-l-rays.on {
+  opacity: 1;
+}
+
+.fxe-l-center {
+  position: absolute;
+  left: 490px;
+  right: 490px;
+  top: 540px;
+  text-align: center;
+  transform: translateY(-50%);
+}
+
+.fxe-l-kicker {
+  font-size: 38px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: #c9d2ff;
+  opacity: 0;
+}
+
+.fxe-l-title {
+  margin-top: 4px;
+  font-size: 104px;
+  color: #ffe08a;
+  white-space: nowrap;
+  --olc: #2a1a00;
+  --olw: 20px;
+  opacity: 0;
+}
+
+.fxe-l-kicker.on,
+.fxe-l-sub.on,
+.fxe-l-more.on {
+  opacity: 1;
+  animation: fxe-rise calc(var(--u) * 0.4) ease-out backwards;
+}
+
+.fxe-l-title.on {
+  opacity: 1;
+  animation: fxe-pop calc(var(--u) * 0.5) cubic-bezier(0.2, 1.4, 0.4, 1) backwards;
+}
+
+.fxe-l-sub {
+  margin-top: 8px;
+  font-size: 44px;
+  font-weight: 900;
+  white-space: nowrap;
+  opacity: 0;
+}
+
+.fxe-l-sub b {
+  margin: 0 0.15em;
+  font-size: 1.3em;
+  color: #ffe08a;
+}
+
+.fxe-l-more {
+  margin-top: 6px;
+  font-size: 30px;
+  font-weight: 800;
+  color: #8a93b8;
+  opacity: 0;
+}
+
+.fxe-l-result {
+  min-height: 1.3em;
+  margin-top: 10px;
+  font-size: 54px;
+  font-weight: 900;
+  line-height: 1.25;
+  color: #ffe08a;
+  text-shadow: 0 5px 0 #2a1a00, 0 0 24px rgba(245, 197, 66, 0.7);
+  opacity: 0;
+}
+
+.fxe-l-result.on {
+  opacity: 1;
+  animation: fxe-pop calc(var(--u) * 0.45) cubic-bezier(0.2, 1.4, 0.4, 1) backwards;
+}
+
+/* 名前のカード（楕円に並べ、光が順に回る） */
+.fxe-l-card {
+  position: absolute;
+  width: 276px;
+  height: 104px;
+  margin: -52px 0 0 -138px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid rgba(245, 197, 66, 0.35);
+  border-radius: 20px;
+  background: linear-gradient(180deg, #1c2554, #0d1331);
+  box-shadow: 0 8px 0 rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transition: opacity calc(var(--u) * 0.4) ease, filter calc(var(--u) * 0.4) ease, transform calc(var(--u) * 0.35) cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+.fxe-l-card.on {
+  opacity: 1;
+  animation: fxe-l-deal calc(var(--u) * 0.5) cubic-bezier(0.2, 1, 0.3, 1) backwards;
+  animation-delay: calc(var(--u) * var(--dk, 0));
+}
+
+@keyframes fxe-l-deal {
+  from {
+    transform: translate(var(--fx), var(--fy)) scale(0.3);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.fxe-l-card small {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #8a93b8;
+}
+
+.fxe-l-card b {
+  max-width: 250px;
+  overflow: hidden;
+  font-size: 36px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fxe-l-card.me {
+  border-color: #5ad2ff;
+}
+
+.fxe-l-card i {
+  position: absolute;
+  top: -18px;
+  right: -10px;
+  padding: 2px 14px;
+  border-radius: 999px;
+  background: #5ad2ff;
+  color: #04121f;
+  font-size: 22px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+/* 光が当たっているカード（切り替えの速さは events.ts で 1 秒に 3 回以下にしてある） */
+.fxe-l-card.lit,
+.fxe-l-card.win {
+  border-color: #fff;
+  background: linear-gradient(180deg, #fff4cc, #f5c542);
+  box-shadow: 0 0 38px rgba(255, 224, 138, 0.85), 0 8px 0 rgba(0, 0, 0, 0.35);
+}
+
+.fxe-l-card.lit b,
+.fxe-l-card.win b {
+  color: #2a1a00;
+}
+
+.fxe-l-card.lit small,
+.fxe-l-card.win small {
+  color: #6b4e00;
+}
+
+.fxe-l-card.out {
+  opacity: 0.3;
+  filter: grayscale(0.7);
+}
+
+.fxe-l-card.win {
+  z-index: 2;
+  transform: scale(1.18);
+  animation: fxe-l-glow var(--pulse) ease-in-out infinite;
+}
+
+@keyframes fxe-l-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 26px rgba(245, 197, 66, 0.7), 0 8px 0 rgba(0, 0, 0, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 60px rgba(255, 248, 220, 0.95), 0 8px 0 rgba(0, 0, 0, 0.35);
+  }
+}
+
+.fxe-l-card.win::after {
+  content: '★ ラストワン賞';
+  position: absolute;
+  left: 50%;
+  bottom: -28px;
+  padding: 3px 18px;
+  border-radius: 999px;
+  background: #2a1a00;
+  color: #ffe08a;
+  font-size: 24px;
+  font-weight: 900;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
