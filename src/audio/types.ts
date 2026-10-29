@@ -65,6 +65,16 @@ export interface EventSfx {
   outro(): void // 締めくくり（おつかれさまでした）
 }
 
+// 手元のスロット（抽選のたびに、自分のスマホで回して STOP で止める）の音
+export interface SpinSfx {
+  spinStart(): void // 手元のリールが回り出す
+  spinTap(power: number): void // 連打の 1 打（power はゲージの量 0〜1。上がるほど少し高く明るく）。1 秒に十数回鳴るので軽く
+  spinLevel(level: number, tier: Tier): void // ゲージの段階が上がった（level 1〜4）。予告の格（tier）に合わせて強さを変える
+  stopReady(): void // STOP が押せるようになった（気づかせるが、短く）
+  stopPress(): void // STOP を押した（気持ちいい手応え）
+  reelLand(tier: Tier): void // 手元のリールが番号に止まる（自分の段階に合わせた着地）
+}
+
 export type BgmScene = 'reception' | 'early' | 'reach' | 'bingo' | 'final' | 'cooldown'
 
 export interface Bgm {

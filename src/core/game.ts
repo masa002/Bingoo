@@ -276,18 +276,22 @@ export class Game {
     return change
   }
 
-  // モグラ（BAD）: まだ上がっていない人の一部で、開いている穴を 1 つ埋める（FREE は対象外）
-  applyMole(rng: Rng, ratio: number, forceMe: boolean): CellChange {
+  // モグラ（BAD）: まだ上がっていない人の一部で、開いている穴を 1 つ埋める（FREE は対象外）。
+  // onlyReach のときは、リーチの人だけを ratio の割合で狙い、リーチのラインの穴を埋める
+  // （景品の残りに対してビンゴの出方が速すぎるときに、ペースを落とす調整役として使う）
+  applyMole(rng: Rng, o: { ratio: number; forceMe?: boolean; onlyReach?: boolean }): CellChange {
     const change: CellChange = { cells: new Map(), newReach: 0, newDouble: 0, lostReach: 0 }
     for (const p of this.players) {
       if (p.bingoDraw !== null) continue
       const open = p.mask & ~FREE_MASK
-      if (!open || !((p.isMe && forceMe) || rng.chance(ratio))) continue
+      const forced = p.isMe && o.forceMe
+      if (!open || (o.onlyReach && p.reach === 0 && !forced)) continue
+      if (!forced && !rng.chance(o.ratio)) continue
       const cells: number[] = []
       for (let cell = 0; cell < 25; cell++) if (open & (1 << cell)) cells.push(cell)
-      // リーチのラインにかかっているマスを少しだけ狙いやすくする（ドラマのため）
+      // リーチのラインにかかっているマスを狙う（ふだんは 4 割、調整役のときは必ず）
       const waiting = cells.filter((c) => LINES.some((line) => line & (1 << c) && popcount(p.mask & line) === 4))
-      const cell = waiting.length && rng.chance(0.4) ? rng.pick(waiting) : rng.pick(cells)
+      const cell = waiting.length && (o.onlyReach || rng.chance(0.4)) ? rng.pick(waiting) : rng.pick(cells)
       const before = p.reach
       p.mask &= ~(1 << cell)
       p.wild &= ~(1 << cell)

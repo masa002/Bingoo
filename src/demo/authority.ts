@@ -31,7 +31,10 @@ export interface Settings {
 }
 
 export type HitKind = 'any' | 'hit' | 'gase' // 段階を指定するとき: 新規ビンゴあり／なし
-export type EventKind = 'wild' | 'mole' | 'moleMe'
+export type EventKind = 'wild' | 'mole' | 'moleMe' | 'moleReach'
+
+// ペースの調整役のモグラは、1 ゲームにこの回数まで
+const MAX_MOLES = 5
 
 const COLOR_RANK: Record<BallColor, number> = { white: 0, red: 1, gold: 2, rainbow: 3 }
 
@@ -50,6 +53,8 @@ export class DemoAuthority {
   onChange: () => void = () => {}
 
   private rng!: Rng
+  private paceRng!: Rng // 進み方の見込みの計算用（演出の乱数の並びを変えないように分ける）
+  private target = 0 // 下位の景品が尽きるまでの抽選回数の目安
   private stock!: PrizeStock
   private dcPool: Prize[] = []
   private readonly prizeOf = new Map<number, Prize>() // 受け取った景品
@@ -61,8 +66,10 @@ export class DemoAuthority {
   private botsJoined = 0
   private tampered = false
   private generation = 0
-  private wildAt = 0
-  private moleAt = 0
+  private lastEventAt = -10
+  private moles = 0
+  private wilds = 0
+  private meStopped = false
   private pendingEvent: EventKind | null = null
   private pushNow: (() => void) | null = null
   private choiceNow: ((kind: 'receive' | 'challenge') => void) | null = null
@@ -78,7 +85,10 @@ export class DemoAuthority {
     this.settings = settings
     this.game = new Game(settings, fakeName)
     this.rng = new Rng(`${settings.seed}/show`)
+    this.paceRng = new Rng(`${settings.seed}/pace`)
     this.stock = new PrizeStock(settings.lower, settings.upper, new Rng(`${settings.seed}/prizes`))
+    // 目安は、何もしなかったときの見込みより少し長め（モグラで一気に減る回をならす分）
+    this.target = Math.max(16, Math.round(this.game.estimateDrawsUntil(settings.lower, this.paceRng, 12) * 1.15))
     this.dcPool = doubleChancePrizes(settings.dc)
     for (const m of [this.prizeOf, this.pending, this.balls]) m.clear()
     this.entrants.clear()
@@ -95,10 +105,9 @@ export class DemoAuthority {
     this.pushNow = null
     this.choiceNow = null
     this.entryClose = null
-    // 全員確定とモグラは 1 ゲームに 1 回ずつ、序盤と中盤のどこかで起きる
-    const ev = new Rng(`${settings.seed}/events`)
-    this.wildAt = 3 + ev.int(5)
-    this.moleAt = 9 + ev.int(7)
+    this.lastEventAt = -10
+    this.moles = 0
+    this.wilds = 0
     this.deckHash = await commitHash(this.game.deck, this.stock.manifest(), `${settings.seed}/salt`)
     if (gen !== this.generation) return
     const g = this.game
@@ -124,6 +133,7 @@ export class DemoAuthority {
 
   command(cmd: PhoneCommand): void {
     if (cmd.type === 'join') this.join()
+    else if (cmd.type === 'stop') this.meStopped = true
     else if (cmd.type === 'choice') this.choiceNow?.(cmd.kind)
     else if (this.phase === 'dc-entry' && !this.entrants.has(0)) {
       this.entrants.add(0)
@@ -150,9 +160,9 @@ export class DemoAuthority {
     this.botsJoined = g.size - 1
     this.onChange()
 
-    const ev = this.pendingEvent ?? this.dueEvent()
+    const ev = this.pendingEvent ? { kind: this.pendingEvent, ratio: 0.15 } : this.pacingEvent()
     this.pendingEvent = null
-    if (ev) await this.runEvent(ev)
+    if (ev) await this.runEvent(ev.kind, ev.ratio)
     else await this.draw(gen)
     if (gen !== this.generation) return
 
@@ -172,19 +182,41 @@ export class DemoAuthority {
 
   // ---- イベント（全員確定・モグラ） -----------------------------------------
 
-  private dueEvent(): EventKind | null {
-    const d = this.game.drawCount
-    if (!this.eventsDone.has('wild') && d >= this.wildAt) return 'wild'
-    if (!this.eventsDone.has('mole') && d >= this.moleAt) return 'mole'
-    return null
+  // ペースの調整役。次の 1 球で景品が一気に減る（残りの 1/3 を超える人数が同時に上がる）ときはモグラでリーチの人の一部を止め、
+  // 序盤を過ぎても誰も上がらず、目安より長引きそうなときだけ虹玉で全員を 1 マス進める（虹玉は進行を大きく速めるため）。
+  // 手元で試した結果（1000 人・下位 30）: 同時に上がって景品からあふれる人が平均 4.8 人 → 1.6 人、抽選回数は 22 → 24 回
+  private pacingEvent(): { kind: EventKind; ratio: number } | null {
+    const g = this.game
+    const d = g.drawCount
+    const left = this.stock.lowerLeft
+    if (d < 3 || d - this.lastEventAt < 2 || left <= 0) return null
+    if (this.forcedNumber !== null || this.forcedTier !== null) return null // 操作パネルで指定中は任せる
+    if (this.wilds < 1 && d >= 5 && g.winners.length === 0) {
+      const projected = d + g.estimateDrawsUntil(left, this.paceRng, 6)
+      if (projected > this.target + 3) return { kind: 'wild', ratio: 1 }
+    }
+    if (this.moles >= MAX_MOLES || g.reachHolders() === 0) return null
+    const next = g.nextInDeck()
+    const burst = next === undefined ? 0 : g.preview(next).newBingo
+    const cap = Math.max(2, Math.ceil(left / 3))
+    if (burst <= cap) return null
+    // 次の回に上がる人が cap 人ほどに収まるくらいの割合で、リーチの人を止める
+    return { kind: 'moleReach', ratio: Math.min(0.85, Math.max(0.35, 1 - cap / burst)) }
   }
 
-  private async runEvent(kind: EventKind): Promise<void> {
+  private async runEvent(kind: EventKind, ratio: number): Promise<void> {
     const g = this.game
     const wild = kind === 'wild'
     this.eventsDone.add(wild ? 'wild' : 'mole')
+    this.lastEventAt = g.drawCount
+    if (wild) this.wilds++
+    else this.moles++
     const before = g.me.reach
-    const change = wild ? g.applyWild(this.rng) : g.applyMole(this.rng, 0.15, kind === 'moleMe')
+    const change = wild
+      ? g.applyWild(this.rng)
+      : kind === 'moleReach'
+        ? g.applyMole(this.rng, { ratio, onlyReach: true })
+        : g.applyMole(this.rng, { ratio, forceMe: kind === 'moleMe' })
     const cell = change.cells.get(0) ?? null
     const durationMs = wild ? 11500 : 7500
     this.hub.publish({
@@ -228,7 +260,23 @@ export class DemoAuthority {
     const drawNo = g.drawCount + 1
     this.hub.publish({ type: 'drawScheduled', drawNo, tier, plan, timing: t, beats: schedule(plan, t), personal })
 
-    await this.clock.wait(t.reveal)
+    // 溜め: 各自のスマホで手元のスロットが回っている（連打でゲージを溜める）
+    this.meStopped = false
+    await this.clock.wait(t.charge)
+    if (gen !== this.generation) return
+    // STOP の受付: 本人に番号を渡す。仮想参加者は、連打した人から順にばらばらに止めていく
+    this.hub.publish({ type: 'drawOpen', drawNo, n: imp.n })
+    const bots = g.size - 1
+    const windowMs = t.deadline - t.charge
+    for (let elapsed = 0; elapsed < windowMs; elapsed += 250) {
+      await this.clock.wait(Math.min(250, windowMs - elapsed))
+      if (gen !== this.generation) return
+      const k = Math.min(1, (elapsed + 250) / windowMs)
+      this.publishStops(drawNo, Math.round((bots * 0.9 * (1 - Math.exp(-4 * k))) / (1 - Math.exp(-4))))
+    }
+    this.publishStops(drawNo, bots, true) // 押さなかった人も、締め切りで自動で止まる
+    // 大画面の答え合わせ
+    await this.clock.wait(t.reveal - t.deadline)
     if (gen !== this.generation) return
     if (t.push) {
       this.hub.publish({ type: 'awaitPush', drawNo, ms: 3000 })
@@ -597,6 +645,11 @@ export class DemoAuthority {
   private publishBulk(numbers: number[]): void {
     if (numbers.length) this.hub.publish({ type: 'bulkDrawn', numbers, totals: this.totals() })
     this.onChange()
+  }
+
+  private publishStops(drawNo: number, bots: number, all = false): void {
+    const total = this.game.size
+    this.hub.publish({ type: 'stopCount', drawNo, count: all ? total : bots + (this.meStopped ? 1 : 0), total })
   }
 
   private publishJoined(): void {
