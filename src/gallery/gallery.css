@@ -1,0 +1,118 @@
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #05070f;
+  color: #e8ecff;
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
+}
+
+#app.gal-app {
+  display: block;
+  height: 100vh;
+}
+
+.gal {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  height: 100vh;
+}
+
+.gal-side {
+  overflow-y: auto;
+  padding: 12px;
+  background: #0b1024;
+  border-right: 1px solid #1d2648;
+  font-size: 13px;
+}
+
+.gal-side h1 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.gal-side h2 {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  color: #8a93b8;
+}
+
+.gal-item,
+.gal-speed button {
+  font: inherit;
+  color: inherit;
+  border: 1px solid #1d2648;
+  background: #121a3e;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.gal-item {
+  display: block;
+  width: 100%;
+  margin: 3px 0;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.gal-speed button {
+  padding: 3px 8px;
+}
+
+.gal-speed button.on {
+  background: #f5c542;
+  color: #1a1400;
+}
+
+.gal-main {
+  position: relative;
+  display: grid;
+  grid-template-rows: 36px minmax(0, 1fr);
+  min-height: 0;
+}
+
+.gal-title {
+  padding: 8px 14px;
+  color: #8a93b8;
+  font-size: 13px;
+}
+
+.gal-view {
+  position: relative;
+  min-height: 0;
+  display: none;
+}
+
+.gal-main:not([data-screen='phone']) .gal-stage-wrap,
+.gal-main[data-screen='phone'] .gal-phone-wrap {
+  display: block;
+}
+
+.gal-stage,
+.gal-phone {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  overflow: hidden;
+}
+
+.gal-stage {
+  width: 1920px;
+  height: 1080px;
+  background: radial-gradient(ellipse at 42% 40%, #16204a 0%, #070b1a 60%, #04060d 100%);
+}
+
+/* 画面の中身はちょうど 390×844。枠は外側に描く */
+.gal-phone {
+  width: 390px;
+  height: 844px;
+  border-radius: 48px;
+  outline: 10px solid #1c2240;
+  background: #0a0f24;
+}
+
+.gal-host {
+  position: absolute;
+  inset: 0;
+}

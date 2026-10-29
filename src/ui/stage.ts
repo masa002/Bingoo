@@ -1,47 +1,32 @@
-import { LETTERS, columnOf } from '../core/card'
+import { bgm, engine, sfx, type BgmScene } from '../audio'
+import { LETTERS } from '../core/card'
 import type { Player } from '../core/game'
-import { TIER_SHAPE, TIER_WORD, type Beat, type Tier } from '../core/show'
 import type { Clock } from '../demo/clock'
+import { Particles, RAINBOW } from '../fx/particles'
+import { DoubleChanceStage } from '../fx/stage/doublechance'
+import { DrawMachine } from '../fx/stage/draw'
+import { playAllKakutei, playFinalBall, playLastOne, playMole } from '../fx/stage/events'
 import type { LocalHub } from '../net/hub'
 import type { Msg, MsgOf, PrizeEntry, Totals } from '../net/protocol'
-import { countUp, esc, fit, fmt, h, q, replay } from './dom'
-import { GOLD, Particles, RAINBOW, TIER_COLORS } from './particles'
-import { sound } from './sound'
+import { countUp, esc, fit, fmt, h, q } from './dom'
 
-// 会場の大画面（1920×1080 で組んで縮小表示する）。音はこの画面だけが鳴らす
+// 会場の大画面（1920×1080 で組んで縮小表示する）。抽選機・イベント・ダブルチャンスの演出は fx/ の部品で、
+// この画面は HUD・結果・会場ビュー・番号の盤と、メッセージから部品への振り分けを受け持つ。音（PA）はこの画面だけが鳴らす
 
 export type VenueSource = () => readonly Player[]
 
-const CARD_X = 810
-const CARD_Y = 440
-
 const STAGE_HTML = `
-<div class="st-bg"></div>
 <header class="st-hud">
   <div class="st-logo">BINGOO</div>
   <div class="st-stat"><span>参加</span><b data-k="size">0</b></div>
   <div class="st-stat"><span>リーチ</span><b data-k="reach">0</b></div>
   <div class="st-stat"><span>ビンゴ</span><b data-k="bingo">0</b></div>
-  <div class="st-stat"><span>景品 残り</span><b data-k="prizes">0</b></div>
+  <div class="st-stat"><span>景品 残り</span><b data-k="lower">0</b></div>
+  <div class="st-stat st-upper"><span>上位</span><b data-k="upper">0</b></div>
+  <div class="st-stat st-chal"><span>チャレンジ中</span><b data-k="chal">0</b></div>
   <div class="st-odds">残り <b data-k="remaining">75</b> 個中　当たり番号 <b data-k="hits">0</b> 個</div>
 </header>
 <div class="st-hash"></div>
-<div class="st-steps">${[1, 2, 3, 4, 5].map((i) => `<div class="st-step"><i>STEP</i><b>${i}</b></div>`).join('')}</div>
-<div class="st-machine">
-  <div class="st-halo"></div>
-  <div class="st-pop">
-    <div class="st-ring"></div>
-    <div class="st-card">
-      <div class="st-face">
-        <div class="st-col">?</div>
-        <div class="st-num">--</div>
-        <div class="st-mark"><span class="st-shape">●</span><span class="st-word"></span></div>
-      </div>
-      <div class="st-back"><div class="st-back-logo">BINGOO<small>PACK</small></div></div>
-    </div>
-  </div>
-  <div class="st-next">NEXT ▶</div>
-</div>
 <section class="st-result">
   <div class="st-last"><small>今回の番号</small><b>--</b></div>
   <div class="st-chips">
@@ -53,30 +38,23 @@ const STAGE_HTML = `
 </section>
 <section class="st-venue"><canvas width="610" height="236"></canvas><span class="st-venue-label">会場ビュー</span></section>
 <div class="st-board"></div>
-<div class="st-telop"></div>
-<div class="st-flyers"></div>
-<div class="st-cutin"><div class="st-cutin-band"><b></b></div></div>
-<div class="st-dim"></div>
-<div class="st-crack"></div>
-<div class="st-kakutei"><b>確定</b><span>せーの！</span></div>
-<div class="st-push">PUSH!</div>
 <canvas class="st-fx" width="1920" height="1080"></canvas>
 <div class="st-overlay"></div>
 <div class="st-watermark">DEMO・仮想参加者</div>
 `
 
-const tierColor = (t: Tier): string => (t === 4 ? '#f5c542' : TIER_COLORS[t])
-
 export class StageView {
   private readonly root: HTMLDivElement
   private readonly fx: Particles
   private readonly venue: Venue
-  private reelTimer = 0
+  private readonly machine: DrawMachine
+  private dc: DoubleChanceStage | null = null
   private timers: number[] = []
   private cancelBeats: () => void = () => {}
   private drawn = new Set<number>()
   private last = 0
-  private prizeEntries: PrizeEntry[] = []
+  private scene: BgmScene = 'reception'
+  private firstBingo = false
 
   constructor(
     host: HTMLElement,
@@ -89,6 +67,7 @@ export class StageView {
     fit(this.root, 1920, 1080)
     this.fx = new Particles(this.$<HTMLCanvasElement>('.st-fx'))
     this.venue = new Venue(this.$<HTMLCanvasElement>('.st-venue canvas'), this.$('.st-venue-label'), venueSource)
+    this.machine = new DrawMachine(this.root, { speed: clock.speed })
     this.buildBoard()
     hub.subscribe((m) => this.on(m))
   }
@@ -106,10 +85,17 @@ export class StageView {
         if (count) count.textContent = fmt(m.count)
         return
       }
+      case 'eventPlay':
+        return this.onEvent(m)
+      case 'finalBall':
+        this.hideOverlay()
+        this.setScene('final')
+        void playFinalBall(this.root, { speed: this.clock.speed, prizesLeft: m.prizesLeft })
+        return
       case 'drawScheduled':
         return this.onScheduled(m)
       case 'awaitPush':
-        this.$('.st-push').classList.add('on')
+        this.machine.awaitPush()
         return
       case 'numberRevealed':
         return this.onRevealed(m)
@@ -122,21 +108,28 @@ export class StageView {
         return
       case 'prizeTime':
         return this.onPrizeTime(m)
-      case 'packOpened': {
-        const e = this.prizeEntries.find((x) => x.idx === m.idx)
-        if (e) this.openTile(e)
-        return
-      }
-      case 'prizeSpotlight':
-        return this.onSpotlight(m)
-      case 'prizeEnd':
-        this.hideOverlay()
+      case 'choices':
+        this.setTotals(m.totals)
+        if (m.challengers.length) this.addNames(m.challengers.map((c) => ({ ...c, label: '上位チャレンジへ' })), 'chal')
         return
       case 'idle':
         this.setTotals(m.totals)
         return
       case 'gameOver':
-        return this.onGameOver(m.totals)
+        return this.onGameOver(m)
+      case 'dcEntry':
+        return this.onDcEntry(m)
+      case 'dcEntrants':
+        this.dc?.setEntrants(m.count)
+        return
+      case 'dcSpin':
+        return this.onDcSpin(m)
+      case 'dcEnd':
+        void this.dc?.finish()
+        this.later(6000, () => bgm.stop(3000))
+        return
+      case 'challengeDeal':
+      case 'challengeEnd':
       case 'notice':
         return
     }
@@ -146,27 +139,29 @@ export class StageView {
 
   private onSnapshot(m: MsgOf<'snapshot'>): void {
     this.cancelAll()
+    this.resetSound()
     this.fx.clear()
+    this.dc?.destroy()
+    this.dc = null
+    this.firstBingo = false
+    this.machine.setSpeed(this.clock.speed)
+    this.machine.reset()
     this.drawn = new Set(m.drawn)
-    this.last = m.drawn[m.drawn.length - 1] ?? 0
+    this.last = 0
     this.renderBoard()
     this.setTotals(m.totals)
     this.$('.st-hash').textContent = `抽選順と景品の並びのハッシュ ${m.deckHash.slice(0, 16)}…`
-    this.resetMachine()
     this.clearResult()
     this.venue.reset(m.size)
-    this.root.querySelectorAll('.st-step').forEach((s) => s.classList.remove('on'))
-    if (m.phase === 'reception') {
-      this.showOverlay(`
-        <div class="rcp">
-          <h2>受付中</h2>
-          <div class="rcp-count"><b>0</b> / ${fmt(m.size)} 人</div>
-          <p>右のスマホ枠の「参加する」を押してください</p>
-          <p class="muted">主催の「次へ」で受付を締め切り、抽選を始めます</p>
-        </div>`)
-    } else {
-      this.hideOverlay()
-    }
+    this.scene = 'reception'
+    bgm.play('reception')
+    this.showOverlay(`
+      <div class="rcp">
+        <h2>受付中</h2>
+        <div class="rcp-count"><b>0</b> / ${fmt(m.size)} 人</div>
+        <p>右のスマホ枠の「参加する」を押してください</p>
+        <p class="muted">主催の「次へ」で受付を締め切り、抽選を始めます</p>
+      </div>`)
   }
 
   private buildBoard(): void {
@@ -194,257 +189,73 @@ export class StageView {
     set('size', fmt(t.size))
     set('reach', fmt(t.reachHolders))
     set('bingo', fmt(t.winners))
-    set('prizes', `${t.prizesLeft}/${t.prizeCount}`)
+    set('lower', `${t.lowerLeft}/${t.lowerTotal}`)
+    set('upper', `${t.upperLeft}/${t.upperTotal}`)
+    set('chal', fmt(t.challengers))
     set('remaining', String(t.remaining))
     set('hits', String(t.hitsLeft))
     this.$('.st-hash').classList.toggle('tampered', t.tampered)
+    // BGM は会場の局面で切り替える（序盤 → リーチ期 → ビンゴ期 → オーラス）
+    if (t.phase === 'playing') {
+      if (t.lowerLeft <= 3 && t.winners > 0) this.setScene('final')
+      else if (t.winners > 0) this.setScene('bingo')
+      else if (t.reachHolders >= t.size * 0.05) this.setScene('reach')
+      else this.setScene('early')
+    }
   }
 
-  // ---- 抽選の演出 -----------------------------------------------------------
+  private setScene(scene: BgmScene): void {
+    const order: BgmScene[] = ['reception', 'early', 'reach', 'bingo', 'final', 'cooldown']
+    if (order.indexOf(scene) < order.indexOf(this.scene)) return // 局面は戻さない
+    this.scene = scene
+    bgm.play(scene)
+  }
+
+  // ---- イベント -------------------------------------------------------------
+
+  private onEvent(m: MsgOf<'eventPlay'>): void {
+    this.hideOverlay()
+    this.cancelAll()
+    this.clearResult()
+    const o = { speed: this.clock.speed, total: m.total }
+    if (m.kind === 'wild') {
+      void playAllKakutei(this.root, { ...o, newReach: m.newReach, newDouble: m.newDouble })
+      this.later(m.resultAt - 2500, () => this.venue.rainbow())
+    } else {
+      void playMole(this.root, { ...o, hit: m.hit, lostReach: m.lostReach })
+    }
+    this.later(m.resultAt, () => {
+      this.setTotals(m.totals)
+      this.venue.refresh()
+    })
+  }
+
+  // ---- 抽選 -----------------------------------------------------------------
 
   private onScheduled(m: MsgOf<'drawScheduled'>): void {
     this.hideOverlay()
     this.cancelAll()
-    this.fx.speed = this.clock.speed
     this.clearResult()
-    this.resetMachine()
-    this.root.querySelectorAll('.st-step').forEach((s) => s.classList.remove('on'))
-    if (m.tier === 4 && !m.plan.upgrade) this.showBack(true)
-    this.cancelBeats = this.clock.run(m.beats, (b) => this.beat(b))
+    this.setScene('early')
+    this.machine.setSpeed(this.clock.speed)
+    this.machine.reset()
+    this.machine.setPool(Array.from({ length: 75 }, (_, i) => i + 1).filter((n) => !this.drawn.has(n)))
+    this.machine.start(m.beats, m.plan)
+    // 会場ビュー（デモ専用）は、赤以上の溜めでリーチの人のスマホが光る様子を見せる
+    this.cancelBeats = this.clock.run(
+      m.beats.filter((b) => b.kind === 'sea'),
+      () => this.venue.sea(),
+    )
   }
-
-  private beat(b: Beat): void {
-    switch (b.kind) {
-      case 'appear':
-        this.setHeat(b.heat)
-        this.$('.st-pop').animate([{ transform: 'scale(.6)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }], {
-          duration: this.clock.scale(300),
-          easing: 'cubic-bezier(.2,1.4,.4,1)',
-        })
-        sound.tick()
-        break
-      case 'spin':
-        this.startReel(55)
-        break
-      case 'holdChange':
-        this.setHeat(b.heat)
-        replay(this.$('.st-ring'), 'pulse')
-        sound.holdChange(b.heat)
-        break
-      case 'step':
-        this.lightStep(b.index ?? 0, b.tier ?? 0)
-        this.setHeat(b.heat)
-        sound.step(b.index ?? 0)
-        break
-      case 'group':
-        this.groupNotice()
-        sound.flutter()
-        break
-      case 'pseudo':
-        this.pseudo()
-        break
-      case 'cutin':
-        this.cutin(b.tier ?? 1)
-        this.setHeat(b.heat)
-        sound.cutin(b.tier ?? 1)
-        break
-      case 'telop':
-        this.telop(b.text ?? '')
-        break
-      case 'decel':
-        this.startReel(150)
-        break
-      case 'riser':
-        sound.riser(this.clock.scale(b.dur ?? 1200) / 1000)
-        this.startReel(90)
-        break
-      case 'sea':
-        this.venue.sea()
-        break
-      case 'heartbeat':
-        this.startReel(260)
-        sound.heartbeat(96 * this.clock.speed, this.clock.scale(b.dur ?? 1400))
-        break
-      case 'ma':
-        this.stopReel('?', '?')
-        this.dim(true)
-        sound.silence()
-        break
-      case 'goldEdge':
-        this.showBack(true)
-        this.setHeat(3)
-        this.fx.rise(160, GOLD, CARD_X - 260, CARD_X + 260, 820)
-        sound.goldRise()
-        break
-      case 'freeze':
-        this.stopReel('?', '?')
-        this.showBack(true)
-        this.setHeat(4)
-        this.dim(true)
-        sound.freeze()
-        break
-      case 'crack':
-        this.dim(false)
-        replay(this.$('.st-crack'), 'on')
-        sound.crack()
-        break
-      case 'kakutei':
-        replay(this.$('.st-kakutei'), 'on')
-        this.fx.burst(CARD_X, 300, { count: 120, colors: RAINBOW, speed: 7, shape: 'dot', gravity: 0.05 })
-        sound.kakutei()
-        break
-      case 'rainbowPhones':
-        this.$('.st-kakutei').classList.remove('on')
-        this.venue.rainbow()
-        break
-      case 'push':
-        this.$('.st-push').classList.add('on')
-        break
-      case 'reveal':
-        break // 実際の公開は numberRevealed で行う
-    }
-  }
-
-  private setHeat(t: Tier): void {
-    this.root.dataset.heat = String(t)
-    this.$('.st-shape').textContent = TIER_SHAPE[t]
-    this.$('.st-word').textContent = TIER_WORD[t]
-  }
-
-  private resetMachine(): void {
-    this.stopReelTimer()
-    this.setHeat(0)
-    this.showBack(false)
-    this.dim(false)
-    this.$('.st-num').textContent = '--'
-    this.$('.st-col').textContent = '?'
-    for (const sel of ['.st-push', '.st-kakutei', '.st-crack', '.st-telop', '.st-next']) this.$(sel).classList.remove('on')
-  }
-
-  private showBack(on: boolean): void {
-    this.$('.st-card').classList.toggle('back', on)
-  }
-
-  private dim(on: boolean): void {
-    this.$('.st-dim').classList.toggle('on', on)
-  }
-
-  private startReel(interval: number): void {
-    this.stopReelTimer()
-    const num = this.$('.st-num')
-    const col = this.$('.st-col')
-    num.classList.add('spin')
-    const pool = Array.from({ length: 75 }, (_, i) => i + 1).filter((n) => !this.drawn.has(n))
-    const tick = () => {
-      // 回転中の数字は見た目だけ（抽選結果とは関係ない）
-      const n = pool[Math.floor(Math.random() * pool.length)]
-      num.textContent = String(n)
-      col.textContent = LETTERS[columnOf(n)]
-    }
-    tick()
-    this.reelTimer = window.setInterval(tick, this.clock.scale(interval))
-  }
-
-  private stopReel(text: string, letter: string): void {
-    this.stopReelTimer()
-    this.$('.st-num').classList.remove('spin')
-    this.$('.st-num').textContent = text
-    this.$('.st-col').textContent = letter
-  }
-
-  private stopReelTimer(): void {
-    if (this.reelTimer) window.clearInterval(this.reelTimer)
-    this.reelTimer = 0
-  }
-
-  private lightStep(i: number, tier: Tier): void {
-    const step = this.root.querySelectorAll<HTMLElement>('.st-step')[i]
-    if (!step) return
-    step.style.setProperty('--c', tierColor(tier))
-    step.classList.add('on')
-    step.animate([{ transform: 'scale(1.15)' }, { transform: 'scale(1)' }], { duration: this.clock.scale(260) })
-  }
-
-  private groupNotice(): void {
-    const box = this.$('.st-flyers')
-    for (let i = 0; i < 16; i++) {
-      const card = h('div', 'st-flyer')
-      card.style.top = `${120 + Math.random() * 640}px`
-      box.append(card)
-      card
-        .animate([{ transform: 'translateX(-200px) rotate(-20deg)' }, { transform: 'translateX(2100px) rotate(25deg)' }], {
-          duration: this.clock.scale(700 + Math.random() * 300),
-          delay: this.clock.scale(i * 30),
-          easing: 'ease-in',
-        })
-        .finished.then(() => card.remove(), () => card.remove())
-    }
-  }
-
-  // 疑似連: 止まりかけて「NEXT」で回り直す
-  private pseudo(): void {
-    this.startReel(170)
-    this.later(380, () => {
-      this.stopReel('?', '?')
-      sound.pseudoStop()
-    })
-    this.later(560, () => {
-      replay(this.$('.st-next'), 'on')
-      sound.nextChime()
-    })
-    this.later(780, () => this.startReel(55))
-  }
-
-  private cutin(tier: Tier): void {
-    const box = this.$('.st-cutin')
-    box.style.setProperty('--c', tierColor(tier))
-    box.style.setProperty('--dur', `${this.clock.scale(900)}ms`)
-    q(box, 'b').textContent = TIER_WORD[tier] || 'CHANCE'
-    replay(box, 'go')
-  }
-
-  private telop(text: string): void {
-    const el = this.$('.st-telop')
-    el.textContent = text
-    el.classList.add('on')
-    this.later(2200, () => el.classList.remove('on'))
-  }
-
-  // ---- 公開と結果 -----------------------------------------------------------
 
   private onRevealed(m: MsgOf<'numberRevealed'>): void {
     this.cancelBeats()
-    sound.silence()
-    for (const sel of ['.st-push', '.st-kakutei', '.st-telop']) this.$(sel).classList.remove('on')
-    this.dim(false)
-    this.stopReel(String(m.n), LETTERS[columnOf(m.n)])
-    this.showBack(false)
-    this.setHeat(m.tier)
+    void this.machine.reveal(m.n, m.tier)
     this.drawn.add(m.n)
     this.last = m.n
-    this.$('.st-pop').animate([{ transform: 'scale(1.25)' }, { transform: 'scale(1)' }], {
-      duration: this.clock.scale(220),
-      easing: 'cubic-bezier(.2,1.6,.4,1)',
-    })
-    replay(this.$('.st-halo'), 'burst')
-    this.fx.speed = this.clock.speed
-    const colors = m.tier === 4 ? RAINBOW : m.tier === 3 ? GOLD : [TIER_COLORS[m.tier], '#ffffff']
-    this.fx.burst(CARD_X, CARD_Y, {
-      count: [40, 90, 160, 280, 520][m.tier],
-      colors,
-      speed: 8 + m.tier * 3,
-      shape: m.tier >= 3 ? 'spark' : 'rect',
-      gravity: m.tier >= 3 ? 0.12 : 0.25,
-    })
-    if (m.tier === 4) this.fx.rain(900, RAINBOW)
-    sound.impact(m.tier)
     this.venue.reveal(m.n, m.totals.drawCount)
     this.renderBoard()
-    this.showResult(m)
     this.setTotals(m.totals)
-  }
-
-  private showResult(m: MsgOf<'numberRevealed'>): void {
     this.$('.st-result').classList.add('on')
     this.$('.st-last b').textContent = m.label
     const dur = this.clock.scale(900)
@@ -454,18 +265,30 @@ export class StageView {
     this.$('.chip-bingo').classList.toggle('hot', m.newBingo > 0)
     const list = this.$('.st-names')
     list.innerHTML = ''
-    m.names.forEach((x, i) => {
-      const li = h('li', x.isMe ? 'me' : '', x.isMe ? 'あなた' : esc(x.name))
+    this.addNames(m.challengeWins.map((x) => ({ ...x, label: '上位チャレンジ成功' })), 'chal')
+    this.addNames(m.names, '')
+    if (m.newBingo > m.names.length) list.append(h('li', 'more', `ほか ${fmt(m.newBingo - m.names.length)} 人`))
+    const wins = m.newBingo + m.challengeWins.length
+    if (wins > 0) {
+      this.later(600, () => {
+        sfx.fanfare(wins >= 10 ? 'big' : wins >= 3 ? 'medium' : 'small')
+        this.fx.speed = this.clock.speed
+        this.fx.rain(Math.min(1000, 160 + 60 * wins), RAINBOW)
+      })
+      if (!this.firstBingo) {
+        this.firstBingo = true
+        this.setScene('bingo')
+      }
+    }
+  }
+
+  private addNames(names: { name: string; isMe: boolean; label?: string }[], cls: string): void {
+    const list = this.$('.st-names')
+    names.forEach((x, i) => {
+      const li = h('li', [cls, x.isMe ? 'me' : ''].join(' ').trim(), `${x.isMe ? 'あなた' : esc(x.name)}${x.label ? `<small>${x.label}</small>` : ''}`)
       li.style.animationDelay = `${this.clock.scale(400 + 150 * i)}ms`
       list.append(li)
     })
-    if (m.newBingo > m.names.length) list.append(h('li', 'more', `ほか ${fmt(m.newBingo - m.names.length)} 人`))
-    if (m.newBingo > 0) {
-      this.later(500, () => {
-        sound.fanfare(m.newBingo >= 5)
-        this.fx.rain(Math.min(1200, 200 + 60 * m.newBingo), m.tier === 4 ? RAINBOW : GOLD)
-      })
-    }
   }
 
   private clearResult(): void {
@@ -476,99 +299,63 @@ export class StageView {
     this.$('.st-names').innerHTML = ''
   }
 
-  // ---- 景品ガチャ -----------------------------------------------------------
+  // ---- 景品（当たった瞬間はスマホで見せる。大画面は名前と結果だけ） --------
 
   private onPrizeTime(m: MsgOf<'prizeTime'>): void {
-    this.prizeEntries = m.entries
-    const shown = m.entries.slice(0, 8)
-    const more = m.entries.length - shown.length
-    const title = m.overflow
-      ? `ラストワン争奪！<small>残り ${m.left} 個を ${m.entries.length} 人で</small>`
-      : `景品ガチャ<small>${m.entries.length} 人が開封</small>`
-    this.showOverlay(`
-      <div class="pz">
-        <h2>${title}</h2>
-        <div class="pz-tiles">${shown.map(tileHtml).join('')}${more > 0 ? `<div class="pz-more">ほか ${more} 人</div>` : ''}</div>
-        <div class="pz-spot"></div>
-      </div>`)
-    sound.holdChange(3)
-    shown.forEach((e, i) => {
-      if (!e.isMe) this.later(800 + i * 320, () => this.openTile(e)) // 自分のパックは自分で開ける
-    })
-  }
-
-  private openTile(e: PrizeEntry): void {
-    const tile = this.root.querySelector<HTMLElement>(`.pz-tile[data-idx="${e.idx}"]`)
-    if (!tile || tile.classList.contains('open')) return
-    tile.classList.add('open')
-    sound.packTear()
-    this.later(450, () => {
-      tile.classList.add('flip')
-      sound.rarity(e.rarity)
-      if (e.rarity === 'SR' || e.rarity === 'UR') {
-        const { x, y } = this.centerOf(tile)
-        this.fx.burst(x, y, { count: e.rarity === 'UR' ? 220 : 120, colors: e.rarity === 'UR' ? RAINBOW : GOLD, speed: 9, shape: 'spark' })
-      }
-      if (e.upgrade) this.later(700, () => tile.setAttribute('data-edge', 'rainbow'))
-    })
-  }
-
-  private onSpotlight(m: MsgOf<'prizeSpotlight'>): void {
-    m.entries.forEach((e, i) => this.later(i * 4600, () => this.spotlight(e)))
-    this.later(m.entries.length * 4600, () => this.root.querySelector('.pz-spot')?.classList.remove('on'))
-  }
-
-  // SR・UR は 1 人ずつ全画面で取り上げる
-  private spotlight(e: PrizeEntry): void {
-    const spot = this.root.querySelector<HTMLElement>('.pz-spot')
-    if (!spot) return
-    spot.innerHTML = `
-      <div class="pz-big" data-edge="${e.edge}">
-        <div class="pz-big-name">${esc(e.name)}</div>
-        <div class="pz-big-card"><b>${e.rarity}</b><span>${esc(e.prize ?? '')}</span></div>
-      </div>`
-    spot.classList.add('on')
-    const big = q(spot, '.pz-big')
-    const reveal = () => {
-      big.classList.add('flip')
-      sound.rarity(e.rarity)
-      this.fx.burst(960, 540, { count: e.rarity === 'UR' ? 420 : 200, colors: e.rarity === 'UR' ? RAINBOW : GOLD, speed: 12, shape: 'spark' })
-      if (e.rarity === 'UR') this.fx.rain(600, RAINBOW)
-      if (e.upgrade) this.later(700, () => big.setAttribute('data-edge', 'rainbow'))
-    }
-    if (e.rarity === 'UR') {
-      sound.freeze()
-      this.later(1000, () => {
-        replay(this.$('.st-crack'), 'on')
-        sound.crack()
+    const list = this.$('.st-names')
+    list.innerHTML = ''
+    const label = (e: PrizeEntry) =>
+      e.rarity === null
+        ? 'ラストワン争奪で外れ'
+        : `【${e.rarity}】${e.rankUp ? 'ランクアップ' : ''}${e.kind === 'challenge' ? 'チャレンジ成功' : ''}`
+    this.addNames(
+      m.entries.slice(0, 12).map((e) => ({ name: e.name, isMe: e.isMe, label: label(e) })),
+      '',
+    )
+    if (m.entries.length > 12) list.append(h('li', 'more', `ほか ${fmt(m.entries.length - 12)} 人`))
+    if (m.lastOne) {
+      const pool = m.entries.filter((e) => e.kind === 'normal')
+      void playLastOne(this.root, {
+        speed: this.clock.speed,
+        prizes: pool.filter((e) => e.rarity).length,
+        entrants: pool.map((e) => ({ name: e.name, isMe: e.isMe, win: e.rarity !== null })),
       })
-      this.later(1900, reveal)
-    } else {
-      this.later(700, reveal)
     }
   }
 
-  private onGameOver(t: Totals): void {
-    this.setTotals(t)
+  private onGameOver(m: MsgOf<'gameOver'>): void {
+    this.setTotals(m.totals)
     this.showOverlay(`
       <div class="fin">
-        <h2>全景品が出ました！</h2>
-        <p>抽選 ${t.drawCount} 回　／　ビンゴ ${fmt(t.winners)} 人　／　景品 ${t.prizeCount} 個</p>
-        <p class="muted">外れた人向けの企画（ダブルチャンス・最遅賞など）は次の版で入れます</p>
-        <p class="muted">操作パネルの「新しいゲーム」でもう一度遊べます</p>
+        <h2>景品がなくなりました！</h2>
+        <p>抽選 ${m.totals.drawCount} 回　／　ビンゴ ${fmt(m.totals.winners)} 人</p>
+        <p class="muted">${m.leftoverUpper ? `残った上位 ${m.leftoverUpper} 個は、ダブルチャンスに回ります。` : ''}主催の「次へ」でダブルチャンスへ</p>
       </div>`)
-    this.fx.rain(600, RAINBOW)
-    sound.fanfare(true)
+    sfx.fanfare('big')
+    this.fx.rain(500, RAINBOW)
+  }
+
+  // ---- ダブルチャンス -------------------------------------------------------
+
+  private onDcEntry(m: MsgOf<'dcEntry'>): void {
+    this.hideOverlay()
+    this.cancelAll()
+    this.setScene('cooldown')
+    this.dc?.destroy()
+    // デモでは同じ PC から鳴るので、自分がガラポンを回すときは音をスマホ側に任せる（本番は大画面が鳴らす）
+    this.dc = new DoubleChanceStage(this.root, { speed: this.clock.speed, sound: !m.meEligible })
+    this.dc.entry(m.seconds)
+  }
+
+  private onDcSpin(m: MsgOf<'dcSpin'>): void {
+    const dc = this.dc
+    if (!dc) return
+    dc.setEntrants(m.entrants)
+    dc.spin()
+    m.winners.forEach((w, i) => this.later(5000 + i * 900, () => dc.addWinner(w)))
   }
 
   // ---- 共通 -----------------------------------------------------------------
-
-  private centerOf(el: HTMLElement): { x: number; y: number } {
-    const root = this.root.getBoundingClientRect()
-    const r = el.getBoundingClientRect()
-    const s = root.width / 1920
-    return { x: (r.left + r.width / 2 - root.left) / s, y: (r.top + r.height / 2 - root.top) / s }
-  }
 
   private showOverlay(html: string): void {
     const ov = this.$('.st-overlay')
@@ -588,19 +375,13 @@ export class StageView {
     this.cancelBeats()
     this.timers.forEach((t) => window.clearTimeout(t))
     this.timers = []
-    sound.silence()
   }
-}
 
-function tileHtml(e: PrizeEntry): string {
-  const edge = e.rarity ? e.edge : 'none'
-  return `
-    <div class="pz-tile${e.isMe ? ' me' : ''}" data-idx="${e.idx}" data-glow="${e.glow}" data-edge="${edge}">
-      <div class="pz-name">${e.isMe ? 'あなた' : esc(e.name)}</div>
-      <div class="pz-card"><b>${e.rarity ?? '券'}</b><span>${esc(e.prize ?? 'ダブルチャンス券 2 口')}</span>${e.lastOne ? '<i>ラストワン賞</i>' : ''}</div>
-      <div class="pz-pack"><span>BINGOO</span><small>PACK</small></div>
-      ${e.isMe ? '<div class="pz-wait">スマホで開封中…</div>' : ''}
-    </div>`
+  // 新しいゲームで抽選の途中から抜けたとき、伸ばしていた音と下げていた BGM を戻す
+  private resetSound(): void {
+    sfx.silence()
+    engine.duckBgm(1)
+  }
 }
 
 // 会場ビュー: 仮想参加者全員のスマホを点で並べる（デモ専用。一人では見られない「会場が光る」様子を見る窓）
@@ -637,7 +418,7 @@ class Venue {
 
   rainbow(): void {
     this.mode = 'rainbow'
-    this.run(7000)
+    this.run(5000)
   }
 
   reveal(n: number, drawNo: number): void {
@@ -696,6 +477,8 @@ class Venue {
         color = `hsl(${(t / 6 + k * 13) % 360} 95% 65%)` // 今回ビンゴの人を虹色に（係員が見つける目印にもなる）
       } else if (flash > 0 && p.cells.includes(this.flashN)) {
         color = `rgba(245, 197, 66, ${0.35 + 0.65 * flash})`
+      } else if (p.challenge) {
+        color = '#b98cff'
       } else if (p.bingoDraw !== null) {
         color = '#8a6d1d'
       } else if (p.reach > 0) {

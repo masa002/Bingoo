@@ -1,0 +1,759 @@
+/* スマホのビンゴカード（card.ts）。接頭辞は fxc- */
+
+.fxc {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  width: var(--fxc-w, calc(100% - 28px));
+  max-width: 362px;
+  margin: 0 auto;
+  container-type: inline-size;
+  padding: 2px;
+  border-radius: 22px;
+  background: linear-gradient(160deg, #4b5cb8 0%, #222c68 35%, #1a2254 65%, #3a4aa0 100%);
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(0, 0, 0, 0.45);
+  color: #e8ecff;
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.fxc *,
+.fxc *::before,
+.fxc *::after {
+  box-sizing: border-box;
+}
+
+.fxc-body {
+  position: relative;
+  padding: 6px 10px 12px;
+  border-radius: 20px;
+  background: radial-gradient(130% 80% at 50% 0%, #1f2a66 0%, #121a44 55%, #0c1232 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* 見出し: B I N G O */
+.fxc-head {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1.66cqw;
+  margin-bottom: 2.2cqw;
+  padding-bottom: 1.1cqw;
+  background: linear-gradient(90deg, transparent, rgba(245, 197, 66, 0.55), transparent) bottom / 100% 1px no-repeat;
+}
+
+.fxc-head span {
+  display: block;
+  text-align: center;
+  font-size: 7.46cqw;
+  font-weight: 900;
+  line-height: 10cqw;
+  letter-spacing: 1px;
+  background: linear-gradient(180deg, #ffffff 25%, #a9b8ff 90%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.45));
+}
+
+/* 見出し: 3×3 のチャレンジカード */
+.fxc-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2.8cqw;
+  height: 12.7cqw;
+  margin-bottom: 1.66cqw;
+}
+
+.fxc-title b {
+  font-size: 7.7cqw;
+  font-weight: 900;
+  letter-spacing: 4px;
+  background: linear-gradient(180deg, #fff8dc 10%, #f5c542 55%, #b8860b 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55));
+}
+
+.fxc-title i {
+  font-style: normal;
+  font-size: 4.4cqw;
+  color: #f5c542;
+  text-shadow: 0 0 8px rgba(245, 197, 66, 0.8);
+}
+
+.fxc-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--fxc-n, 5), minmax(0, 1fr));
+  gap: var(--fxc-gap, 1.66cqw);
+}
+
+/* ---- マス ---------------------------------------------------------------- */
+
+.fxc-cell {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 12px;
+}
+
+.fxc-cell.is-anim,
+.fxc-cell.is-pop {
+  z-index: 2;
+}
+
+.fxc-face,
+.fxc-back {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.fxc-face {
+  display: grid;
+  place-items: center;
+  background: var(--fxc-face-bg, linear-gradient(180deg, #232e6c 0%, #19214f 100%));
+  box-shadow: var(--fxc-face-shadow, inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 -3px 0 rgba(0, 0, 0, 0.22));
+}
+
+.fxc-num {
+  position: relative;
+  z-index: 3;
+  font-size: 6.9cqw;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--fxc-num, inherit);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+/* 開いた穴: インクのスタンプ（欠けた点は、マスの地の色で抜いて手押しの風合いにする） */
+.fxc-ink {
+  position: absolute;
+  inset: 8%;
+  z-index: 2;
+  border-radius: 50%;
+  opacity: 0;
+  background:
+    radial-gradient(circle at 27% 33%, var(--fxc-hole, #1b2358) 0 4%, transparent 5%),
+    radial-gradient(circle at 70% 70%, var(--fxc-hole, #1b2358) 0 3%, transparent 4%),
+    radial-gradient(circle at 76% 31%, var(--fxc-hole, #1b2358) 0 2.5%, transparent 3.5%),
+    radial-gradient(circle, rgba(255, 72, 138, 0.8) 0 54%, rgba(255, 72, 138, 0.62) 55% 61%, #e3206e 62% 69%, rgba(227, 32, 110, 0) 70.5%);
+  -webkit-mask: repeating-conic-gradient(from 12deg, #000 0deg 22deg, rgba(0, 0, 0, 0.74) 22deg 26deg);
+  mask: repeating-conic-gradient(from 12deg, #000 0deg 22deg, rgba(0, 0, 0, 0.74) 22deg 26deg);
+}
+
+.fxc-cell.is-on .fxc-ink {
+  opacity: 1;
+}
+
+.fxc-cell.is-stamping .fxc-ink {
+  opacity: 0;
+}
+
+/* FREE: 金の星のスタンプ */
+.fxc-cell.is-free .fxc-face {
+  background: linear-gradient(180deg, #3b3010 0%, #261e08 100%);
+}
+
+.fxc-cell.is-free .fxc-ink {
+  opacity: 1;
+  background: radial-gradient(circle, rgba(245, 197, 66, 0.16) 0 56%, rgba(245, 197, 66, 0.9) 58% 66%, rgba(245, 197, 66, 0) 67.5%);
+  -webkit-mask: none;
+  mask: none;
+}
+
+.fxc-cell.is-free .fxc-num {
+  display: grid;
+  place-items: center;
+  font-size: 2.8cqw;
+  letter-spacing: 0.4cqw;
+  color: #ffe08a;
+}
+
+.fxc-cell.is-free .fxc-num::before {
+  content: '★';
+  font-size: 6cqw;
+  letter-spacing: 0;
+  color: #f5c542;
+  text-shadow: 0 0 8px rgba(245, 197, 66, 0.6);
+}
+
+/* あと 1 つ: 金の照準（四隅のかぎ）がゆっくり脈動する */
+.fxc-frame {
+  --c: #ffd75e;
+  --l: 32%;
+  --t: 3px;
+  position: absolute;
+  inset: -3px;
+  z-index: 4;
+  border-radius: 14px;
+  opacity: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--c), var(--c)) left top / var(--l) var(--t),
+    linear-gradient(var(--c), var(--c)) left top / var(--t) var(--l),
+    linear-gradient(var(--c), var(--c)) right top / var(--l) var(--t),
+    linear-gradient(var(--c), var(--c)) right top / var(--t) var(--l),
+    linear-gradient(var(--c), var(--c)) left bottom / var(--l) var(--t),
+    linear-gradient(var(--c), var(--c)) left bottom / var(--t) var(--l),
+    linear-gradient(var(--c), var(--c)) right bottom / var(--l) var(--t),
+    linear-gradient(var(--c), var(--c)) right bottom / var(--t) var(--l);
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0 3px rgba(245, 197, 66, 0.9));
+}
+
+.fxc-cell.is-wait .fxc-face {
+  box-shadow:
+    inset 0 0 0 1.5px rgba(245, 197, 66, 0.75),
+    0 0 14px rgba(245, 197, 66, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.fxc-cell.is-wait .fxc-frame {
+  opacity: 1;
+  animation: fxc-wait var(--fxc-wait-ms, 1800ms) ease-in-out infinite;
+}
+
+@keyframes fxc-wait {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+}
+
+/* そろったライン: 金のマスに ★ */
+.fxc-cell.is-line .fxc-face {
+  background: linear-gradient(145deg, #fff0b0 0%, #f5c542 40%, #d9a520 100%);
+  box-shadow:
+    0 0 14px rgba(245, 197, 66, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 -3px 0 rgba(120, 70, 0, 0.3);
+}
+
+.fxc-cell.is-line .fxc-num {
+  color: #2b1b00;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.fxc-cell.is-line .fxc-ink {
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.22) 0 55%, rgba(150, 90, 0, 0.5) 57% 67%, rgba(150, 90, 0, 0) 68.5%);
+}
+
+.fxc-cell.is-line .fxc-face::before {
+  content: '★';
+  position: absolute;
+  top: 3px;
+  right: 5px;
+  z-index: 3;
+  font-size: 2.8cqw;
+  line-height: 1;
+  color: rgba(110, 60, 0, 0.75);
+}
+
+.fxc-cell.is-line.is-free .fxc-num,
+.fxc-cell.is-line.is-free .fxc-num::before {
+  color: #5a3a00;
+  text-shadow: none;
+}
+
+/* 虹玉で開いた: 虹の縁の穴（色だけを回す）と ✦ */
+.fxc-cell.is-wild .fxc-face {
+  box-shadow:
+    0 0 12px rgba(255, 255, 255, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.fxc-cell.is-wild .fxc-ink {
+  opacity: 1;
+  background:
+    radial-gradient(circle, #0a0e26 0 40%, rgba(10, 14, 38, 0) 41.5%),
+    conic-gradient(from 0deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff, #ff5a5a);
+  -webkit-mask: radial-gradient(circle, #000 0 69%, transparent 70.5%);
+  mask: radial-gradient(circle, #000 0 69%, transparent 70.5%);
+  animation: fxc-hue var(--fxc-hue-ms, 12000ms) linear infinite;
+}
+
+.fxc-cell.is-wild .fxc-num {
+  color: #fff;
+  text-shadow:
+    0 0 6px rgba(0, 0, 0, 0.9),
+    0 1px 0 #000;
+}
+
+.fxc-cell.is-wild .fxc-face::before {
+  content: '✦';
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  z-index: 3;
+  font-size: 3cqw;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.9);
+}
+
+@keyframes fxc-hue {
+  to {
+    filter: hue-rotate(360deg);
+  }
+}
+
+/* モグラに埋められた: 土（番号は薄く残す）と小さな芽 */
+.fxc-soil {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  opacity: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 22% 72%, #2f1d0e 0 5%, transparent 6%),
+    radial-gradient(circle at 72% 80%, #2f1d0e 0 4%, transparent 5%),
+    radial-gradient(circle at 58% 30%, #93693f 0 3.5%, transparent 4.5%),
+    radial-gradient(circle at 30% 36%, #93693f 0 2.5%, transparent 3.5%),
+    radial-gradient(circle at 84% 52%, #3a2412 0 3%, transparent 4%),
+    radial-gradient(circle at 44% 88%, #7a5532 0 3%, transparent 4%),
+    radial-gradient(circle at 14% 46%, #7a5532 0 2.5%, transparent 3.5%),
+    linear-gradient(180deg, #6e4a2a 0%, #553720 55%, #43291a 100%);
+  box-shadow:
+    inset 0 3px 0 rgba(255, 214, 160, 0.16),
+    inset 0 -4px 8px rgba(0, 0, 0, 0.4);
+}
+
+.fxc-soil::after {
+  content: '';
+  position: absolute;
+  left: 72%;
+  top: 7%;
+  width: 11%;
+  height: 15%;
+  border-radius: 0 100% 0 100%;
+  background: #5fbf4a;
+  transform: rotate(-24deg);
+}
+
+.fxc-cell.is-filled .fxc-soil {
+  opacity: 1;
+}
+
+.fxc-cell.is-filled .fxc-ink {
+  opacity: 0;
+}
+
+.fxc-cell.is-filled .fxc-num {
+  color: rgba(255, 232, 200, 0.6);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
+}
+
+/* モグラの巣穴（演出の間だけ置く）。モグラは穴の中心の線で切り取って、穴から出てくるように見せる */
+.fxc-pit {
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  bottom: 11%;
+  height: 18%;
+  z-index: 3;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, #0d0703 0 45%, #3b2412 70%, rgba(59, 36, 18, 0) 72%);
+}
+
+.fxc-burrow {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -20%;
+  bottom: 20%;
+  z-index: 4;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.fxc-mole {
+  position: absolute;
+  left: 13%;
+  width: 74%;
+  bottom: 0;
+  transform: translateY(105%);
+}
+
+.fxc-mole svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  transform-origin: 50% 90%;
+}
+
+/* ---- 配る演出（めくる）---------------------------------------------------- */
+
+.fxc-back {
+  display: none;
+}
+
+.fxc.is-dealing .fxc-cell {
+  transform-style: preserve-3d;
+}
+
+.fxc.is-dealing .fxc-face,
+.fxc.is-dealing .fxc-back {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.fxc.is-dealing .fxc-back {
+  display: grid;
+  place-items: center;
+  transform: rotateY(180deg);
+  background:
+    radial-gradient(circle, rgba(245, 197, 66, 0.3) 0 1.5px, transparent 2px) 0 0 / 9px 9px,
+    linear-gradient(160deg, #2a3584, #151b4c);
+  box-shadow: inset 0 0 0 2px rgba(245, 197, 66, 0.4);
+  color: #f5c542;
+  font-size: 5cqw;
+}
+
+.fxc.is-dealing .fxc-back::after {
+  content: '✦';
+  text-shadow: 0 0 6px rgba(245, 197, 66, 0.8);
+}
+
+/* 3×3 の表紙（めくる前の金のカード） */
+.fxc-cover {
+  position: absolute;
+  inset: 3px;
+  z-index: 7;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 21px;
+  text-align: center;
+  color: #2b1b00;
+  background:
+    radial-gradient(circle, rgba(60, 40, 0, 0.3) 0 2px, transparent 2.5px) 0 0 / 14px 14px,
+    linear-gradient(150deg, #fff0b0 0%, #f5c542 35%, #b8860b 70%, #ffe08a 100%);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.5),
+    inset 0 0 40px rgba(120, 70, 0, 0.45);
+}
+
+.fxc-cover em {
+  display: block;
+  font-style: normal;
+  font-size: 17.7cqw;
+  line-height: 1;
+  margin-bottom: 2.2cqw;
+  color: #fff8dc;
+  text-shadow:
+    0 0 18px rgba(255, 255, 255, 0.9),
+    0 2px 0 rgba(120, 70, 0, 0.6);
+}
+
+.fxc-cover b {
+  display: block;
+  font-size: 10cqw;
+  font-weight: 900;
+  letter-spacing: 4px;
+  text-shadow: 0 2px 0 rgba(255, 255, 255, 0.5);
+}
+
+.fxc-cover small {
+  display: block;
+  margin-top: 1.1cqw;
+  font-size: 4.1cqw;
+  font-weight: 800;
+  letter-spacing: 0.8cqw;
+}
+
+.fxc-cover-sheen {
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
+  transform: translateX(-130%) skewX(-18deg);
+}
+
+/* ---- 演出用の層（カードの上） --------------------------------------------- */
+
+.fxc-fx {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.fxc-spark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+  pointer-events: none;
+}
+
+.fxc-spark.is-diamond {
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}
+
+.fxc-spark.is-dot {
+  border-radius: 50%;
+}
+
+.fxc-spark.is-star {
+  font-style: normal;
+  line-height: 1;
+  text-shadow: 0 0 6px currentColor;
+}
+
+.fxc-ring {
+  position: absolute;
+  border: 3px solid currentColor;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* ゴム印（上から見た形） */
+.fxc-stamper {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #ff8db5 0 18%, #e02a70 55%, #a3124c 100%);
+  box-shadow:
+    0 10px 18px rgba(0, 0, 0, 0.45),
+    inset 0 -4px 0 rgba(0, 0, 0, 0.25),
+    inset 0 3px 0 rgba(255, 255, 255, 0.35);
+}
+
+.fxc-stamper::after {
+  content: '';
+  position: absolute;
+  inset: 30%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #fff 0 15%, #c9c9d6 60%, #8c8ca0 100%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+/* 虹の光の柱と虹玉 */
+.fxc-beam {
+  position: absolute;
+  transform-origin: 50% 0;
+  border-radius: 0 0 40% 40%;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 90, 90, 0),
+    rgba(255, 90, 90, 0.55) 12%,
+    rgba(255, 184, 77, 0.6) 26%,
+    rgba(255, 241, 90, 0.7) 40%,
+    rgba(255, 255, 255, 0.95) 50%,
+    rgba(90, 255, 140, 0.7) 60%,
+    rgba(90, 210, 255, 0.6) 74%,
+    rgba(168, 90, 255, 0.55) 88%,
+    rgba(168, 90, 255, 0)
+  );
+  -webkit-mask: linear-gradient(180deg, transparent 0%, #000 45%);
+  mask: linear-gradient(180deg, transparent 0%, #000 45%);
+  filter: blur(1px);
+}
+
+.fxc-orb {
+  position: absolute;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 30%, #fff 0 14%, rgba(255, 255, 255, 0) 40%),
+    conic-gradient(from 0deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff, #ff5a5a);
+  box-shadow:
+    0 0 14px rgba(255, 255, 255, 0.75),
+    0 0 28px rgba(168, 90, 255, 0.45);
+}
+
+/* モグラが投げる土と「ザッ」 */
+.fxc-clod {
+  position: absolute;
+  border-radius: 45% 55% 50% 50%;
+  box-shadow: inset -1px -2px 0 rgba(0, 0, 0, 0.3);
+}
+
+.fxc-onoma {
+  position: absolute;
+  font-style: normal;
+  font-weight: 900;
+  font-size: 4.1cqw;
+  white-space: nowrap;
+  color: #ffd9a0;
+  text-shadow:
+    0 2px 0 #3b2412,
+    0 0 6px rgba(0, 0, 0, 0.6);
+}
+
+/* ラインを走る光 */
+.fxc-track {
+  position: absolute;
+  height: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.fxc-trail {
+  position: absolute;
+  left: 0;
+  top: -8px;
+  width: 100%;
+  height: 16px;
+  border-radius: 8px;
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, rgba(255, 224, 138, 0), rgba(255, 224, 138, 0.85) 70%, #fff);
+  box-shadow: 0 0 18px rgba(245, 197, 66, 0.85);
+}
+
+.fxc-comet {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0 28%, rgba(255, 240, 180, 0.9) 45%, rgba(245, 197, 66, 0) 72%);
+}
+
+/* マスの上を光がなでる（ライン） */
+.fxc-shine {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.fxc-shine::before {
+  content: '';
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: -70%;
+  width: 50%;
+  transform: skewX(-18deg);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.85), transparent);
+  animation: fxc-shine var(--fxc-shine-run, 480ms) ease-out forwards;
+}
+
+@keyframes fxc-shine {
+  to {
+    left: 130%;
+  }
+}
+
+/* カード全体をなでる光沢 */
+.fxc-gloss {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.fxc-gloss i {
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: 0;
+  width: 40%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.2) 45%, rgba(190, 230, 255, 0.28) 55%, transparent);
+  transform: translateX(-120%) skewX(-16deg);
+}
+
+/* ---- 3×3: 上位チャレンジの金のカード ------------------------------------- */
+
+.fxc[data-size='3'] {
+  --fxc-n: 3;
+  --fxc-gap: 2.5cqw;
+  --fxc-face-bg: linear-gradient(180deg, #3f2e0a 0%, #2a1e06 100%);
+  --fxc-face-shadow: inset 0 0 0 1.5px rgba(245, 197, 66, 0.42), inset 0 1px 0 rgba(255, 240, 200, 0.16), inset 0 -3px 0 rgba(0, 0, 0, 0.25);
+  --fxc-num: #fff4cc;
+  --fxc-hole: #33250a;
+  padding: 3px;
+  border-radius: 24px;
+  background: linear-gradient(120deg, #b8860b 0%, #ffe08a 18%, #f5c542 32%, #a87410 50%, #fff4cc 66%, #f5c542 80%, #b8860b 100%) 0 0 / 300% 100%;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 16px 40px rgba(0, 0, 0, 0.55),
+    0 0 30px rgba(245, 197, 66, 0.3);
+  animation: fxc-gold var(--fxc-gold-ms, 6000ms) ease-in-out infinite alternate;
+}
+
+@keyframes fxc-gold {
+  to {
+    background-position: 100% 0;
+  }
+}
+
+.fxc[data-size='3'] .fxc-body {
+  padding: 6px 12px 14px;
+  border-radius: 21px;
+  background: radial-gradient(130% 90% at 50% 0%, #4d3a0c 0%, #2a1e06 55%, #1a1203 100%);
+}
+
+.fxc[data-size='3'] .fxc-cell {
+  border-radius: 16px;
+}
+
+.fxc[data-size='3'] .fxc-num {
+  font-size: 12.2cqw;
+}
+
+.fxc[data-size='3'] .fxc-frame {
+  --t: 4px;
+  inset: -4px;
+  border-radius: 18px;
+}
+
+.fxc[data-size='3'] .fxc-cell.is-free:not(.is-line) .fxc-face {
+  background: linear-gradient(180deg, #5a4210 0%, #33250a 100%);
+}
+
+.fxc[data-size='3'] .fxc-cell.is-free .fxc-num {
+  font-size: 4.1cqw;
+}
+
+.fxc[data-size='3'] .fxc-cell.is-free .fxc-num::before {
+  font-size: 11cqw;
+}
+
+.fxc[data-size='3'] .fxc-cell.is-line .fxc-face::before,
+.fxc[data-size='3'] .fxc-cell.is-wild .fxc-face::before {
+  top: 6px;
+  right: 8px;
+  font-size: 4.4cqw;
+}
+
+.fxc[data-size='3'].is-dealing .fxc-back {
+  background:
+    radial-gradient(circle, rgba(60, 40, 0, 0.35) 0 2px, transparent 2.5px) 0 0 / 12px 12px,
+    linear-gradient(150deg, #ffe08a, #f5c542 45%, #b8860b);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.45);
+  color: #3b2a00;
+  font-size: 9.4cqw;
+}
+
+.fxc[data-size='3'] .fxc-onoma {
+  font-size: 6cqw;
+}
+
+/* 動きを減らす設定では、くり返しの動きを止めて色と文字だけで伝える */
+@media (prefers-reduced-motion: reduce) {
+  .fxc,
+  .fxc *,
+  .fxc *::before,
+  .fxc *::after {
+    animation: none !important;
+  }
+}

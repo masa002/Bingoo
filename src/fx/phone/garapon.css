@@ -1,0 +1,989 @@
+/* ダブルチャンスのガラポン（スマホ）と、大画面と共用の抽選器・玉。クラスは fxg- で始める。
+   1 回きりの動きの長さは --fxg-k（= 1 / 速度）を掛ける。
+   繰り返す動き（呼吸・虹の色）は、速度を上げても速くしない（光過敏への配慮） */
+
+.fxg {
+  --fxg-k: 1;
+  --heat: 0;
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: #f6efe4;
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
+  background: #070a18;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+  opacity: 0;
+  transition: opacity calc(420ms * var(--fxg-k)) ease-out;
+}
+
+.fxg.on {
+  opacity: 1;
+}
+
+.fxg.out {
+  opacity: 0;
+  transition-duration: calc(600ms * var(--fxg-k));
+}
+
+/* ---- 背景: 夜の紺に、ガラポンの後ろのあたたかい灯り。熱が冷めると青い灯りに替わる ---- */
+
+.fxg-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 60% at 50% 0%, rgba(22, 32, 74, 0.9) 0%, rgba(22, 32, 74, 0) 70%),
+    linear-gradient(180deg, #0c1232 0%, #080b1d 55%, #05070f 100%);
+}
+
+.fxg-bg::before,
+.fxg-bg::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 440px;
+  height: 440px;
+  margin: -220px 0 0 -220px;
+  border-radius: 50%;
+}
+
+/* あたたかい灯り。--heat（回転の速さをならした値）で少しずつ明るくなる。輝度の変化は 20% 以下に収める */
+.fxg-bg::after {
+  background: radial-gradient(closest-side, rgba(255, 170, 80, 0.42), rgba(255, 140, 60, 0.14) 60%, rgba(255, 140, 60, 0) 100%);
+  opacity: calc(0.3 + var(--heat) * 0.45);
+}
+
+.fxg-bg::before {
+  width: 520px;
+  height: 520px;
+  margin: -260px 0 0 -260px;
+  background: radial-gradient(closest-side, rgba(110, 150, 255, 0.24), rgba(110, 150, 255, 0) 100%);
+  opacity: 0;
+  transition: opacity calc(1800ms * var(--fxg-k)) ease;
+}
+
+.fxg[data-mood='cool'] .fxg-bg::before {
+  opacity: 1;
+}
+
+.fxg[data-mood='cool'] .fxg-bg::after {
+  opacity: 0.08;
+  transition: opacity calc(1800ms * var(--fxg-k)) ease;
+}
+
+/* ---- 見出し ---- */
+
+.fxg-head {
+  position: relative;
+  margin-top: 54px;
+  text-align: center;
+  transition: opacity calc(500ms * var(--fxg-k)) ease;
+}
+
+.fxg-kicker {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.34em;
+  color: #f5c542;
+}
+
+.fxg-title {
+  margin-top: 4px;
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.fxg-left {
+  margin-top: 6px;
+  font-size: 14px;
+  color: #c9cfe6;
+}
+
+.fxg-left b {
+  margin: 0 3px;
+  font-size: 20px;
+  font-weight: 900;
+  color: #fff;
+}
+
+.fxg-slots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  min-height: 24px;
+  margin-top: 8px;
+}
+
+.fxg-slot {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px dashed rgba(201, 207, 230, 0.4);
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(201, 207, 230, 0.6);
+}
+
+.fxg-slot.now {
+  border-style: solid;
+  border-color: #f5c542;
+  color: #f5c542;
+  animation: fxg-breathe 2.4s ease-in-out infinite;
+}
+
+.fxg-slot.is-done {
+  border-color: transparent;
+}
+
+.fxg-slot .fxg-ball {
+  --d: 22px;
+}
+
+@keyframes fxg-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 197, 66, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(245, 197, 66, 0.22);
+  }
+}
+
+/* ---- 抽選器 ---- */
+
+.fxg-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  transition:
+    opacity calc(600ms * var(--fxg-k)) ease,
+    transform calc(600ms * var(--fxg-k)) ease;
+}
+
+.fxg-machine {
+  position: relative;
+  width: 320px;
+  height: 320px;
+  flex: none;
+}
+
+.fxg-m-inner {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 320px;
+  height: 320px;
+  transform-origin: 0 0;
+}
+
+.fxg-m-inner > svg {
+  position: absolute;
+  inset: 0;
+  width: 320px;
+  height: 320px;
+  overflow: visible;
+}
+
+.fxg-m-balls {
+  position: absolute;
+  inset: 0;
+}
+
+.fxg-m-balls .fxg-ball {
+  --d: 22px;
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+/* ---- 玉（白 ○ はずれ、赤 ◆・金 ★・虹 ✦ は当たり。色だけでなく形でも伝える） ---- */
+
+.fxg-ball {
+  --d: 40px;
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--d);
+  height: var(--d);
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #ffffff 0%, #f3f5f9 30%, #cfd5e1 72%, #98a1b4 100%);
+  box-shadow:
+    inset 0 calc(var(--d) * -0.06) calc(var(--d) * 0.12) rgba(0, 0, 0, 0.22),
+    0 calc(var(--d) * 0.06) calc(var(--d) * 0.14) rgba(0, 0, 0, 0.35);
+}
+
+.fxg-ball i {
+  position: relative;
+  z-index: 1;
+  font-style: normal;
+  font-weight: 900;
+  font-size: calc(var(--d) * 0.42);
+  line-height: 1;
+  color: rgba(40, 46, 70, 0.5);
+}
+
+.fxg-ball[data-color='red'] {
+  background: radial-gradient(circle at 34% 30%, #ffd9d9 0%, #ff7373 22%, #e23b3b 58%, #9b1c1c 100%);
+}
+
+.fxg-ball[data-color='red'] i {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.fxg-ball[data-color='gold'] {
+  background: radial-gradient(circle at 34% 30%, #fffbe6 0%, #ffe08a 20%, #f5c542 48%, #c8961d 78%, #7d5a0c 100%);
+}
+
+.fxg-ball[data-color='gold'] i {
+  color: rgba(110, 72, 0, 0.72);
+}
+
+/* 虹は色だけを回す（明るさは変えない）。模様が回って見える速さは 1 秒に 0.1 回転以下 */
+.fxg-ball[data-color='rainbow'] {
+  background: conic-gradient(from 0deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff, #ff5a5a);
+  animation: fxg-hue 12s linear infinite;
+}
+
+.fxg-ball[data-color='rainbow']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0) 34%, rgba(0, 0, 0, 0) 60%, rgba(0, 0, 0, 0.28) 100%);
+}
+
+.fxg-ball[data-color='rainbow'] i {
+  color: #fff;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.35);
+}
+
+@keyframes fxg-hue {
+  to {
+    filter: hue-rotate(360deg);
+  }
+}
+
+/* ---- 連打の手ごたえ（「ガラッ」の文字と、指の跡）。どちらも 1 秒に 3 回までに間引く ---- */
+
+.fxg-pops {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.fxg-pop {
+  position: absolute;
+  font-size: 20px;
+  font-weight: 900;
+  white-space: nowrap;
+  color: #ffd9a8;
+  text-shadow: 0 2px 0 rgba(90, 40, 0, 0.6);
+  animation: fxg-pop calc(800ms * var(--fxg-k)) ease-out forwards;
+}
+
+@keyframes fxg-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0) rotate(var(--r, 0deg)) scale(0.7);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -6px) rotate(var(--r, 0deg)) scale(1.05);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -36px) rotate(var(--r, 0deg)) scale(1);
+  }
+}
+
+.fxg-ripple {
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 222, 170, 0.32);
+  animation: fxg-ripple calc(450ms * var(--fxg-k)) ease-out forwards;
+}
+
+@keyframes fxg-ripple {
+  from {
+    opacity: 1;
+    transform: scale(0.3);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+/* ---- 下: 玉が出るまでのメーターと「連打で回せ！」 ---- */
+
+.fxg-foot {
+  position: relative;
+  width: 100%;
+  padding: 0 34px 48px;
+  text-align: center;
+  transition: opacity calc(400ms * var(--fxg-k)) ease;
+}
+
+.fxg-meter-label {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: #c9cfe6;
+}
+
+.fxg-meter {
+  position: relative;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.fxg-meter b {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  transform-origin: 0 50%;
+  transform: scaleX(var(--p, 0));
+  background: linear-gradient(90deg, #b8722f, #f0a64e, #ffd98a);
+}
+
+.fxg-prompt {
+  margin-top: 20px;
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  color: #fff4e0;
+  text-shadow: 0 0 18px rgba(255, 170, 80, 0.45);
+  animation: fxg-throb 1.2s ease-in-out infinite;
+  transition: opacity calc(300ms * var(--fxg-k)) ease;
+}
+
+@keyframes fxg-throb {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+.fxg-sub {
+  min-height: 20px;
+  margin-top: 6px;
+  font-size: 14px;
+  color: #c9cfe6;
+}
+
+.fxg[data-phase='drop'] .fxg-prompt,
+.fxg[data-phase='reveal'] .fxg-prompt {
+  opacity: 0;
+}
+
+.fxg[data-phase='reveal'] .fxg-stage {
+  opacity: 0.22;
+  transform: scale(0.94);
+}
+
+.fxg[data-phase='reveal'] .fxg-foot {
+  opacity: 0;
+}
+
+.fxg[data-phase='result'] .fxg-stage,
+.fxg[data-phase='result'] .fxg-foot,
+.fxg[data-phase='result'] .fxg-head {
+  opacity: 0;
+}
+
+/* ---- 玉の発表 ---- */
+
+.fxg-reveal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 26px 60px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.fxg-rv-ballwrap {
+  position: relative;
+  width: 150px;
+  height: 150px;
+}
+
+.fxg-rv-ballwrap > .fxg-ball {
+  --d: 150px;
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.fxg-rv-halo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 320px;
+  height: 320px;
+  margin: -160px 0 0 -160px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--halo, rgba(255, 255, 255, 0.2)), rgba(255, 255, 255, 0));
+  opacity: 0;
+  transition: opacity calc(700ms * var(--fxg-k)) ease;
+}
+
+.fxg-rv-halo.on {
+  opacity: 1;
+}
+
+.fxg-rv-name,
+.fxg-rv-word,
+.fxg-rv-prize,
+.fxg-rv-msg {
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity calc(500ms * var(--fxg-k)) ease-out,
+    transform calc(500ms * var(--fxg-k)) ease-out;
+}
+
+.fxg-rv-name.on,
+.fxg-rv-word.on,
+.fxg-rv-prize.on,
+.fxg-rv-msg.on {
+  opacity: 1;
+  transform: none;
+}
+
+.fxg-rv-name {
+  margin-top: 22px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #dfe4f5;
+}
+
+.fxg-rv-name span {
+  margin-right: 6px;
+}
+
+.fxg-rv-word {
+  margin-top: 2px;
+  font-size: 50px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+
+.fxg-rv-word[data-color='white'] {
+  font-size: 40px;
+  color: #c9d3ee;
+}
+
+.fxg-rv-word[data-color='red'] {
+  color: #ff8a8a;
+  text-shadow: 0 0 22px rgba(239, 68, 68, 0.45);
+}
+
+.fxg-rv-word[data-color='gold'] {
+  color: #ffe08a;
+  text-shadow: 0 0 24px rgba(245, 197, 66, 0.5);
+}
+
+.fxg-rv-word[data-color='rainbow'] {
+  background: linear-gradient(90deg, #ff8a8a, #ffd27a, #fff38a, #8affb0, #8ae0ff, #c49aff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* 当たりの言葉は、ぽんと弾んで出る */
+.fxg-rv-word.on:not([data-color='white']) {
+  animation: fxg-bounce calc(560ms * var(--fxg-k)) cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+
+@keyframes fxg-bounce {
+  from {
+    transform: scale(0.6);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+.fxg-rv-prize {
+  margin-top: 16px;
+}
+
+.fxg-rv-msg {
+  margin-top: 16px;
+  font-size: 15px;
+  line-height: 1.7;
+  color: #c9cfe6;
+}
+
+.fxg-rv-msg b {
+  color: #fff;
+}
+
+/* 当たりの鐘（ハンドベル）。持ち手を支点に揺れる */
+.fxg-bell {
+  position: absolute;
+  right: -58px;
+  top: -30px;
+  width: 64px;
+  height: 76px;
+  opacity: 0;
+  transform-origin: 50% 10%;
+}
+
+.fxg-bell.ring {
+  opacity: 1;
+  animation: fxg-bell 1500ms ease-in-out both;
+}
+
+@keyframes fxg-bell {
+  0% {
+    transform: rotate(0deg);
+  }
+  12% {
+    transform: rotate(28deg);
+  }
+  30% {
+    transform: rotate(-24deg);
+  }
+  48% {
+    transform: rotate(18deg);
+  }
+  66% {
+    transform: rotate(-12deg);
+  }
+  82% {
+    transform: rotate(6deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+/* 景品の目録（のし紙）。上の帯は紅白の水引 */
+.fxg-noshi {
+  --band: #d43a32;
+  --band2: #ffffff;
+  position: relative;
+  display: inline-block;
+  min-width: 230px;
+  max-width: 320px;
+  padding: 24px 22px 14px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #fffdf7, #f3ead8);
+  color: #2a1d10;
+  text-align: center;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+
+.fxg-noshi::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 10px;
+  height: 5px;
+  background: linear-gradient(90deg, var(--band) 0 50%, var(--band2) 50% 100%);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+.fxg-noshi[data-color='gold'] {
+  --band: #d9a520;
+  --band2: #fff1c2;
+}
+
+.fxg-noshi[data-color='rainbow']::before {
+  background: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
+}
+
+.fxg-noshi small {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5em;
+  color: #8a6a44;
+}
+
+.fxg-noshi b {
+  display: block;
+  margin-top: 6px;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1.4;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+/* 1 回だけの、ごく弱い全面の光（虹のとき）。輝度の変化は 20% 以下、立ち上がりは 120ms 以上 */
+.fxg-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.08) 70%);
+  opacity: 0;
+}
+
+/* ---- その人のゲームの結果と、締めのあいさつ ---- */
+
+.fxg-result {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 64px 26px 44px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity calc(900ms * var(--fxg-k)) ease;
+}
+
+.fxg[data-phase='result'] .fxg-result {
+  opacity: 1;
+}
+
+.fxg-rs-kicker {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.34em;
+  color: #9fb4ff;
+}
+
+.fxg-rs-title {
+  margin-top: 4px;
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.fxg-rs-list {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fxg-rs-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.fxg-rs-list span {
+  font-size: 14px;
+  color: #c9cfe6;
+}
+
+.fxg-rs-list b {
+  font-size: 30px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.fxg-rs-list small {
+  margin-left: 4px;
+  font-size: 13px;
+  color: #c9cfe6;
+}
+
+.fxg-rs-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 16px;
+  font-size: 13px;
+  color: #c9cfe6;
+}
+
+.fxg-rs-row .fxg-ball {
+  --d: 26px;
+}
+
+.fxg-rs-cheer {
+  margin-top: 14px;
+  font-size: 15px;
+  line-height: 1.6;
+  text-align: center;
+  color: #ffe2b8;
+}
+
+.fxg-rs-prizes {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.fxg-rs-prizes .fxg-noshi {
+  min-width: 220px;
+  padding: 20px 18px 10px;
+}
+
+.fxg-rs-prizes .fxg-noshi b {
+  font-size: 17px;
+}
+
+.fxg-rs-fin {
+  margin-top: auto;
+  text-align: center;
+}
+
+.fxg-rs-fin b {
+  display: block;
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 24px rgba(160, 190, 255, 0.45);
+}
+
+.fxg-rs-fin small {
+  display: block;
+  margin-top: 8px;
+  font-size: 14px;
+  color: #c9cfe6;
+}
+
+/* 結果の各行は、下から順にそっと出す */
+.fxg-in {
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity calc(600ms * var(--fxg-k)) ease-out,
+    transform calc(600ms * var(--fxg-k)) ease-out;
+}
+
+.fxg-in.on {
+  opacity: 1;
+  transform: none;
+}
+
+.fxg-rs-fin.fxg-in {
+  transform: translateY(18px) scale(0.98);
+  transition-duration: calc(1400ms * var(--fxg-k));
+}
+
+/* ---- エントリー ---- */
+
+.fxg-entry {
+  justify-content: center;
+}
+
+.fxg-entry .fxg-head {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  margin-top: 70px;
+}
+
+.fxg-en-lead {
+  margin-top: 12px;
+  font-size: 15px;
+  line-height: 1.7;
+  color: #c9cfe6;
+}
+
+.fxg-en-wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 264px;
+  height: 264px;
+  margin-top: 70px;
+}
+
+.fxg-en-ring {
+  position: absolute;
+  inset: 0;
+  transform: rotate(-90deg);
+}
+
+.fxg-en-ring circle {
+  fill: none;
+  stroke-width: 8;
+}
+
+.fxg-en-ring .bg {
+  stroke: rgba(255, 255, 255, 0.08);
+}
+
+.fxg-en-ring .fg {
+  stroke: #f5c542;
+  stroke-linecap: round;
+  transition: stroke calc(400ms * var(--fxg-k)) ease;
+}
+
+.fxg-en-btn {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 4px;
+  width: 212px;
+  height: 212px;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  font: inherit;
+  color: #3a2600;
+  background: radial-gradient(circle at 50% 32%, #ffe9a8, #f5c542 46%, #c8961d 100%);
+  box-shadow:
+    0 0 0 6px rgba(245, 197, 66, 0.16),
+    0 18px 40px rgba(0, 0, 0, 0.45),
+    inset 0 -10px 18px rgba(120, 70, 0, 0.35);
+  animation: fxg-btn 2.4s ease-in-out infinite;
+  transition: transform 120ms ease;
+}
+
+.fxg-en-btn:active {
+  transform: scale(0.96);
+}
+
+.fxg-en-btn b {
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.fxg-en-btn small {
+  font-size: 13px;
+  font-weight: 700;
+  opacity: 0.8;
+}
+
+@keyframes fxg-btn {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 6px rgba(245, 197, 66, 0.16),
+      0 18px 40px rgba(0, 0, 0, 0.45),
+      inset 0 -10px 18px rgba(120, 70, 0, 0.35);
+  }
+  50% {
+    box-shadow:
+      0 0 0 16px rgba(245, 197, 66, 0.08),
+      0 18px 40px rgba(0, 0, 0, 0.45),
+      inset 0 -10px 18px rgba(120, 70, 0, 0.35);
+  }
+}
+
+.fxg-entry[data-state='done'] .fxg-en-btn {
+  cursor: default;
+  color: #062b14;
+  background: radial-gradient(circle at 50% 32%, #b9f7cf, #22c55e 52%, #15803d 100%);
+  animation: none;
+}
+
+.fxg-entry[data-state='done'] .fxg-en-ring .fg {
+  stroke: #22c55e;
+}
+
+.fxg-entry[data-state='closed'] .fxg-en-btn {
+  cursor: default;
+  color: #c9cfe6;
+  background: radial-gradient(circle at 50% 32%, #4a5275, #2a3050 60%, #1a1f38 100%);
+  animation: none;
+}
+
+.fxg-en-time {
+  margin-top: 30px;
+  font-size: 15px;
+  color: #c9cfe6;
+}
+
+.fxg-en-time b {
+  margin: 0 4px;
+  font-size: 36px;
+  font-weight: 900;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.fxg-en-note {
+  margin-top: 8px;
+  padding: 0 30px;
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+  color: #8a93b8;
+}
+
+/* 押した瞬間の手ごたえ（1 回だけ） */
+.fxg-en-wave {
+  position: absolute;
+  inset: 24px;
+  border-radius: 50%;
+  border: 3px solid rgba(34, 197, 94, 0.5);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.fxg-en-wave.on {
+  animation: fxg-wave calc(700ms * var(--fxg-k)) ease-out forwards;
+}
+
+@keyframes fxg-wave {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+.fxg-fx {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* 動きを減らす設定: 動きを止めて、色と文字だけで伝える */
+@media (prefers-reduced-motion: reduce) {
+  .fxg,
+  .fxg *,
+  .fxg *::before,
+  .fxg *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

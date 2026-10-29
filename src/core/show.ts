@@ -12,13 +12,30 @@ export const TIER_SHAPE = ['●', '▲', '◆', '★', '✦'] as const
 
 export type FactClass = 'QUIET' | 'WARM' | 'HOT' | 'BINGO' | 'PREM'
 
-// 事実クラスごとの段階の抽選表（％）。ガセは溜めの間だけで、虹は PREM のときしか出さない
+// 大画面の段階の抽選表（％）。会場全体の熱を表す 4 段階で、ガセは溜めの間だけ。
+// 虹は「虹が出た画面の持ち主は必ず当たる」ので、大画面では全員確定のイベントにだけ使う
 export const TIER_TABLE: Readonly<Record<FactClass, readonly number[]>> = {
   QUIET: [86, 11, 3, 0, 0],
   WARM: [45, 40, 15, 0, 0],
   HOT: [10, 40, 42, 8, 0],
-  BINGO: [4, 14, 32, 50, 0],
-  PREM: [0, 0, 0, 0, 100],
+  // 1000 人規模だと中盤以降はほぼ毎回ビンゴが出るので、金（PUSH 待ち）が続きすぎないように抑える
+  BINGO: [6, 22, 42, 30, 0],
+  PREM: [0, 0, 20, 80, 0],
+}
+
+export type PersonalOutcome = 'none' | 'hit' | 'reach' | 'bingo'
+
+// 手元（スマホ）の段階の抽選表（％）。次の番号が自分のカードにとって何を意味するかで決める。
+// 当たらない人にも緑・赤のあおりを少し出し（失敗演出で終わる）、虹は自分がビンゴになるときだけ
+export const PERSONAL_TABLE: Readonly<Record<PersonalOutcome, readonly number[]>> = {
+  none: [90, 8, 2, 0, 0],
+  hit: [30, 55, 15, 0, 0],
+  reach: [5, 35, 50, 10, 0],
+  bingo: [0, 5, 25, 40, 30],
+}
+
+export function personalTier(outcome: PersonalOutcome, rng: Rng): Tier {
+  return rng.weighted(PERSONAL_TABLE[outcome]) as Tier
 }
 
 export interface Context {
@@ -256,14 +273,3 @@ export function schedule(plan: Plan, t: Timing): Beat[] {
   return beats.sort((a, b) => a.at - b.at)
 }
 
-export type Notice = 'none' | 'chance' | 'kakutei'
-
-// 本人宛ての予告。自分がビンゴになる回なら「確定」30%・「チャンス」60%、ならない回のガセは 2%
-export function personalNotice(imp: Impact, meReach: number, rng: Rng): Notice {
-  if (imp.me.bingo) {
-    const r = rng.next()
-    return r < 0.3 ? 'kakutei' : r < 0.9 ? 'chance' : 'none'
-  }
-  if (meReach > 0 && rng.chance(0.02)) return 'chance'
-  return 'none'
-}
