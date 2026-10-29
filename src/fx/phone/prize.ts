@@ -394,7 +394,8 @@ export async function playPackOpen(
   host: HTMLElement,
   o: PackSpec & PrizeFxOptions & { autoOpenMs?: number; onOpen?: (by: OpenBy) => void },
 ): Promise<void> {
-  const s = new Scene(host, o, 'pack', 40)
+  // 舞台の名前は fxp-opening（fxp-pack はパック本体のクラス名なので、同じにすると舞台ごと小さくなる）
+  const s = new Scene(host, o, 'opening', 40)
   return run(
     s,
     async () => {
