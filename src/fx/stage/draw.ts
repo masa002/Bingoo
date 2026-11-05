@@ -588,12 +588,13 @@ export class DrawMachine {
     this.pool = numbers.filter((n) => Number.isInteger(n) && n >= 1 && n <= 75)
   }
 
-  start(beats: readonly Beat[], plan: Plan): void {
+  // variant を渡すと、その型で回す（権威が決めた型。スマホの手元の演出と着地の時刻をそろえるため）
+  start(beats: readonly Beat[], plan: Plan, variant?: DrawVariant): void {
     if (this.dead) return
     this.retire()
     this.clear()
     this.applyMotion()
-    this.mount(this.choose(plan))
+    this.mount(this.forced ?? variant ?? this.choose(plan))
     this.dir = Math.random() < 0.5 ? 1 : -1
     this.rays.style.setProperty('--ray', `${360 / pickOne([12, 16, 20, 24])}deg`)
     this.rays.classList.toggle('rev', Math.random() < 0.5)

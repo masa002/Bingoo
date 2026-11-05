@@ -1,0 +1,196 @@
+import { registerGallery } from '../gallery'
+import type { Timeline } from '../runtime'
+import { MoleQuestStage, type MoleQuestStageResult } from './quest'
+
+// 緊急クエスト「モグラ撃退」の大画面のギャラリー。叩いた数の合計（setTotal）は本番と同じく 0.5 秒ごとに届け、
+// 結果（result）は叩く時間が終わった 0.8 秒後に呼ぶ。
+// 後ろに大画面の配置（HUD・抽選機・結果・会場・番号の盤）を薄く描いて、重ねたときの見え方も確かめられるようにする
+
+const G = '大画面: 緊急クエスト'
+const INTRO = 2600
+const PLAY = 10000
+
+function backdrop(host: HTMLElement): HTMLElement {
+  const boxes: readonly (readonly [string, number, number, number, number])[] = [
+    ['HUD', 0, 0, 1920, 90],
+    ['抽選機', 40, 90, 1200, 700],
+    ['結果パネル', 1270, 110, 610, 390],
+    ['会場ビュー', 1270, 520, 610, 260],
+    ['番号の盤', 40, 800, 1840, 260],
+  ]
+  for (const [label, x, y, w, h] of boxes) {
+    const box = document.createElement('div')
+    box.textContent = label
+    box.style.cssText =
+      `position:absolute; left:${x}px; top:${y}px; width:${w}px; height:${h}px; box-sizing:border-box; padding:12px 18px;` +
+      'border:2px solid rgba(138,147,184,.28); border-radius:18px; background:rgba(22,32,74,.35);' +
+      'color:rgba(200,210,255,.45); font:800 28px system-ui, sans-serif'
+    host.append(box)
+  }
+  return host
+}
+
+type Top = MoleQuestStageResult['top']
+
+interface Case {
+  id: string
+  label: string
+  players: number
+  targets: number
+  total: number
+  defended: number
+  lost: number
+  lostReach: number
+  top: Top
+  speeds?: readonly (readonly [at: number, times: number])[] // 叩き始めからの ms と、そこからの速度の倍率
+  resultAt?: number // 始まりから result を呼ぶまでの ms（既定は叩く時間の終わりの 0.8 秒後）
+}
+
+const p = (name: string, score: number, isMe = false): Top[number] => ({ name, score, isMe })
+
+// 0.5 秒ごとの会場の合計（叩き始めは少しずつ、なかほどで波があり、終盤は追い込みで増える）。
+// 最後の値は final の 98% にしておく（遅れて届いた分が、結果の合計に入る）
+function totals(final: number, steps: number): number[] {
+  const w = Array.from({ length: steps }, (_, i) => {
+    const t = (i + 0.5) / steps
+    const ramp = Math.min(1, t / 0.15)
+    const wave = 1 + 0.2 * Math.sin(t * 11)
+    const spurt = t > 0.7 ? 1.3 : 1
+    return ramp * wave * spurt
+  })
+  const sum = w.reduce((a, b) => a + b, 0)
+  let acc = 0
+  return w.map((x) => Math.round(((acc += x) / sum) * final * 0.98))
+}
+
+async function run(host: HTMLElement, tl: Timeline, c: Case): Promise<void> {
+  const q = new MoleQuestStage(backdrop(host), { speed: tl.speed })
+  q.start({ introMs: INTRO, playMs: PLAY, targets: c.targets, players: c.players })
+  totals(c.total, PLAY / 500).forEach((v, i) => tl.at(INTRO + (i + 1) * 500, () => q.setTotal(v)))
+  for (const [at, times] of c.speeds ?? []) tl.at(INTRO + at, () => q.setSpeed(tl.speed * times))
+  await tl.wait(c.resultAt ?? INTRO + PLAY + 800)
+  if (!tl.cancelled) {
+    await q.result({ total: c.total, targets: c.targets, defended: c.defended, lost: c.lost, lostReach: c.lostReach, top: c.top })
+  }
+  q.destroy()
+}
+
+const NORMAL: Omit<Case, 'id' | 'label'> = {
+  players: 1000,
+  targets: 312,
+  total: 18234,
+  defended: 204,
+  lost: 108,
+  lostReach: 97,
+  top: [p('きつね208', 168), p('しろくま042', 159), p('ぱんだ579', 151)],
+}
+
+const CASES: readonly Case[] = [
+  { id: 'normal', label: 'ふつう（1,000 人・狙われた 312 人）', ...NORMAL },
+  {
+    id: 'almost',
+    label: 'ほぼ全員守った',
+    players: 1000,
+    targets: 286,
+    total: 27650,
+    defended: 279,
+    lost: 7,
+    lostReach: 5,
+    top: [p('らっこ311', 182), p('こあら777', 176), p('いるか150', 170)],
+  },
+  {
+    id: 'perfect',
+    label: '完全防衛（やられた人 0）',
+    players: 1000,
+    targets: 240,
+    total: 31020,
+    defended: 240,
+    lost: 0,
+    lostReach: 0,
+    top: [p('ぺんぎん009', 190), p('かわうそ612', 183), p('たぬき333', 179)],
+  },
+  {
+    id: 'many-lost',
+    label: 'やられた人が多い（モグラの逆襲）',
+    players: 1000,
+    targets: 342,
+    total: 9410,
+    defended: 98,
+    lost: 244,
+    lostReach: 226,
+    top: [p('はりねずみ520', 121), p('あるぱか064', 117), p('うさぎ816', 109)],
+  },
+  {
+    id: 'me-king',
+    label: '自分が撃退王',
+    players: 1000,
+    targets: 298,
+    total: 20480,
+    defended: 211,
+    lost: 87,
+    lostReach: 80,
+    top: [p('ねこ123', 196, true), p('ふくろう404', 171), p('しろくま042', 165)],
+  },
+  {
+    id: 'me-3rd',
+    label: '自分が 3 位',
+    ...NORMAL,
+    top: [p('きつね208', 168), p('しろくま042', 159), p('ねこ123', 151, true)],
+  },
+  {
+    id: 'small',
+    label: '少人数（30 人・狙われた 7 人）',
+    players: 30,
+    targets: 7,
+    total: 1480,
+    defended: 4,
+    lost: 3,
+    lostReach: 3,
+    top: [p('いるか150', 98), p('ねこ123', 91, true), p('こあら777', 84)],
+  },
+  {
+    id: 'huge',
+    label: '1 万人（合計が 6 桁）',
+    players: 10000,
+    targets: 3120,
+    total: 412345,
+    defended: 2048,
+    lost: 1072,
+    lostReach: 975,
+    top: [p('ぺんぎん009', 214), p('らっこ311', 209), p('かわうそ612', 205)],
+  },
+  {
+    id: 'two',
+    label: '撃退王が 2 人だけ・長い名前',
+    players: 12,
+    targets: 3,
+    total: 380,
+    defended: 2,
+    lost: 1,
+    lostReach: 1,
+    top: [p('ながいなまえのはりねずみさん', 64), p('あるぱか', 58)],
+  },
+  {
+    id: 'none',
+    label: '誰も叩かなかった（撃退王なし）',
+    players: 40,
+    targets: 9,
+    total: 0,
+    defended: 0,
+    lost: 9,
+    lostReach: 9,
+    top: [],
+  },
+  { id: 'speed', label: '叩く途中で速度を変える（×3 → ×0.5 → ×1）', ...NORMAL, speeds: [[1500, 3], [4000, 0.5], [7000, 1]] },
+  { id: 'early', label: '叩く途中で結果が来る（その場で終了にする）', ...NORMAL, resultAt: INTRO + 5000 },
+]
+
+registerGallery(
+  ...CASES.map((c) => ({
+    id: `stage-quest-${c.id}`,
+    group: G,
+    label: c.label,
+    screen: 'stage' as const,
+    play: (host: HTMLElement, tl: Timeline) => run(host, tl, c),
+  })),
+)

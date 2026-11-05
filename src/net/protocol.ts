@@ -1,5 +1,5 @@
 import type { Glow, Rarity } from '../core/prizes'
-import type { Beat, FactClass, Plan, Tier, Timing } from '../core/show'
+import type { Beat, FactClass, MachineStyle, Plan, Tier, Timing } from '../core/show'
 import type { BallColor } from '../fx/theme'
 
 // 権威（本番はサーバー、デモはブラウザ内）から画面へ流れるメッセージ。
@@ -62,10 +62,10 @@ export type Msg =
       totals: Totals
     }
   | { type: 'joined'; count: number }
-  // 全員確定（虹玉）とモグラ。durationMs が大画面の演出の長さ、resultAt に各自の結果を見せる
+  // 全員確定（虹玉）。durationMs が大画面の演出の長さ、resultAt に各自の結果を見せる
   | {
       type: 'eventPlay'
-      kind: 'wild' | 'mole'
+      kind: 'wild'
       durationMs: number
       resultAt: number
       total: number
@@ -82,13 +82,11 @@ export type Msg =
       drawNo: number
       tier: Tier
       plan: Plan
+      style: MachineStyle // 抽選機の回し方の型（大画面とスマホで着地をそろえる）
       timing: Timing
       beats: Beat[]
       personal: { tier: Tier; waiting: string[] } // 本人宛て
     }
-  // STOP の受付が始まった。n は本人宛て（本番では本人にだけ送る）で、大画面には答え合わせまで出さない
-  | { type: 'drawOpen'; drawNo: number; n: number }
-  | { type: 'stopCount'; drawNo: number; count: number; total: number }
   | { type: 'awaitPush'; drawNo: number; ms: number }
   | {
       type: 'numberRevealed'
@@ -106,10 +104,38 @@ export type Msg =
       totals: Totals
       resultMs: number
     }
-  | { type: 'prizeTime'; entries: PrizeEntry[]; lastOne: boolean; final: boolean }
+  // lastOne は、上のランクまで景品が尽きて同じ回に上がった人で争うとき。争う人がそれぞれスマホでガラポンを回し、
+  // dropAt で全員の玉が出るのと同時に大画面が当たりを発表する
+  | { type: 'prizeTime'; entries: PrizeEntry[]; lastOne: { dropAt: number; durationMs: number } | null; final: boolean }
   | { type: 'choices'; challengers: { name: string; isMe: boolean }[]; totals: Totals }
   | { type: 'challengeDeal'; idx: number; cells: number[]; target: Rarity } // 本人宛て
   | { type: 'challengeEnd'; idx: number } // 決着しないままゲームが終わった（本人宛て）
+  // 緊急クエスト「モグラ撃退」。狙われるのはリーチの人。やられる割合は先に決まっていて、
+  // 叩いた数が会場全体の下位（その割合）に入った人がやられる（持っているものを失うのは、自分が挑んだ結果としてだけにする）
+  | {
+      type: 'questStart'
+      kind: 'mole'
+      introMs: number // 警報（大画面とスマホで同時）
+      playMs: number // 叩く時間
+      targets: number // 狙われたリーチの人数
+      players: number
+      me: { target: boolean; cell: number | null; label: string } // 本人宛て（ボスモグラが狙う自分のマス）
+    }
+  | { type: 'questProgress'; total: number } // 会場で叩いた数の合計（叩く時間の間、0.5 秒ごと）
+  | {
+      type: 'questResult'
+      kind: 'mole'
+      total: number
+      targets: number
+      defended: number
+      lost: number
+      lostReach: number
+      top: { name: string; score: number; isMe: boolean }[] // 撃退王（上位 3 人）
+      // 本人宛て。need は、やられたときに、あと何匹叩けば守れたか（守れる数との差）
+      me: { score: number; target: boolean; lost: boolean; cell: number | null; need: number; rank: number; reachBefore: number; reachAfter: number }
+      totals: Totals
+      resultMs: number
+    }
   | { type: 'bulkDrawn'; numbers: number[]; totals: Totals }
   | { type: 'idle'; totals: Totals }
   | { type: 'gameOver'; totals: Totals; leftoverUpper: number }
@@ -129,6 +155,6 @@ export type MsgOf<T extends Msg['type']> = Extract<Msg, { type: T }>
 // 端末（スマホ）から権威へのコマンド
 export type PhoneCommand =
   | { type: 'join' }
-  | { type: 'stop'; drawNo: number }
+  | { type: 'questScore'; score: number } // 叩き終わったときに 1 回だけ送る
   | { type: 'choice'; kind: 'receive' | 'challenge' }
   | { type: 'entry' }

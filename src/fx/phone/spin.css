@@ -1,11 +1,10 @@
-/* 手元のスロット（spin.ts）。接頭辞は fxs-。層は z-index 12（スマホのあおり 10〜19 の中）。
-   中の重なり: 暗転 1、縁の光・虹 2、後光 3、カットイン 6、スロットの本体 8、粒子・段階の文字・単発の部品 9、全面の光 10。
+/* 手元の抽選演出（spin.ts）。接頭辞は fxs-。層は z-index 12（スマホのあおり 10〜19 の中）。入力は受けない（pointer-events: none）。
+   中の重なり: 暗転 1、縁の光・虹 2、後光 3、カットイン 6、群予告のカード 7、本体 8、粒子・段階の文字・単発の部品 9、全面の光 10。
    位置は CSS 変数で変えられる（host か、その上の要素に置く）: --fxs-top（本体の上端、530px）、--fxs-center（文字を叩きつける高さ、318px）。
    1 回きりの動きの長さは --fxs-k（= 1 / 速度）を掛ける。くり返す動き（呼吸・虹の色・後光）は、速度を上げても安全な下限を守る */
 
 .fxs {
   --fxs-k: 1;
-  --heat: 0;
   --c: #3b82f6;
   --cl: #93c5fd;
   --cd: #1d3f99;
@@ -18,14 +17,6 @@
   font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
   user-select: none;
   -webkit-user-select: none;
-  -webkit-touch-callout: none;
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* 回っている間は、画面のどこをタップしても連打に数える */
-.fxs.is-live {
-  pointer-events: auto;
-  touch-action: none;
 }
 
 .fxs * {
@@ -65,7 +56,6 @@
   top: 0;
   width: 100%;
   height: 100%;
-  pointer-events: none;
 }
 
 .fxs-dim {
@@ -82,7 +72,6 @@
   inset: 0;
   z-index: 2;
   opacity: 0;
-  pointer-events: none;
   transition: opacity calc(500ms * var(--fxs-k)) ease;
 }
 
@@ -119,7 +108,6 @@
   inset: 0;
   z-index: 2;
   opacity: 0;
-  pointer-events: none;
   background: linear-gradient(160deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
 }
 
@@ -138,7 +126,6 @@
   height: 320px;
   margin: -160px 0 0 -160px;
   opacity: 0;
-  pointer-events: none;
 }
 
 .fxs.is-kakutei .fxs-rays {
@@ -167,7 +154,6 @@
   inset: 0;
   z-index: 10;
   opacity: 0;
-  pointer-events: none;
   background: radial-gradient(circle at 50% 50%, #fffbe8, rgba(255, 251, 232, 0.7) 60%, rgba(255, 251, 232, 0.45));
 }
 
@@ -176,7 +162,33 @@
   position: absolute;
   inset: 0;
   z-index: 9;
-  pointer-events: none;
+}
+
+/* 群予告: 裏向きのカードの群れが、カードの上を横切る（本体の下をくぐる） */
+.fxs-flock {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  overflow: hidden;
+}
+
+.fxs-fc {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 34px;
+  margin: -17px 0 0 -12px;
+  border-radius: 4px;
+  font-style: normal;
+  background:
+    radial-gradient(circle, rgba(245, 197, 66, 0.35) 0 1px, transparent 1.5px) 0 0 / 6px 6px,
+    linear-gradient(160deg, #2a3584, #151b4c);
+  box-shadow:
+    inset 0 0 0 1.5px rgba(245, 197, 66, 0.55),
+    0 4px 10px rgba(0, 0, 0, 0.4);
 }
 
 /* ---- 段階の文字（中央に叩きつけ、本体のランプへ吸い込まれる） ---------------- */
@@ -191,7 +203,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  pointer-events: none;
 }
 
 .fxs-em-in {
@@ -260,7 +271,7 @@
   animation: fxs-hue var(--fxs-hue-ms, 12000ms) linear infinite;
 }
 
-/* ---- 緑 → 赤のカットイン「激アツ」 ------------------------------------------ */
+/* ---- カットイン（大画面のカットインと同じ時刻。色と言葉は自分の段階） --------- */
 
 .fxs-cut {
   position: absolute;
@@ -272,7 +283,6 @@
   z-index: 6;
   transform: rotate(-8deg);
   visibility: hidden;
-  pointer-events: none;
 }
 
 .fxs-cut.on {
@@ -291,6 +301,14 @@
     0 0 0 3px rgba(255, 255, 255, 0.9),
     0 12px 30px rgba(0, 0, 0, 0.5);
   transform: translateX(-112%);
+}
+
+.fxs-cut[data-t='1'] .fxs-cut-band {
+  background: linear-gradient(180deg, rgba(80, 230, 140, 0.97), rgba(21, 128, 61, 0.97));
+}
+
+.fxs-cut[data-t='3'] .fxs-cut-band {
+  background: linear-gradient(180deg, rgba(255, 241, 184, 0.97), rgba(245, 197, 66, 0.97) 50%, rgba(201, 146, 18, 0.97));
 }
 
 /* 帯の中を走る線（速さの表現） */
@@ -327,7 +345,20 @@
   letter-spacing: 2px;
 }
 
-/* ---- スロットの本体（y 530〜830。親指で押しやすい位置） --------------------- */
+.fxs-cut[data-t='1'] .fxs-cut-txt .fxa-txt {
+  --stroke: #0b3d1e;
+  --fill: linear-gradient(180deg, #ffffff 25%, #eafff0 70%, #b9f7cf 100%);
+  font-size: 62px;
+  font-style: italic;
+}
+
+.fxs-cut[data-t='3'] .fxs-cut-txt .fxa-txt {
+  --stroke: #3b2600;
+  --fill: linear-gradient(180deg, #fffbe6 0%, #ffe08a 40%, #b8860b 100%);
+  font-size: 40px;
+}
+
+/* ---- 本体（y 530〜830） ------------------------------------------------------ */
 
 .fxs-body {
   position: absolute;
@@ -353,7 +384,7 @@
     filter calc(600ms * var(--fxs-k)) ease;
 }
 
-/* 連打の熱: 本体のまわりがじわっと光る（勢いをならした値で、ゆっくり変える） */
+/* 本体のまわりの光。ライザーの間は、ゆっくり強まる（明るさは一気に変えない） */
 .fxs-body::before {
   content: '';
   position: absolute;
@@ -361,8 +392,14 @@
   z-index: -1;
   border-radius: 30px;
   box-shadow: 0 0 26px 6px var(--c);
-  opacity: calc(0.22 + var(--heat) * 0.5);
-  pointer-events: none;
+  opacity: 0.25;
+  transition: opacity calc(400ms * var(--fxs-k)) ease;
+}
+
+.fxs.is-rise .fxs-body::before {
+  opacity: 0.75;
+  transition-duration: var(--fxs-rise, 1200ms);
+  transition-timing-function: ease-in;
 }
 
 /* 虹: 縁が虹になり、色だけがゆっくり回る */
@@ -381,7 +418,6 @@
     linear-gradient(#000 0 0) content-box exclude,
     linear-gradient(#000 0 0);
   animation: fxs-hue var(--fxs-hue-ms, 12000ms) linear infinite;
-  pointer-events: none;
 }
 
 /* 時が止まる（虹の前ぶれ）: 色が抜け、くり返しの動きも止まる */
@@ -400,7 +436,7 @@
   filter: saturate(0.3) brightness(0.85);
 }
 
-/* 上の段: 段階のランプと「あと〇〇」 */
+/* 上の段: 自分の段階のランプ・大画面のステップ・会場の段階 */
 .fxs-head {
   position: relative;
   flex: none;
@@ -475,42 +511,101 @@
   animation: fxs-hue var(--fxs-hue-ms, 12000ms) linear infinite;
 }
 
-.fxs-wait {
+/* 大画面の STEP UP（5 段）。点く色は自分の段階で頭打ち */
+.fxs-steps {
   display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-  max-width: 55%;
-  overflow: hidden;
-  padding: 3px 10px 4px;
-  border-radius: 10px;
-  white-space: nowrap;
-  background: rgba(8, 10, 24, 0.85);
-  border: 1.5px solid #ff7a3d;
-  box-shadow: 0 0 10px rgba(255, 122, 61, 0.4);
+  align-items: flex-end;
+  gap: 3px;
+  height: 18px;
 }
 
-.fxs-wait small {
+.fxs-steps i {
+  --pc: #3b82f6;
+  display: block;
+  width: 8px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+.fxs-steps i:nth-child(1) {
+  height: 8px;
+}
+
+.fxs-steps i:nth-child(2) {
+  height: 10px;
+}
+
+.fxs-steps i:nth-child(3) {
+  height: 12px;
+}
+
+.fxs-steps i:nth-child(4) {
+  height: 15px;
+}
+
+.fxs-steps i:nth-child(5) {
+  height: 18px;
+}
+
+.fxs-steps i.on {
+  background: var(--pc);
+  box-shadow:
+    0 0 8px var(--pc),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.fxs-steps i[data-t='1'] {
+  --pc: #22c55e;
+}
+
+.fxs-steps i[data-t='2'] {
+  --pc: #ef4444;
+}
+
+.fxs-steps i[data-t='3'] {
+  --pc: #f5c542;
+}
+
+/* 会場（大画面）の段階。色だけでなく形も出す */
+.fxs-venue {
+  --vc: #3b82f6;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 12px;
   font-size: 11px;
   font-weight: 800;
-  color: #ffd9c2;
+  white-space: nowrap;
+  color: #c9d1f0;
+  background: rgba(8, 10, 24, 0.75);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
 }
 
-.fxs-wait b {
-  font-size: 16px;
-  font-weight: 900;
-  font-variant-numeric: tabular-nums;
+.fxs-venue i {
+  font-style: normal;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--vc);
+  text-shadow: 0 0 6px var(--vc);
 }
 
-.fxs[data-tier='3'] .fxs-wait {
-  border-color: #f5c542;
-  box-shadow: 0 0 12px rgba(245, 197, 66, 0.55);
+.fxs-venue[data-t='1'] {
+  --vc: #22c55e;
 }
 
-.fxs[data-tier='4'] .fxs-wait {
-  border-color: #fff;
-  box-shadow:
-    0 0 0 2px rgba(168, 90, 255, 0.55),
-    0 0 12px rgba(90, 210, 255, 0.55);
+.fxs-venue[data-t='2'] {
+  --vc: #ef4444;
+}
+
+.fxs-venue[data-t='3'] {
+  --vc: #f5c542;
+}
+
+.fxs-venue[data-t='4'] {
+  --vc: #ff8ae0;
 }
 
 /* ---- リールの窓 ------------------------------------------------------------ */
@@ -521,12 +616,22 @@
   height: 124px;
   overflow: hidden;
   border-radius: 16px;
+  perspective: 640px;
   background: linear-gradient(180deg, #03051a 0%, #0f1744 22%, #18245e 50%, #0f1744 78%, #03051a 100%);
   box-shadow:
     inset 0 0 0 2px color-mix(in srgb, var(--c) 70%, transparent),
     inset 0 12px 18px rgba(0, 0, 0, 0.65),
     inset 0 -12px 18px rgba(0, 0, 0, 0.65);
   transition: box-shadow calc(400ms * var(--fxs-k)) ease;
+}
+
+.fxs.is-rise .fxs-win {
+  box-shadow:
+    inset 0 0 0 2px var(--cl),
+    inset 0 0 30px color-mix(in srgb, var(--c) 55%, transparent),
+    inset 0 12px 18px rgba(0, 0, 0, 0.55),
+    inset 0 -12px 18px rgba(0, 0, 0, 0.55);
+  transition-duration: var(--fxs-rise, 1200ms);
 }
 
 /* 当たりの線（中央の 1 コマ） */
@@ -605,6 +710,14 @@
   text-shadow: 0 0 18px var(--c);
 }
 
+.fxs-dash {
+  font-size: 54px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 6px;
+  color: rgba(255, 255, 255, 0.22);
+}
+
 /* モーションブラー: 速さに応じて、ぼかしと縦の残像を重ねる */
 .fxs-win[data-blur='1'] .fxs-row {
   filter: blur(0.6px);
@@ -669,12 +782,127 @@
   transition: opacity calc(240ms * var(--fxs-k)) ease;
 }
 
+/* ふた（大画面のカードが金の箔で裏返っている間）。色は自分の段階。公開で、大画面と同じ曲線でめくれる */
+.fxs-cover {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: none;
+  place-items: center;
+  border-radius: inherit;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, 0.16) 0 1.2px, transparent 1.8px) 0 0 / 11px 11px,
+    linear-gradient(160deg, color-mix(in srgb, var(--cl) 70%, #fff) -20%, var(--c) 35%, var(--cd) 100%);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.4),
+    inset 0 0 28px rgba(0, 0, 0, 0.35);
+}
+
+.fxs-cover.on {
+  display: grid;
+}
+
+.fxs-cover b {
+  font-size: 78px;
+  font-weight: 900;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow:
+    0 3px 0 rgba(0, 0, 0, 0.35),
+    0 0 18px rgba(255, 255, 255, 0.4);
+  opacity: 0;
+}
+
+.fxs-cover.has-q b {
+  opacity: 1;
+}
+
+.fxs[data-tier='3'] .fxs-cover {
+  background:
+    radial-gradient(circle, rgba(60, 40, 0, 0.3) 0 1.5px, transparent 2px) 0 0 / 12px 12px,
+    linear-gradient(150deg, #fff0b0 0%, #f5c542 35%, #b8860b 70%, #ffe08a 100%);
+}
+
+.fxs[data-tier='3'] .fxs-cover b {
+  color: #3b2600;
+  text-shadow: 0 2px 0 rgba(255, 255, 255, 0.55);
+}
+
+.fxs[data-tier='4'] .fxs-cover {
+  background: linear-gradient(120deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
+  animation: fxs-hue var(--fxs-hue-ms, 12000ms) linear infinite;
+}
+
+.fxs[data-tier='4'] .fxs-cover b {
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+
+/* MC の PUSH 待ち: ふたの縁がゆっくり呼吸する（1 秒に約 0.6 回） */
+.fxs.is-push .fxs-cover {
+  animation: fxs-cover var(--fxs-breathe-ms, 1600ms) ease-in-out infinite;
+}
+
+.fxs.is-push[data-tier='4'] .fxs-cover {
+  animation:
+    fxs-cover var(--fxs-breathe-ms, 1600ms) ease-in-out infinite,
+    fxs-hue var(--fxs-hue-ms, 12000ms) linear infinite;
+}
+
+@keyframes fxs-cover {
+  50% {
+    box-shadow:
+      inset 0 0 0 3px rgba(255, 255, 255, 0.85),
+      inset 0 0 20px rgba(255, 255, 255, 0.25);
+  }
+}
+
+/* 疑似連の「NEXT ×2」 */
+.fxs-next {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px 7px;
+  border-radius: 12px;
+  white-space: nowrap;
+  background: rgba(8, 10, 24, 0.92);
+  box-shadow:
+    0 0 0 2px var(--cl),
+    0 0 16px color-mix(in srgb, var(--c) 60%, transparent);
+  transform: translate(-50%, -50%);
+  opacity: 0;
+}
+
+.fxs-next b {
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 3px;
+}
+
+.fxs-next i {
+  font-style: normal;
+  font-size: 16px;
+  color: var(--cl);
+}
+
+.fxs-next em {
+  font-style: normal;
+  font-size: 24px;
+  font-weight: 900;
+  color: #ffe08a;
+}
+
 .fxs-glass {
   position: absolute;
   inset: 0;
   z-index: 2;
   border-radius: inherit;
-  pointer-events: none;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.03) 30%, rgba(255, 255, 255, 0) 48%),
     linear-gradient(100deg, rgba(255, 255, 255, 0) 60%, rgba(255, 255, 255, 0.05) 70%, rgba(255, 255, 255, 0) 80%);
@@ -700,112 +928,18 @@
   right: 8px;
 }
 
-/* ---- ゲージ ---------------------------------------------------------------- */
+/* ---- 声かけと「あと O65」 --------------------------------------------------- */
 
-.fxs-gauge {
-  --g: 0;
-  position: relative;
-  flex: none;
-  height: 22px;
-  margin-top: 2px;
-  border-radius: 11px;
-  background: rgba(0, 0, 0, 0.5);
-  box-shadow:
-    inset 0 0 0 1.5px rgba(255, 255, 255, 0.14),
-    inset 0 2px 4px rgba(0, 0, 0, 0.6);
-}
-
-.fxs-fill {
-  position: absolute;
-  inset: 3px;
-  overflow: hidden;
-  border-radius: 8px;
-  clip-path: inset(0 calc((1 - var(--g)) * 100%) 0 0 round 8px);
-  background: linear-gradient(90deg, var(--cd), var(--c) 55%, var(--cl));
-}
-
-/* 光沢がゆっくり流れる（同じ場所が光るのは 2 秒に 1 回くらい） */
-.fxs-fill::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(100deg, rgba(255, 255, 255, 0) 35%, rgba(255, 255, 255, 0.45) 48%, rgba(255, 255, 255, 0) 60%) 0 0 / 220% 100% no-repeat;
-  animation: fxs-sheen var(--fxs-sheen-ms, 2600ms) linear infinite;
-}
-
-.fxs[data-tier='4'] .fxs-fill {
-  background: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
-  animation: fxs-hue var(--fxs-hue-ms, 12000ms) linear infinite;
-}
-
-/* 25・50・75% の目盛り。越えると白く光る */
-.fxs-mark {
-  position: absolute;
-  top: 3px;
-  bottom: 3px;
-  z-index: 1;
-  width: 2px;
-  margin-left: -1px;
-  border-radius: 1px;
-  background: rgba(5, 8, 22, 0.85);
-  transition:
-    background calc(300ms * var(--fxs-k)),
-    box-shadow calc(300ms * var(--fxs-k));
-}
-
-.fxs-mark.on {
-  background: #fff;
-  box-shadow:
-    0 0 6px #fff,
-    0 0 12px var(--cl);
-}
-
-/* ゲージの先の光。連打の熱で強くなる */
-.fxs-tip {
-  position: absolute;
-  top: 50%;
-  left: calc(3px + var(--g) * (100% - 6px));
-  z-index: 2;
-  width: 18px;
-  height: 18px;
-  margin: -9px 0 0 -9px;
-  border-radius: 50%;
-  background: radial-gradient(circle, #fff 0 28%, color-mix(in srgb, var(--cl) 80%, transparent) 48%, transparent 72%);
-  opacity: calc(0.5 + var(--heat) * 0.5);
-  pointer-events: none;
-}
-
-.fxs-gauge.is-full .fxs-tip {
-  opacity: 0;
-}
-
-.fxs-gauge.is-full::after {
-  content: 'MAX';
-  position: absolute;
-  right: 12px;
-  top: 50%;
-  z-index: 3;
-  transform: translateY(-50%);
-  font-size: 12px;
-  font-weight: 900;
-  letter-spacing: 2px;
-  color: #fff;
-  text-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.9),
-    0 0 6px rgba(0, 0, 0, 0.6);
-}
-
-/* 声かけの一行 */
 .fxs-msg {
   flex: none;
-  height: 18px;
+  height: 20px;
   overflow: hidden;
   text-align: center;
   white-space: nowrap;
   text-overflow: ellipsis;
   font-size: 13px;
   font-weight: 800;
-  line-height: 18px;
+  line-height: 20px;
   color: #dfe6ff;
 }
 
@@ -815,155 +949,86 @@
   color: #fff;
 }
 
-/* ---- 大きなボタン（連打 → STOP） --------------------------------------------- */
-
-.fxs-btn {
-  position: relative;
+/* リーチがないときは、声かけを大きく出す */
+.fxs-body:not(.has-wait) .fxs-msg {
   flex: 1 1 auto;
-  min-height: 78px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
+  height: auto;
+  display: grid;
+  place-items: center;
+  padding: 0 8px;
+  border-radius: 18px;
+  font-size: 19px;
+  line-height: 1.35;
+  white-space: normal;
+  background: rgba(5, 8, 22, 0.4);
 }
 
-.fxs-btn:focus-visible {
-  outline: 3px solid #fff;
-  outline-offset: 3px;
-  border-radius: 22px;
+.fxs-body:not(.has-wait) .fxs-msg b {
+  font-size: 30px;
 }
 
-/* ボタンの側面（押すと、上面がここへ沈む） */
-.fxs-btn-side {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 8px;
-  bottom: 0;
-  border-radius: 22px;
-  background: linear-gradient(180deg, #0c1233, #060a1f);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5);
-}
-
-.fxs-btn-cap {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  bottom: 8px;
+/* あと 1 つの番号（大きく。リーチの札と同じ金の札） */
+.fxs-wait {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  overflow: hidden;
-  border-radius: 22px;
-  background: linear-gradient(180deg, #4659bd 0%, #2b3888 55%, #1e2766 100%);
-  box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.28),
-    inset 0 -3px 0 rgba(0, 0, 0, 0.25),
-    0 0 0 2px color-mix(in srgb, var(--c) 65%, transparent);
-  transition:
-    filter calc(300ms * var(--fxs-k)),
-    transform calc(120ms * var(--fxs-k));
+  gap: 12px;
+  border-radius: 18px;
+  background: rgba(5, 8, 22, 0.55);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--c) 55%, transparent);
+  transition: box-shadow calc(400ms * var(--fxs-k)) ease;
 }
 
-.fxs-btn-word {
-  font-size: 30px;
+.fxs-wait small {
+  font-size: 20px;
   font-weight: 900;
-  letter-spacing: 3px;
+  color: #ffd9c2;
+}
+
+.fxs-wait span {
+  display: flex;
+  gap: 8px;
+}
+
+.fxs-wait b {
+  padding: 6px 14px 7px;
+  border-radius: 14px;
+  font-size: 46px;
+  font-weight: 900;
   line-height: 1;
-  white-space: nowrap;
-  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
-}
-
-.fxs-btn-sub {
-  font-size: 12px;
-  font-weight: 700;
-  opacity: 0.85;
-}
-
-.fxs-btn-sub:empty {
-  display: none;
-}
-
-/* 連打の数 */
-.fxs-combo {
-  position: absolute;
-  right: 18px;
-  top: 50%;
-  translate: 0 -50%;
-  font-style: normal;
-  font-size: 19px;
-  font-weight: 900;
   font-variant-numeric: tabular-nums;
-  color: var(--cl);
-  text-shadow: 0 0 8px var(--c);
-}
-
-/* STOP が押せる: 金のボタンになり、まわりの光がゆっくり呼吸する（1 秒に約 0.6 回） */
-.fxs[data-phase='ready'] .fxs-btn-cap,
-.fxs[data-by='tap'] .fxs-btn-cap {
-  color: #2a1700;
-  background: linear-gradient(180deg, #fff6cf 0%, #f5c542 45%, #d99a12 100%);
+  color: #1a1400;
+  background: linear-gradient(180deg, #fff8dc, #ffe08a);
   box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.75),
-    inset 0 -3px 0 rgba(120, 70, 0, 0.35),
-    0 0 0 3px #fff;
+    0 0 0 3px #f5c542,
+    0 0 20px rgba(245, 197, 66, 0.55);
 }
 
-.fxs[data-phase='ready'] .fxs-btn-side,
-.fxs[data-by='tap'] .fxs-btn-side {
-  background: linear-gradient(180deg, #a87410, #5e3f05);
+.fxs-wait[data-count='2'] b {
+  padding: 5px 10px 6px;
+  font-size: 34px;
 }
 
-.fxs[data-phase='ready'] .fxs-btn-word {
-  font-size: 44px;
-  letter-spacing: 10px;
-  text-shadow: 0 2px 0 rgba(255, 255, 255, 0.55);
+.fxs-wait[data-count='3'] b {
+  padding: 4px 8px 5px;
+  font-size: 24px;
 }
 
-.fxs[data-by] .fxs-btn-word {
-  font-size: 38px;
-  letter-spacing: 8px;
-  text-shadow: 0 2px 0 rgba(255, 255, 255, 0.4);
+.fxs[data-tier='2'] .fxs-wait,
+.fxs[data-tier='3'] .fxs-wait {
+  box-shadow:
+    inset 0 0 0 2px var(--c),
+    0 0 16px color-mix(in srgb, var(--c) 45%, transparent);
 }
 
-.fxs[data-phase='ready'] .fxs-combo,
-.fxs[data-by='tap'] .fxs-combo {
-  color: rgba(90, 55, 0, 0.75);
-  text-shadow: none;
-}
-
-.fxs[data-phase='ready'] .fxs-btn::before {
-  content: '';
-  position: absolute;
-  inset: -7px -7px -3px;
-  border-radius: 28px;
-  box-shadow: 0 0 22px 7px rgba(255, 214, 90, 0.75);
-  animation: fxs-breathe var(--fxs-breathe-ms, 1600ms) ease-in-out infinite;
-  pointer-events: none;
-}
-
-.fxs[data-phase='ready'] .fxs-btn-cap::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 38%, rgba(255, 255, 255, 0.6) 48%, rgba(255, 255, 255, 0) 58%) 0 0 / 240% 100% no-repeat;
-  animation: fxs-sheen var(--fxs-sheen-ms, 2600ms) linear infinite;
-  pointer-events: none;
-}
-
-/* 押した（自動で止まった）あとは、沈んだまま */
-.fxs[data-phase='stopping'] .fxs-btn-cap,
-.fxs[data-phase='landed'] .fxs-btn-cap,
-.fxs[data-phase='result'] .fxs-btn-cap {
-  transform: translateY(6px);
-  filter: saturate(0.6) brightness(0.85);
+/* 出た番号が「あと 1 つ」だった */
+.fxs-wait b.is-hit {
+  background: linear-gradient(180deg, #ffffff, #fff1b8 40%, #f5c542);
+  box-shadow:
+    0 0 0 3px #fff,
+    0 0 28px rgba(255, 236, 170, 0.95);
 }
 
 /* ---- 結果 ------------------------------------------------------------------ */
@@ -1170,12 +1235,6 @@
 
 /* ---- くり返しの動き --------------------------------------------------------- */
 
-@keyframes fxs-breathe {
-  50% {
-    opacity: 0.35;
-  }
-}
-
 @keyframes fxs-hue {
   to {
     filter: hue-rotate(360deg);
@@ -1185,15 +1244,6 @@
 @keyframes fxs-spin {
   to {
     transform: rotate(360deg);
-  }
-}
-
-@keyframes fxs-sheen {
-  from {
-    background-position: 150% 0;
-  }
-  to {
-    background-position: -60% 0;
   }
 }
 

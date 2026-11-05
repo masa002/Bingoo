@@ -339,130 +339,6 @@ input {
   }
 }
 
-.st-result.hidden {
-  visibility: hidden;
-}
-
-/* 手元の STOP の受付。番号は各自のスマホで先に開くので、答え合わせまでは結果の欄の代わりに止めた人数を出す */
-.st-stops {
-  position: absolute;
-  z-index: 21;
-  left: 1270px;
-  top: 112px;
-  width: 610px;
-  height: 390px;
-  display: none;
-  flex-direction: column;
-  justify-content: center;
-  gap: 16px;
-  padding: 26px 34px;
-  border: 2px solid #26305a;
-  border-radius: 18px;
-  background: linear-gradient(180deg, #0f1738, #0a1030);
-}
-
-.st-stops.on {
-  display: flex;
-}
-
-.st-stops-head {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  font-size: 32px;
-  font-weight: 900;
-}
-
-/* 溜めの間は、連打の合図の点がゆっくり脈打つ（1 秒に 1 回） */
-.st-stops-head::before {
-  content: '';
-  flex: none;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #3fd0ff;
-  animation: tapdot 0.5s ease-in-out infinite alternate;
-}
-
-.st-stops[data-mode='open'] .st-stops-head {
-  color: var(--gold);
-}
-
-.st-stops[data-mode='open'] .st-stops-head::before {
-  background: var(--gold);
-}
-
-.st-stops[data-mode='closed'] .st-stops-head::before {
-  animation: none;
-  background: #7af0c8;
-}
-
-.st-stops-count b {
-  font-size: 124px;
-  font-weight: 900;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-
-.st-stops-count small {
-  font-size: 34px;
-  font-weight: 800;
-  color: var(--muted);
-}
-
-.st-stops[data-mode='charge'] .st-stops-count {
-  opacity: 0.45;
-}
-
-.st-stops-bar {
-  height: 22px;
-  border-radius: 11px;
-  background: #18204a;
-  overflow: hidden;
-}
-
-.st-stops-bar i {
-  display: block;
-  height: 100%;
-  width: calc(var(--fill, 0) * 100%);
-  border-radius: inherit;
-  background: linear-gradient(90deg, #3fd0ff, #7af0c8);
-  transition: width 0.25s linear;
-}
-
-.st-stops[data-mode='closed'] .st-stops-bar i {
-  background: linear-gradient(90deg, #7af0c8, #f5c542);
-}
-
-.st-stops-note {
-  margin: 0;
-  font-size: 22px;
-  color: var(--muted);
-}
-
-/* STOP の受付が始まった合図（縁が 1 回だけ光る） */
-.st-stops.flash {
-  animation: stopsflash 0.7s ease-out;
-}
-
-@keyframes stopsflash {
-  from {
-    border-color: var(--gold);
-    box-shadow: 0 0 46px rgba(245, 197, 66, 0.55);
-  }
-}
-
-@keyframes tapdot {
-  from {
-    transform: scale(0.7);
-    opacity: 0.55;
-  }
-  to {
-    transform: scale(1.1);
-    opacity: 1;
-  }
-}
-
 .st-venue {
   position: absolute;
   z-index: 20;
@@ -548,7 +424,6 @@ input {
 /* 抽選の「間（ま）」では、抽選機の外のパネルも少し暗くして画面全体で息をのむ */
 .st-hud,
 .st-result,
-.st-stops,
 .st-venue,
 .st-board {
   transition:
@@ -556,7 +431,7 @@ input {
     opacity 0.3s;
 }
 
-.stage:has(.fxd.is-ma) :is(.st-hud, .st-result, .st-stops, .st-venue, .st-board) {
+.stage:has(.fxd.is-ma) :is(.st-hud, .st-result, .st-venue, .st-board) {
   filter: brightness(0.8);
 }
 

@@ -1,0 +1,759 @@
+/* ラストワン争奪のガラポン（スマホ）。クラスは fxlp- で始める。抽選器と玉の絵は garapon.css（fxg-）のものを使う。
+   1 回きりの動きの長さは --fxlp-k（= 1 / 速度）を掛ける。
+   繰り返す動き（「？」の玉のゆれ・呼吸）は、速度を上げても速くしない（光過敏への配慮） */
+
+.fxlp {
+  --fxlp-k: 1;
+  --fxlp-out: 500ms;
+  --heat: 0;
+  position: absolute;
+  inset: 0;
+  z-index: 42;
+  overflow: hidden;
+  color: #f6efe4;
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
+  background: #070a18;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+  opacity: 0;
+  transition: opacity calc(380ms * var(--fxlp-k)) ease-out;
+}
+
+.fxlp.on {
+  opacity: 1;
+}
+
+.fxlp.out {
+  opacity: 0;
+  transition-duration: var(--fxlp-out);
+}
+
+/* ---- 背景: 夜の紺に、抽選器の後ろのあたたかい灯り（回すほど少し明るい）。外れると青い灯りに替わる ---- */
+
+.fxlp-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 55% at 50% 0%, rgba(58, 40, 10, 0.55) 0%, rgba(22, 32, 74, 0) 70%),
+    radial-gradient(120% 60% at 50% 0%, rgba(22, 32, 74, 0.9) 0%, rgba(22, 32, 74, 0) 70%),
+    linear-gradient(180deg, #0c1232 0%, #080b1d 55%, #05070f 100%);
+}
+
+.fxlp-bg::before,
+.fxlp-bg::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 470px;
+  width: 460px;
+  height: 460px;
+  margin: -230px 0 0 -230px;
+  border-radius: 50%;
+}
+
+/* 輝度の変化は 20% 以下に収める（--heat は回転の速さをならした値） */
+.fxlp-bg::after {
+  background: radial-gradient(closest-side, rgba(255, 170, 80, 0.42), rgba(255, 140, 60, 0.14) 60%, rgba(255, 140, 60, 0) 100%);
+  opacity: calc(0.28 + var(--heat) * 0.45);
+}
+
+.fxlp-bg::before {
+  width: 540px;
+  height: 540px;
+  margin: -270px 0 0 -270px;
+  background: radial-gradient(closest-side, rgba(110, 150, 255, 0.24), rgba(110, 150, 255, 0) 100%);
+  opacity: 0;
+  transition: opacity calc(1600ms * var(--fxlp-k)) ease;
+}
+
+.fxlp[data-mood='cool'] .fxlp-bg::before {
+  opacity: 1;
+}
+
+.fxlp[data-mood='cool'] .fxlp-bg::after {
+  opacity: 0.08;
+  transition: opacity calc(1600ms * var(--fxlp-k)) ease;
+}
+
+/* 順に出てくるもの */
+.fxlp-in {
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity calc(450ms * var(--fxlp-k)) ease-out,
+    transform calc(450ms * var(--fxlp-k)) ease-out;
+}
+
+.fxlp-in.on {
+  opacity: 1;
+  transform: none;
+}
+
+/* ---- 見出し ---- */
+
+.fxlp-head {
+  position: absolute;
+  top: 46px;
+  left: 0;
+  right: 0;
+  text-align: center;
+}
+
+.fxlp-kicker {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.34em;
+  color: #f5c542;
+}
+
+.fxlp-title {
+  margin-top: 2px;
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  line-height: 1.25;
+  color: #ffe08a;
+  text-shadow:
+    0 3px 0 #3a2400,
+    0 0 20px rgba(245, 197, 66, 0.45);
+}
+
+.fxlp-title.on {
+  animation: fxlp-pop calc(520ms * var(--fxlp-k)) cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+
+@keyframes fxlp-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.fxlp-odds {
+  margin-top: 2px;
+  font-size: 15px;
+  color: #dfe4f5;
+}
+
+.fxlp-odds b {
+  margin: 0 4px;
+  font-size: 21px;
+  font-weight: 900;
+  color: #fff;
+}
+
+.fxlp-rule {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 8px;
+  padding: 4px 12px 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+  font-weight: 700;
+  color: #dfe4f5;
+}
+
+.fxlp-rule .fxg-ball {
+  --d: 17px;
+}
+
+.fxlp-rule-t {
+  margin-left: 4px;
+}
+
+/* ---- 争奪している人（「？」の玉がゆれて、みんなが回している様子） ---- */
+
+.fxlp-crowd {
+  position: absolute;
+  top: 176px;
+  left: 0;
+  right: 0;
+  text-align: center;
+}
+
+.fxlp-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 22px;
+}
+
+.fxlp-dot {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+  color: #ffe08a;
+  background: radial-gradient(circle at 34% 30%, #4a5ba8 0%, #26306a 60%, #121839 100%);
+  box-shadow: inset 0 0 0 1px rgba(245, 197, 66, 0.45);
+  animation: fxlp-wobble 1.6s ease-in-out infinite alternate;
+}
+
+.fxlp-dot.me {
+  box-shadow:
+    inset 0 0 0 1px rgba(245, 197, 66, 0.45),
+    0 0 0 2px #5ad2ff;
+}
+
+.fxlp-dot-more {
+  margin-left: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #8a93b8;
+}
+
+@keyframes fxlp-wobble {
+  from {
+    transform: rotate(-14deg);
+  }
+  to {
+    transform: rotate(14deg);
+  }
+}
+
+.fxlp-crowd-text {
+  margin-top: 6px;
+  font-size: 14px;
+  color: #ffe2b8;
+}
+
+.fxlp-crowd-text b {
+  font-weight: 900;
+  color: #fff4e0;
+}
+
+.fxlp[data-phase='drop'] .fxlp-crowd.on,
+.fxlp[data-phase='reveal'] .fxlp-crowd.on {
+  opacity: 0;
+}
+
+/* ---- 3・2・1（1 秒に 1 回だけ出る） ---- */
+
+.fxlp-count {
+  position: absolute;
+  top: 226px;
+  left: 0;
+  right: 0;
+  height: 104px;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.fxlp-count b {
+  font-size: 88px;
+  font-weight: 900;
+  line-height: 1;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  text-shadow:
+    0 4px 0 rgba(0, 0, 0, 0.35),
+    0 0 26px rgba(255, 200, 120, 0.55);
+  opacity: 0;
+}
+
+/* 動きを減らす設定ではアニメーションが止まるので、出しっぱなしにする */
+.fxlp-count b.tick {
+  opacity: 1;
+  animation: fxlp-tick calc(900ms * var(--fxlp-k)) ease-out both;
+}
+
+@keyframes fxlp-tick {
+  0% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+  18% {
+    opacity: 1;
+    transform: none;
+  }
+  72% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+/* ---- 抽選器 ---- */
+
+.fxlp-stage {
+  position: absolute;
+  left: 45px;
+  top: 336px;
+  width: 300px;
+  height: 300px;
+  transition:
+    opacity calc(600ms * var(--fxlp-k)) ease,
+    transform calc(600ms * var(--fxlp-k)) ease;
+}
+
+.fxlp[data-phase='reveal'] .fxlp-stage {
+  opacity: 0.14;
+  transform: scale(0.94);
+}
+
+/* 玉が出た瞬間に、受け皿のあたりを玉の色で照らす（抽選器の後ろ。立ち上がりの長さは TS で決める） */
+.fxlp-aura {
+  position: absolute;
+  left: 13px;
+  top: 108px;
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(closest-side, rgba(200, 214, 255, 0.22), rgba(200, 214, 255, 0));
+  opacity: 0;
+  transition: opacity 260ms ease-out;
+}
+
+.fxlp-aura.on {
+  opacity: 1;
+}
+
+.fxlp-aura[data-color='red'] {
+  background: radial-gradient(closest-side, rgba(239, 68, 68, 0.5), rgba(239, 68, 68, 0.16) 55%, rgba(239, 68, 68, 0));
+}
+
+.fxlp-aura[data-color='gold'] {
+  background: radial-gradient(closest-side, rgba(255, 224, 138, 0.62), rgba(245, 197, 66, 0.2) 55%, rgba(245, 197, 66, 0));
+}
+
+/* 虹は色だけを回す（明るさは変えない） */
+.fxlp-aura[data-color='rainbow'] {
+  background: conic-gradient(from 0deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff, #ff5a5a);
+  -webkit-mask: radial-gradient(closest-side, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.18) 55%, transparent);
+  mask: radial-gradient(closest-side, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.18) 55%, transparent);
+  animation: fxlp-hue 12s linear infinite;
+}
+
+@keyframes fxlp-hue {
+  to {
+    filter: hue-rotate(360deg);
+  }
+}
+
+/* ---- 下: 玉が出るまでのメーターと「タップで回せ！」 ---- */
+
+.fxlp-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 38px;
+  padding: 0 34px;
+  text-align: center;
+  transition: opacity calc(400ms * var(--fxlp-k)) ease;
+}
+
+.fxlp[data-phase='intro'] .fxlp-foot,
+.fxlp[data-phase='drop'] .fxlp-foot,
+.fxlp[data-phase='reveal'] .fxlp-foot {
+  opacity: 0;
+}
+
+.fxlp-meter-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: #c9cfe6;
+}
+
+.fxlp-meter-label b {
+  margin: 0 3px;
+  font-size: 16px;
+  font-weight: 900;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.fxlp-meter {
+  position: relative;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.fxlp-meter b {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  transform-origin: 0 50%;
+  transform: scaleX(var(--p, 0));
+  background: linear-gradient(90deg, #b8722f, #f0a64e, #ffd98a);
+}
+
+.fxlp-prompt {
+  margin-top: 16px;
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  color: #fff4e0;
+  text-shadow: 0 0 18px rgba(255, 170, 80, 0.45);
+  animation: fxlp-throb 1.2s ease-in-out infinite;
+}
+
+@keyframes fxlp-throb {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+.fxlp-sub {
+  min-height: 20px;
+  margin-top: 6px;
+  font-size: 14px;
+  color: #c9cfe6;
+}
+
+/* ---- 連打の手ごたえ（「ガラッ」の文字と、指の跡）。どちらも 1 秒に 3 回までに間引く ---- */
+
+.fxlp-pops {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.fxlp-pop {
+  position: absolute;
+  font-size: 20px;
+  font-weight: 900;
+  white-space: nowrap;
+  color: #ffd9a8;
+  text-shadow: 0 2px 0 rgba(90, 40, 0, 0.6);
+  animation: fxlp-word calc(800ms * var(--fxlp-k)) ease-out forwards;
+}
+
+@keyframes fxlp-word {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0) rotate(var(--r, 0deg)) scale(0.7);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -6px) rotate(var(--r, 0deg)) scale(1.05);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -36px) rotate(var(--r, 0deg)) scale(1);
+  }
+}
+
+.fxlp-ripple {
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 222, 170, 0.32);
+  animation: fxlp-ripple calc(450ms * var(--fxlp-k)) ease-out forwards;
+}
+
+@keyframes fxlp-ripple {
+  from {
+    opacity: 1;
+    transform: scale(0.3);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+/* ---- 結果 ---- */
+
+.fxlp-reveal {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 150px;
+  bottom: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 26px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.fxlp-rv-ballwrap {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  flex: none;
+}
+
+.fxlp-rv-ballwrap > .fxg-ball {
+  --d: 140px;
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.fxlp-rv-halo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 320px;
+  height: 320px;
+  margin: -160px 0 0 -160px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--halo, rgba(255, 255, 255, 0.2)), rgba(255, 255, 255, 0));
+  opacity: 0;
+  transition: opacity calc(700ms * var(--fxlp-k)) ease;
+}
+
+.fxlp-rv-halo.on {
+  opacity: 1;
+}
+
+.fxlp-rv-name,
+.fxlp-rv-word,
+.fxlp-plate,
+.fxlp-dc,
+.fxlp-rv-msg {
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity calc(500ms * var(--fxlp-k)) ease-out,
+    transform calc(500ms * var(--fxlp-k)) ease-out;
+}
+
+.fxlp-rv-name.on,
+.fxlp-rv-word.on,
+.fxlp-plate.on,
+.fxlp-dc.on,
+.fxlp-rv-msg.on {
+  opacity: 1;
+  transform: none;
+}
+
+.fxlp-rv-name {
+  margin-top: 18px;
+  font-size: 17px;
+  font-weight: 700;
+  color: #dfe4f5;
+}
+
+.fxlp-rv-name span {
+  margin-right: 6px;
+}
+
+.fxlp-rv-word {
+  margin-top: 2px;
+  font-size: 48px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+
+.fxlp-rv-word[data-color='white'] {
+  font-size: 36px;
+  color: #c9d3ee;
+}
+
+.fxlp-rv-word[data-color='red'] {
+  color: #ff8a8a;
+  text-shadow: 0 0 22px rgba(239, 68, 68, 0.45);
+}
+
+.fxlp-rv-word[data-color='gold'] {
+  color: #ffe08a;
+  text-shadow: 0 0 24px rgba(245, 197, 66, 0.5);
+}
+
+.fxlp-rv-word[data-color='rainbow'] {
+  background: linear-gradient(90deg, #ff8a8a, #ffd27a, #fff38a, #8affb0, #8ae0ff, #c49aff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* 当たりの言葉は、ぽんと弾んで出る */
+.fxlp-rv-word.on:not([data-color='white']) {
+  animation: fxlp-bounce calc(560ms * var(--fxlp-k)) cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+
+@keyframes fxlp-bounce {
+  from {
+    transform: scale(0.6);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+/* 景品の札（ラストワン賞）。上の帯は玉の色 */
+.fxlp-plate {
+  --band: linear-gradient(90deg, #d43a32 0 50%, #ffffff 50% 100%);
+  position: relative;
+  display: inline-block;
+  min-width: 240px;
+  max-width: 330px;
+  margin-top: 14px;
+  padding: 24px 22px 14px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fffdf7, #f3ead8);
+  color: #2a1d10;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+
+.fxlp-plate::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 10px;
+  height: 5px;
+  background: var(--band);
+}
+
+.fxlp-plate[data-color='gold'] {
+  --band: linear-gradient(90deg, #d9a520 0 50%, #fff1c2 50% 100%);
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.45),
+    0 0 26px rgba(245, 197, 66, 0.35);
+}
+
+.fxlp-plate[data-color='rainbow'] {
+  --band: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.45),
+    0 0 26px rgba(200, 160, 255, 0.35);
+}
+
+.fxlp-plate small {
+  display: block;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.24em;
+  color: #8a6a44;
+}
+
+.fxlp-plate b {
+  display: block;
+  margin-top: 6px;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1.4;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+/* 外れ: ダブルチャンスの玉（白い外れの玉や金の当たりの玉と見分けられるよう、淡い青に「？」） */
+.fxlp-dc {
+  margin-top: 16px;
+  padding: 12px 18px 14px;
+  border-radius: 16px;
+  background: rgba(17, 24, 56, 0.9);
+  box-shadow:
+    inset 0 0 0 1px rgba(159, 180, 255, 0.28),
+    0 10px 26px rgba(0, 0, 0, 0.35);
+}
+
+.fxlp-dc-head {
+  font-size: 14px;
+  color: #c9d6ff;
+}
+
+.fxlp-dc-head b {
+  margin: 0 3px;
+  font-size: 20px;
+  font-weight: 900;
+  color: #fff;
+}
+
+.fxlp-dc-balls {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.fxlp-token {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  font-size: 20px;
+  font-style: normal;
+  font-weight: 900;
+  color: #26306a;
+  background: radial-gradient(circle at 34% 30%, #ffffff 0%, #dfe7ff 26%, #9fb4ff 68%, #5b6fc4 100%);
+  box-shadow:
+    inset 0 -3px 6px rgba(0, 0, 0, 0.2),
+    0 3px 8px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transform: translateY(10px) scale(0.4);
+  transition:
+    opacity calc(380ms * var(--fxlp-k)) ease-out,
+    transform calc(420ms * var(--fxlp-k)) cubic-bezier(0.2, 1.5, 0.4, 1);
+}
+
+.fxlp-token.on {
+  opacity: 1;
+  transform: none;
+}
+
+.fxlp-rv-msg {
+  margin-top: 14px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #c9cfe6;
+}
+
+/* 1 回だけの、ごく弱い全面の光（虹のとき）。輝度の変化は 20% 以下、立ち上がりは 120ms 以上 */
+.fxlp-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.08) 70%);
+  opacity: 0;
+}
+
+.fxlp-fx {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* 動きを減らす設定: 動きを止めて、色と文字だけで伝える */
+@media (prefers-reduced-motion: reduce) {
+  .fxlp,
+  .fxlp *,
+  .fxlp *::before,
+  .fxlp *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -1165,7 +1165,7 @@ function garaponWin(color: 'red' | 'gold' | 'rainbow'): void {
   for (let i = 0; i < shakes; i++) {
     const swell = Math.min(1, (i + 1) / 3, (shakes - i) / 3 + 0.25) // 振り始めと振り終わりは弱く
     bells.forEach((bf, j) => {
-      const at = i * period + j * 0.023 + rnd(-0.008, 0.008)
+      const at = Math.max(0, i * period + j * 0.023 + rnd(-0.008, 0.008)) // 最初の一打を揺らしても、過去の時刻にしない
       const g = (0.05 / Math.sqrt(bells.length)) * swell
       const pan = j === 0 ? -0.1 : 0.3
       bell(bf * cents(8), { at, dur: 0.8, gain: g * 0.7, kind: 'hand', pan: pan - 0.1, reverb: 0.25 })

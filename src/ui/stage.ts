@@ -5,10 +5,12 @@ import type { Clock } from '../demo/clock'
 import { Particles, RAINBOW } from '../fx/particles'
 import { DoubleChanceStage } from '../fx/stage/doublechance'
 import { DrawMachine } from '../fx/stage/draw'
-import { playAllKakutei, playFinalBall, playLastOne, playMole } from '../fx/stage/events'
+import { playAllKakutei, playFinalBall } from '../fx/stage/events'
+import { playLastOneGarapon } from '../fx/stage/lastone'
+import { MoleQuestStage } from '../fx/stage/quest'
 import type { LocalHub } from '../net/hub'
 import type { Msg, MsgOf, PrizeEntry, Totals } from '../net/protocol'
-import { countUp, esc, fit, fmt, h, q, replay } from './dom'
+import { countUp, esc, fit, fmt, h, q } from './dom'
 
 // 会場の大画面（1920×1080 で組んで縮小表示する）。抽選機・イベント・ダブルチャンスの演出は fx/ の部品で、
 // この画面は HUD・結果・会場ビュー・番号の盤と、メッセージから部品への振り分けを受け持つ。音（PA）はこの画面だけが鳴らす
@@ -36,12 +38,6 @@ const STAGE_HTML = `
   </div>
   <ol class="st-names"></ol>
 </section>
-<section class="st-stops">
-  <div class="st-stops-head"></div>
-  <div class="st-stops-count"><b>0</b><small></small></div>
-  <div class="st-stops-bar"><i></i></div>
-  <p class="st-stops-note"></p>
-</section>
 <section class="st-venue"><canvas width="610" height="236"></canvas><span class="st-venue-label">会場ビュー</span></section>
 <div class="st-board"></div>
 <canvas class="st-fx" width="1920" height="1080"></canvas>
@@ -55,15 +51,13 @@ export class StageView {
   private readonly venue: Venue
   private readonly machine: DrawMachine
   private dc: DoubleChanceStage | null = null
+  private quest: MoleQuestStage | null = null
   private timers: number[] = []
   private cancelBeats: () => void = () => {}
   private drawn = new Set<number>()
   private last = 0
   private scene: BgmScene = 'reception'
   private firstBingo = false
-  private size = 0
-  private stopShown = 0
-  private stopRaf = 0
 
   constructor(
     host: HTMLElement,
@@ -103,15 +97,19 @@ export class StageView {
         return
       case 'drawScheduled':
         return this.onScheduled(m)
-      case 'drawOpen':
-        return this.onDrawOpen()
-      case 'stopCount':
-        return this.onStopCount(m)
       case 'awaitPush':
         this.machine.awaitPush()
         return
       case 'numberRevealed':
         return this.onRevealed(m)
+      case 'questStart':
+        return this.onQuestStart(m)
+      case 'questProgress':
+        this.quest?.setTotal(m.total)
+        return
+      case 'questResult':
+        void this.onQuestResult(m)
+        return
       case 'bulkDrawn':
         m.numbers.forEach((n) => this.drawn.add(n))
         this.last = m.numbers[m.numbers.length - 1]
@@ -157,8 +155,8 @@ export class StageView {
     this.dc?.destroy()
     this.dc = null
     this.firstBingo = false
-    this.size = m.size
-    this.hideStops()
+    this.quest?.destroy()
+    this.quest = null
     this.machine.setSpeed(this.clock.speed)
     this.machine.reset()
     this.drawn = new Set(m.drawn)
@@ -231,19 +229,34 @@ export class StageView {
   private onEvent(m: MsgOf<'eventPlay'>): void {
     this.hideOverlay()
     this.cancelAll()
-    this.hideStops()
     this.clearResult()
-    const o = { speed: this.clock.speed, total: m.total }
-    if (m.kind === 'wild') {
-      void playAllKakutei(this.root, { ...o, newReach: m.newReach, newDouble: m.newDouble })
-      this.later(m.resultAt - 2500, () => this.venue.rainbow())
-    } else {
-      void playMole(this.root, { ...o, hit: m.hit, lostReach: m.lostReach })
-    }
+    void playAllKakutei(this.root, { speed: this.clock.speed, total: m.total, newReach: m.newReach, newDouble: m.newDouble })
+    this.later(m.resultAt - 2500, () => this.venue.rainbow())
     this.later(m.resultAt, () => {
       this.setTotals(m.totals)
       this.venue.refresh()
     })
+  }
+
+  // 緊急クエスト「モグラ撃退」。会場全員がスマホで叩いている様子と合計、結果を見せる
+  private onQuestStart(m: MsgOf<'questStart'>): void {
+    this.hideOverlay()
+    this.cancelAll()
+    this.clearResult()
+    this.quest?.destroy()
+    this.quest = new MoleQuestStage(this.root, { speed: this.clock.speed })
+    this.quest.start({ introMs: m.introMs, playMs: m.playMs, targets: m.targets, players: m.players })
+  }
+
+  private async onQuestResult(m: MsgOf<'questResult'>): Promise<void> {
+    const quest = this.quest
+    this.setTotals(m.totals)
+    this.venue.refresh()
+    if (!quest) return
+    await quest.result({ total: m.total, targets: m.targets, defended: m.defended, lost: m.lost, lostReach: m.lostReach, top: m.top })
+    if (this.quest !== quest) return
+    quest.destroy()
+    this.quest = null
   }
 
   // ---- 抽選 -----------------------------------------------------------------
@@ -256,8 +269,7 @@ export class StageView {
     this.machine.setSpeed(this.clock.speed)
     this.machine.reset()
     this.machine.setPool(Array.from({ length: 75 }, (_, i) => i + 1).filter((n) => !this.drawn.has(n)))
-    this.machine.start(m.beats, m.plan)
-    this.showStops()
+    this.machine.start(m.beats, m.plan, m.style)
     // 会場ビュー（デモ専用）は、赤以上の溜めでリーチの人のスマホが光る様子を見せる
     this.cancelBeats = this.clock.run(
       m.beats.filter((b) => b.kind === 'sea'),
@@ -265,72 +277,8 @@ export class StageView {
     )
   }
 
-  // ---- 手元の STOP（番号は各自のスマホで先に開く。大画面は止めた人数を見せてから答え合わせ） ----
-
-  private showStops(): void {
-    const box = this.$('.st-stops')
-    box.dataset.mode = 'charge'
-    box.style.setProperty('--fill', '0')
-    this.$('.st-stops-head').textContent = 'いま、手元のスマホで回しています'
-    this.setStopCount(0, false)
-    this.$('.st-stops-count small').textContent = ` / ${fmt(this.size)} 人`
-    this.$('.st-stops-note').textContent = '連打でゲージを溜めて、STOP で自分の番号を開けよう'
-    box.classList.add('on')
-    this.$('.st-result').classList.add('hidden')
-    this.venue.stops(0)
-  }
-
-  private onDrawOpen(): void {
-    const box = this.$('.st-stops')
-    box.dataset.mode = 'open'
-    replay(box, 'flash')
-    this.$('.st-stops-head').textContent = 'STOP 受付中！'
-    this.$('.st-stops-note').textContent = '押さなかった人も、締め切りで自動で止まります'
-  }
-
-  private onStopCount(m: MsgOf<'stopCount'>): void {
-    const box = this.$('.st-stops')
-    if (!box.classList.contains('on')) return
-    this.setStopCount(m.count, true)
-    box.style.setProperty('--fill', String(m.count / Math.max(1, m.total)))
-    this.venue.stops(m.count / Math.max(1, m.total))
-    if (m.count >= m.total) {
-      box.dataset.mode = 'closed'
-      this.$('.st-stops-head').textContent = '全員の番号が開きました'
-      this.$('.st-stops-note').textContent = 'では、答え合わせ！'
-    }
-  }
-
-  // 止めた人数は、届くたびに数字を転がして見せる
-  private setStopCount(to: number, roll: boolean): void {
-    cancelAnimationFrame(this.stopRaf)
-    const b = this.$('.st-stops-count b')
-    const from = this.stopShown
-    this.stopShown = to
-    if (!roll) {
-      b.textContent = fmt(to)
-      return
-    }
-    const start = performance.now()
-    const ms = this.clock.scale(240)
-    const step = (now: number) => {
-      const k = Math.min(1, (now - start) / ms)
-      b.textContent = fmt(Math.round(from + (to - from) * k))
-      if (k < 1) this.stopRaf = requestAnimationFrame(step)
-    }
-    this.stopRaf = requestAnimationFrame(step)
-  }
-
-  private hideStops(): void {
-    cancelAnimationFrame(this.stopRaf)
-    this.$('.st-stops').classList.remove('on')
-    this.$('.st-result').classList.remove('hidden')
-    this.venue.stops(-1)
-  }
-
   private onRevealed(m: MsgOf<'numberRevealed'>): void {
     this.cancelBeats()
-    this.hideStops()
     void this.machine.reveal(m.n, m.tier)
     this.drawn.add(m.n)
     this.last = m.n
@@ -387,7 +335,7 @@ export class StageView {
     list.innerHTML = ''
     const label = (e: PrizeEntry) =>
       e.rarity === null
-        ? 'ラストワン争奪で外れ'
+        ? 'ラストワン争奪のガラポンで外れ'
         : `【${e.rarity}】${e.rankUp ? 'ランクアップ' : ''}${e.kind === 'challenge' ? 'チャレンジ成功' : ''}`
     this.addNames(
       m.entries.slice(0, 12).map((e) => ({ name: e.name, isMe: e.isMe, label: label(e) })),
@@ -396,9 +344,11 @@ export class StageView {
     if (m.entries.length > 12) list.append(h('li', 'more', `ほか ${fmt(m.entries.length - 12)} 人`))
     if (m.lastOne) {
       const pool = m.entries.filter((e) => e.kind === 'normal')
-      void playLastOne(this.root, {
+      void playLastOneGarapon(this.root, {
         speed: this.clock.speed,
         prizes: pool.filter((e) => e.rarity).length,
+        dropAt: m.lastOne.dropAt,
+        durationMs: m.lastOne.durationMs,
         entrants: pool.map((e) => ({ name: e.name, isMe: e.isMe, win: e.rarity !== null })),
       })
     }
@@ -473,7 +423,6 @@ class Venue {
   private flashDraw = 0
   private flashUntil = 0
   private spotUntil = 0
-  private stopRatio = -1 // 手元の STOP を受付中なら、止めた人の割合（それ以外は -1）
   private until = 0
   private raf = 0
 
@@ -501,12 +450,6 @@ class Venue {
   rainbow(): void {
     this.mode = 'rainbow'
     this.run(5000)
-  }
-
-  // 回している間は全員のスマホを暗くし、STOP した人から明るく戻す（止める順はばらばらに見せる）
-  stops(ratio: number): void {
-    this.stopRatio = ratio
-    if (!this.raf) this.refresh()
   }
 
   reveal(n: number, drawNo: number): void {
@@ -574,15 +517,8 @@ class Venue {
       }
       const x = ox + (k % cols) * pitch + (pitch - dot) / 2
       const y = oy + Math.floor(k / cols) * pitch + (pitch - dot) / 2
-      if (this.stopRatio >= 0) {
-        // 止めた順はばらばらに見せる（番号から決まる疑似乱数と割合を比べる）
-        const stopped = ((Math.imul(k + 1, 2654435761) >>> 0) % 1000) / 1000 < this.stopRatio
-        if (!stopped) ctx.globalAlpha = 0.35
-        else if (color === '#1c2445') color = '#3f74b8'
-      }
       ctx.fillStyle = color
       ctx.fillRect(x, y, dot, dot)
-      ctx.globalAlpha = 1
       if (p.isMe) {
         ctx.strokeStyle = '#ffffff'
         ctx.lineWidth = 2

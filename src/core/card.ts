@@ -71,23 +71,25 @@ export interface LineState {
   bingo: number // 揃ったライン数
 }
 
-export function lineState(mask: number): LineState {
+// dead は、もう開かないマス（モグラに埋められたマス。その番号はもう出ている）。
+// 残りの 1 つが dead のラインはそろわないので、リーチに数えない
+export function lineState(mask: number, dead = 0): LineState {
   let reach = 0
   let bingo = 0
   for (const line of LINES) {
     const k = popcount(mask & line)
     if (k === 5) bingo++
-    else if (k === 4) reach++
+    else if (k === 4 && !(line & ~mask & dead)) reach++
   }
   return { reach, bingo }
 }
 
-// リーチのラインで、あと 1 つになっているマス
-export function waitingCells(mask: number): number[] {
+// リーチのラインで、あと 1 つになっているマス（dead は lineState と同じ）
+export function waitingCells(mask: number, dead = 0): number[] {
   const cells = new Set<number>()
   for (const line of LINES) {
     const rest = line & ~mask
-    if (popcount(rest) === 1) cells.add(31 - Math.clz32(rest))
+    if (popcount(rest) === 1 && !(rest & dead)) cells.add(31 - Math.clz32(rest))
   }
   return [...cells]
 }

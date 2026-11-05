@@ -141,7 +141,7 @@ export class Game {
       if (p.isMe) me.hit = true
       if (p.bingoDraw !== null) continue
       hits++
-      const s = lineState(p.mask | (1 << (e & 31)))
+      const s = lineState(p.mask | (1 << (e & 31)), p.filled)
       if (s.bingo > 0) {
         bingoIdx.push(p.idx)
         if (p.isMe) me.bingo = true
@@ -176,7 +176,7 @@ export class Game {
       p.mask |= bit
       p.filled &= ~bit
       if (p.bingoDraw !== null) continue
-      const s = lineState(p.mask)
+      const s = lineState(p.mask, p.filled)
       if (s.bingo > 0) {
         p.bingoDraw = this.drawn.length
         p.reach = 0
@@ -253,7 +253,7 @@ export class Game {
       for (let cell = 0; cell < 25; cell++) {
         const bit = 1 << cell
         if (cell === FREE_CELL || p.mask & bit) continue
-        const s = lineState(p.mask | bit)
+        const s = lineState(p.mask | bit, p.filled & ~bit)
         if (s.bingo > 0) continue
         let most = 0
         for (const line of LINES) if (line & bit) most = Math.max(most, popcount((p.mask | bit) & line))
@@ -268,7 +268,7 @@ export class Game {
       p.mask |= 1 << best
       p.wild |= 1 << best
       p.filled &= ~(1 << best)
-      p.reach = lineState(p.mask).reach
+      p.reach = lineState(p.mask, p.filled).reach
       if (before === 0 && p.reach > 0) change.newReach++
       else if (before > 0 && p.reach > before) change.newDouble++
       change.cells.set(p.idx, best)
@@ -276,31 +276,25 @@ export class Game {
     return change
   }
 
-  // モグラ（BAD）: まだ上がっていない人の一部で、開いている穴を 1 つ埋める（FREE は対象外）。
-  // onlyReach のときは、リーチの人だけを ratio の割合で狙い、リーチのラインの穴を埋める
-  // （景品の残りに対してビンゴの出方が速すぎるときに、ペースを落とす調整役として使う）
-  applyMole(rng: Rng, o: { ratio: number; forceMe?: boolean; onlyReach?: boolean }): CellChange {
-    const change: CellChange = { cells: new Map(), newReach: 0, newDouble: 0, lostReach: 0 }
-    for (const p of this.players) {
-      if (p.bingoDraw !== null) continue
-      const open = p.mask & ~FREE_MASK
-      const forced = p.isMe && o.forceMe
-      if (!open || (o.onlyReach && p.reach === 0 && !forced)) continue
-      if (!forced && !rng.chance(o.ratio)) continue
-      const cells: number[] = []
-      for (let cell = 0; cell < 25; cell++) if (open & (1 << cell)) cells.push(cell)
-      // リーチのラインにかかっているマスを狙う（ふだんは 4 割、調整役のときは必ず）
-      const waiting = cells.filter((c) => LINES.some((line) => line & (1 << c) && popcount(p.mask & line) === 4))
-      const cell = waiting.length && (o.onlyReach || rng.chance(0.4)) ? rng.pick(waiting) : rng.pick(cells)
-      const before = p.reach
-      p.mask &= ~(1 << cell)
-      p.wild &= ~(1 << cell)
-      p.filled |= 1 << cell
-      p.reach = lineState(p.mask).reach
-      if (p.reach < before) change.lostReach++
-      change.cells.set(p.idx, cell)
-    }
-    return change
+  // モグラ（緊急クエスト）が狙うマス: リーチのラインにかかっている開いたマス（リーチでなければ、開いたマスのどれか。FREE は対象外）
+  aimMole(p: Player, rng: Rng): number | null {
+    const open = p.mask & ~FREE_MASK
+    if (!open) return null
+    const cells: number[] = []
+    for (let cell = 0; cell < 25; cell++) if (open & (1 << cell)) cells.push(cell)
+    const waiting = cells.filter((c) => LINES.some((line) => line & (1 << c) && popcount(p.mask & line) === 4 && !(line & ~p.mask & p.filled)))
+    return rng.pick(waiting.length ? waiting : cells)
+  }
+
+  // モグラに穴を埋められる（その番号はもう出ているので、二度と開かない）。リーチが減ったら true
+  fillByMole(idx: number, cell: number): boolean {
+    const p = this.players[idx]
+    const before = p.reach
+    p.mask &= ~(1 << cell)
+    p.wild &= ~(1 << cell)
+    p.filled |= 1 << cell
+    p.reach = lineState(p.mask, p.filled).reach
+    return p.reach < before
   }
 }
 

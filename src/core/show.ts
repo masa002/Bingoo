@@ -70,31 +70,44 @@ export function pickTier(cls: FactClass, rng: Rng): Tier {
   return rng.weighted(TIER_TABLE[cls]) as Tier
 }
 
-// 1 回の抽選の時間割（ms、「次へ」から）。番号は各自のスマホで先に開け、大画面はあとから答え合わせをする:
-//   0 〜 charge         手元のスロットを回して溜める（連打しても、これより早くは STOP できない）
-//   charge 〜 deadline  STOP の受付（押さなかった人は deadline で自動で止まる）
-//   reveal              大画面の答え合わせ（金・虹は、ここから MC の PUSH を待つ）
-//   total               結果を見せ終わる
+// 1 回の抽選の時間割（ms、「次へ」から）。大画面と各自のスマホは同じ拍の列で進み、番号はどちらも reveal で同時に開く
+// （スマホで先に開けると、会場と驚くタイミングがずれる）:
+//   reveal  番号の公開（金・虹は、ここから MC の PUSH を待つ。スマホも一緒に待つ）
+//   total   結果を見せ終わる
 export interface Timing {
-  charge: number
-  deadline: number
   reveal: number
   total: number
   push: boolean
 }
 
-const CHARGE = [3500, 4500, 5500, 6500, 7500]
-const STOP_WINDOW = 3500
+// 普通の番号でも一瞬で流さず、溜めてから開ける
+const REVEAL = [7400, 8400, 9400, 10400, 11400]
 const RESULT = [3200, 3600, 4000, 4400, 5000]
 const RAINBOW_REVEAL = 8500 // 虹（全員確定の流れ）の拍の基準
 
 export function timing(tier: Tier, size: number): Timing {
   // 少人数は抽選回数が多くなるので、尺を少し縮める
   const k = size <= 100 ? 0.85 : 1
-  const charge = CHARGE[tier] * k
-  const deadline = charge + STOP_WINDOW
-  const reveal = deadline + 400
-  return { charge, deadline, reveal, total: reveal + RESULT[tier] * k, push: tier >= 3 }
+  const reveal = REVEAL[tier] * k
+  return { reveal, total: reveal + RESULT[tier] * k, push: tier >= 3 }
+}
+
+// 抽選機の回し方の型（リール・カードめくり・パタパタ）。型ごとに着地の時間が少し違うので、
+// 権威が決めて大画面とスマホの両方に配り、番号が見える瞬間をそろえる
+export type MachineStyle = 'reel' | 'stack' | 'flap'
+const STYLES: readonly MachineStyle[] = ['reel', 'stack', 'flap']
+
+// 熱い回ほどカードめくり型、静かな回ほどパタパタ型が出やすい。同じ型は 3 回続けない
+export function pickStyle(plan: Plan, recent: readonly MachineStyle[], rng: Rng): MachineStyle {
+  const shown = plan.upgrade || plan.tier >= 3 ? 3 : plan.tier
+  const w: Record<MachineStyle, number> = {
+    reel: [4, 4, 3, 3][shown],
+    stack: [3, 3, 4, 5][shown],
+    flap: [3, 3, 2, 2][shown],
+  }
+  const last = recent.slice(-2)
+  if (last.length === 2 && last[0] === last[1]) w[last[0]] = 0
+  return STYLES[rng.weighted(STYLES.map((k) => w[k]))]
 }
 
 export interface Plan {

@@ -75,6 +75,21 @@ export interface SpinSfx {
   reelLand(tier: Tier): void // 手元のリールが番号に止まる（自分の段階に合わせた着地）
 }
 
+// 緊急クエスト「モグラ撃退」の音。大画面は警報・合図・残り秒数・結果の数え上げ、スマホはモグラ・叩く音・自分の結果を鳴らす
+export interface QuestSfx {
+  questAlarm(): void // 緊急クエスト発生の警報（約 2 秒。あおるが、耳に痛くしない）
+  questGo(): void // 叩き始めの合図
+  questTick(secondsLeft: number): void // 残り 3・2・1 秒
+  questEnd(): void // 叩く時間の終わりの合図
+  molePop(): void // 小さなモグラが穴から顔を出す（1 秒に数回鳴る。軽く）
+  whack(combo: number): void // モグラを叩いた（続けて当てるほど少し高く）。1 秒に数回鳴る
+  whackMiss(): void // 空振り（ごく控えめ）
+  bossAppear(): void // ボスモグラが、狙ったマスに現れる（狙われた人だけ）
+  questDefend(): void // 守りきった
+  questFail(): void // 頑張ったけどダメだった（悔しいが、重すぎない）
+  questTally(): void // 大画面で結果（撃退数の合計・撃退王）を数え上げる
+}
+
 export type BgmScene = 'reception' | 'early' | 'reach' | 'bingo' | 'final' | 'cooldown'
 
 export interface Bgm {

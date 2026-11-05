@@ -32,9 +32,9 @@ const HOST_HTML = `
   <div class="dp-msg"></div>
   <h4>イベント（次の「次へ」で起きる）</h4>
   <div class="dp-ev">
-    <button data-ev="wild">🌈 全員確定（虹玉）</button><button data-ev="mole">モグラ</button><button data-ev="moleMe">モグラ（自分に当てる）</button>
+    <button data-ev="wild">🌈 全員確定（虹玉）</button><button data-ev="mole">モグラ撃退クエスト</button><button data-ev="moleMe">モグラ撃退（自分も狙われる）</button>
   </div>
-  <p class="dp-note">指定しなくても、景品の減り方に合わせて自動で出ます（ビンゴが速すぎればモグラ、静かすぎれば虹玉）</p>
+  <p class="dp-note">指定しなくても、景品の減り方に合わせて自動で出ます（ビンゴが速すぎればモグラ撃退、静かすぎれば虹玉）。モグラ撃退では、狙われた人のうち叩いた数が会場の下位に入った人が、リーチのマスを埋められます</p>
   <h4>次の番号 <label class="dp-spoil-label"><input type="checkbox" class="dp-spoil" /> ネタバレ表示</label></h4>
   <div class="dp-grid"></div>
   <p class="dp-legend">数字をクリックで次の番号に指定。ネタバレ: <b class="b">B</b>=新規ビンゴ人数 <b class="r">R</b>=新規リーチ人数 ★=あなたがビンゴ ●=あなたがリーチ ・=あなたにヒット</p>
@@ -73,7 +73,6 @@ const HOST_HTML = `
 export class HostView {
   private readonly root: HTMLDivElement
   private pushReady = false
-  private tier = ''
 
   constructor(
     host: HTMLElement,
@@ -182,23 +181,23 @@ export class HostView {
         break
       }
       case 'eventPlay':
-        this.status(m.kind === 'wild' ? '🌈 全員確定（虹玉）！' : 'モグラ出現！')
+        this.status('🌈 全員確定（虹玉）！')
+        break
+      case 'questStart':
+        this.status(`緊急クエスト「モグラ撃退」— 狙われたリーチ ${m.targets.toLocaleString('ja-JP')} 人。スマホで叩いて守る`)
+        break
+      case 'questProgress':
+        return
+      case 'questResult':
+        this.status(`モグラ撃退の結果 — 守った ${m.defended.toLocaleString('ja-JP')} 人／やられた ${m.lost.toLocaleString('ja-JP')} 人`)
         break
       case 'finalBall':
         this.status(`この 1 球で景品が尽きる！（残り ${m.prizesLeft} 個）`)
         break
       case 'drawScheduled':
         this.$('.dp-msg').textContent = ''
-        this.tier = `${TIER_SHAPE[m.tier]} ${TIER_NAME[m.tier]}`
-        this.status(`抽選中 ${this.tier} — 各自のスマホで回しています`)
+        this.status(`抽選中 ${TIER_SHAPE[m.tier]} ${TIER_NAME[m.tier]}`)
         break
-      case 'drawOpen':
-        this.status(`抽選中 ${this.tier} — STOP 受付中`)
-        return
-      case 'stopCount':
-        // 0.25 秒ごとに届くので、盤の描き直しはしない
-        this.status(`抽選中 ${this.tier} — STOP ${m.count.toLocaleString('ja-JP')} / ${m.total.toLocaleString('ja-JP')} 人`)
-        return
       case 'awaitPush':
         this.pushReady = true
         this.status('PUSH を押してください（3 秒で自動）')
@@ -208,7 +207,8 @@ export class HostView {
         this.status(`結果表示中 ${m.label}`)
         break
       case 'prizeTime':
-        this.status(m.entries.some((e) => e.isMe) ? '景品の開封中（あなたのスマホで開けてください）' : '景品の開封中')
+        if (m.lastOne) this.status('ラストワン争奪 — 同時に上がった人がスマホでガラポン')
+        else this.status(m.entries.some((e) => e.isMe) ? '景品の開封中（あなたのスマホで開けてください）' : '景品の開封中')
         break
       case 'idle':
         this.status(`待機中 — 抽選 ${m.totals.drawCount} 回目まで終了`)

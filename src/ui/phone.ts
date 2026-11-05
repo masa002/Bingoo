@@ -2,18 +2,21 @@ import { FREE_MASK, bingoCells, deriveCard, labelOf, lineState, popcount, waitin
 import { CH_FREE, CH_LINES, challengeBingo } from '../core/game'
 import type { Rarity } from '../core/prizes'
 import type { Clock } from '../demo/clock'
-import { playBingo, playMoleResult, playReach, playWildResult, type AoriOutcome } from '../fx/phone/aori'
+import { playBingo, playReach, playWildResult, type AoriOutcome } from '../fx/phone/aori'
 import { CardView } from '../fx/phone/card'
 import { askEntry, playGarapon } from '../fx/phone/garapon'
+import { playLastOneGarapon } from '../fx/phone/lastone'
 import { askChoice, playChallengeResult, playChallengeStart, playPackOpen } from '../fx/phone/prize'
+import { MoleQuest } from '../fx/phone/quest'
 import { HandSpin } from '../fx/phone/spin'
+import type { BallColor } from '../fx/theme'
 import type { LocalHub } from '../net/hub'
 import type { Msg, MsgOf, PhoneCommand, PrizeEntry } from '../net/protocol'
 import { esc, fit, fmt, h, q, replay } from './dom'
 
-// 参加者のスマホ（390×844 で組んで縮小表示する）。カード・手元のスロット・景品・ガラポンの演出は fx/ の部品。
+// 参加者のスマホ（390×844 で組んで縮小表示する）。カード・手元の抽選演出・緊急クエスト・景品・ガラポンの演出は fx/ の部品。
 // 自分のカードはシードとカード番号から手元で作り、届いた番号で自分で塗る（本番と同じ）。
-// 抽選のたびに手元のスロットを回し、STOP で自分の番号を開ける。大画面はそのあとで答え合わせをする
+// 抽選は大画面と同じ拍で溜め、番号は大画面と同時に開く。熱さだけを自分のカードに合わせる
 
 const PHONE_HTML = `
 <div class="ph-status"><span class="ph-time">9:41</span><span>●●● 100%</span></div>
@@ -49,6 +52,7 @@ export class PhoneView {
   private readonly root: HTMLDivElement
   private readonly card: CardView
   private readonly spin: HandSpin
+  private readonly quest: MoleQuest
   private cells: number[] = []
   private mask = FREE_MASK
   private filled = 0
@@ -62,11 +66,7 @@ export class PhoneView {
   private stats = { hits: 0, maxReach: 0, nearMiss: 0, won: undefined as string | undefined }
   private challenge: MyChallenge | null = null
   private generation = 0
-  // いまの抽選。番号（drawOpen）と大画面の答え合わせ（numberRevealed）を、手元の流れに渡す
-  private drawNo = 0
-  private spinning = false
-  private gotNumber: ((n: number) => void) | null = null
-  private gotReveal: ((m: MsgOf<'numberRevealed'>) => void) | null = null
+  private drawNo = 0 // いまの抽選
   private celebration: Promise<void> = Promise.resolve() // 当たりの演出が終わるまで（景品パックはその後に出す）
 
   constructor(
@@ -82,7 +82,9 @@ export class PhoneView {
     host.append(frame)
     fit(frame, 410, 864)
     this.card = new CardView(this.$('.ph-cardhost'), { size: 5, speed: clock.speed })
-    this.spin = new HandSpin(this.root, { speed: clock.speed })
+    // デモでは大画面と同じ PC から鳴るので、手元の演出は自分だけの音にする（本番のスマホは 'all'）
+    this.spin = new HandSpin(this.root, { speed: clock.speed, sound: 'personal' })
+    this.quest = new MoleQuest(this.root, { speed: clock.speed, sound: 'personal' })
     hub.subscribe((m) => this.on(m))
   }
 
@@ -107,21 +109,25 @@ export class PhoneView {
       case 'drawScheduled':
         if (!this.joined) this.join() // 受付を締め切ったら自動で参加する
         this.syncSpeed()
-        void this.playDraw(m)
-        return
-      case 'drawOpen':
-        if (m.drawNo === this.drawNo) {
-          this.spin.open(m.n)
-          this.gotNumber?.(m.n)
-        }
+        return this.onScheduled(m)
+      case 'awaitPush':
+        this.spin.awaitPush()
         return
       case 'numberRevealed':
-        return this.onRevealed(m)
+        void this.onRevealed(m)
+        return
+      case 'questStart':
+        if (!this.joined) this.join()
+        void this.onQuestStart(m)
+        return
+      case 'questResult':
+        void this.onQuestResult(m)
+        return
       case 'bulkDrawn':
         return this.onBulk(m.numbers)
       case 'prizeTime': {
         const mine = m.entries.find((e) => e.isMe)
-        if (mine) void this.onMyPrize(mine)
+        if (mine) void this.onMyPrize(mine, m.lastOne ? { ...m.lastOne, entries: m.entries } : null)
         return
       }
       case 'challengeDeal':
@@ -147,6 +153,7 @@ export class PhoneView {
   private syncSpeed(): void {
     this.card.setSpeed(this.speed)
     this.spin.setSpeed(this.speed)
+    this.quest.setSpeed(this.speed)
     this.challenge?.view.setSpeed(this.speed)
   }
 
@@ -155,13 +162,11 @@ export class PhoneView {
   private onSnapshot(m: MsgOf<'snapshot'>): void {
     this.generation++
     this.spin.cancel()
-    this.spinning = false
+    this.quest.cancel()
     this.drawNo = 0
-    this.gotNumber = null
-    this.gotReveal = null
     this.celebration = Promise.resolve()
     // 前のゲームで残った景品・ガラポンの画面を片付ける
-    this.root.querySelectorAll('.fxg, .fxp').forEach((n) => n.remove())
+    this.root.querySelectorAll('.fxg, .fxp, .fxlp').forEach((n) => n.remove())
     this.clearChallenge()
     this.name = m.me.name
     this.cardNo = m.me.cardNo
@@ -203,7 +208,7 @@ export class PhoneView {
   private renderCard(): void {
     const bits = (x: number) => [...Array(25).keys()].filter((i) => x & (1 << i))
     this.card.setMarks(this.mask, {
-      waiting: this.won ? [] : waitingCells(this.mask),
+      waiting: this.won ? [] : waitingCells(this.mask, this.filled),
       line: bingoCells(this.mask),
       filled: bits(this.filled),
       wild: bits(this.wild & this.mask),
@@ -214,7 +219,7 @@ export class PhoneView {
   // カードの上の帯: リーチの「あと〇〇」、上がったら順位、上位チャレンジ中はそのリーチ
   private renderChip(): void {
     const el = this.$('.ph-wait')
-    const lines = lineState(this.mask).reach
+    const lines = lineState(this.mask, this.filled).reach
     const ch = this.challenge
     if (ch) {
       const rest = challengeWaiting(ch.mask).map((c) => labelOf(ch.cells[c]))
@@ -234,7 +239,7 @@ export class PhoneView {
   }
 
   private waitingLabels(): string[] {
-    return waitingCells(this.mask).map((c) => labelOf(this.cells[c]))
+    return waitingCells(this.mask, this.filled).map((c) => labelOf(this.cells[c]))
   }
 
   private renderHistory(): void {
@@ -245,77 +250,82 @@ export class PhoneView {
       .join('')
   }
 
-  // ---- イベント（全員確定・モグラ）の自分の結果 -----------------------------
+  // ---- 全員確定（虹玉）の自分の結果 ------------------------------------------
 
   private onEvent(m: MsgOf<'eventPlay'>): void {
     const gen = this.generation
     window.setTimeout(async () => {
-      if (gen !== this.generation) return
       const { cell, label, reachBefore, reachAfter } = m.me
-      if (m.kind === 'wild') {
-        if (cell === null) return
-        await this.card.wildOpen(cell)
-        this.mask |= 1 << cell
-        this.wild |= 1 << cell
-        this.filled &= ~(1 << cell)
-        this.stats.maxReach = Math.max(this.stats.maxReach, reachAfter)
-        this.renderCard()
-        await playWildResult(this.root, { label, newReach: reachAfter > reachBefore, speed: this.speed })
-      } else if (!this.won) {
-        if (cell !== null) {
-          await this.card.moleFill(cell)
-          this.mask &= ~(1 << cell)
-          this.wild &= ~(1 << cell)
-          this.filled |= 1 << cell
-          this.renderCard()
-        }
-        await playMoleResult(this.root, { hit: cell !== null, lostReach: reachAfter < reachBefore, label, speed: this.speed })
-      }
+      if (gen !== this.generation || cell === null) return
+      await this.card.wildOpen(cell)
+      this.mask |= 1 << cell
+      this.wild |= 1 << cell
+      this.filled &= ~(1 << cell)
+      this.stats.maxReach = Math.max(this.stats.maxReach, reachAfter)
+      this.renderCard()
+      await playWildResult(this.root, { label, newReach: reachAfter > reachBefore, speed: this.speed })
     }, this.clock.scale(m.resultAt))
   }
 
-  // ---- 抽選（手元のスロット → STOP → 自分のカードに反映 → 大画面の答え合わせ） ----
+  // ---- 緊急クエスト「モグラ撃退」 ---------------------------------------------
+  // 狙われた人は自分のリーチのマスを守るために叩く。やられるのは、狙われた人の中で叩いた数が少ない人から
 
-  private async playDraw(m: MsgOf<'drawScheduled'>): Promise<void> {
+  private async onQuestStart(m: MsgOf<'questStart'>): Promise<void> {
     const gen = this.generation
-    const drawNo = m.drawNo
-    const live = () => gen === this.generation && drawNo === this.drawNo
-    this.drawNo = drawNo
-    const number = new Promise<number>((r) => (this.gotNumber = r))
-    const reveal = new Promise<MsgOf<'numberRevealed'>>((r) => (this.gotReveal = r))
+    this.syncSpeed()
+    // モグラは、いま見えているカード（上位チャレンジ中は 3×3）のマスから顔を出す
+    const card = this.challenge?.view ?? this.card
+    const score = await this.quest.play(card, { introMs: m.introMs, playMs: m.playMs, target: m.me.target, cell: m.me.cell, label: m.me.label })
+    if (gen === this.generation) this.send({ type: 'questScore', score })
+  }
+
+  private async onQuestResult(m: MsgOf<'questResult'>): Promise<void> {
+    const gen = this.generation
+    const me = m.me
+    await this.quest.result({ score: me.score, lost: me.lost, need: me.need, total: m.total, rank: me.rank, players: m.totals.size })
+    if (gen !== this.generation || !me.lost || me.cell === null) return
+    this.mask &= ~(1 << me.cell)
+    this.wild &= ~(1 << me.cell)
+    this.filled |= 1 << me.cell
+    this.renderCard()
+  }
+
+  // ---- 抽選（大画面と同じ拍で溜め、番号は大画面と同時に開く） ------------------
+
+  private onScheduled(m: MsgOf<'drawScheduled'>): void {
+    const drawn = new Set(this.history)
+    this.drawNo = m.drawNo
+    this.spin.start({
+      tier: m.personal.tier,
+      waiting: m.personal.waiting,
+      pool: Array.from({ length: 75 }, (_, i) => i + 1).filter((n) => !drawn.has(n)),
+      beats: m.beats,
+      revealAt: m.timing.reveal,
+      venueTier: m.tier,
+      venueVariant: m.style, // 大画面と同じ型の着地に合わせる
+    })
+  }
+
+  // 大画面の公開と同時に手元でも番号に着地させ、自分のカードに押す
+  private async onRevealed(m: MsgOf<'numberRevealed'>): Promise<void> {
+    if (m.drawNo !== this.drawNo) return
+    const gen = this.generation
     let done = () => {}
     this.celebration = new Promise<void>((r) => (done = r))
     try {
-      const drawn = new Set(this.history)
-      this.spinning = true
-      this.spin.start({
-        tier: m.personal.tier,
-        waiting: m.personal.waiting,
-        pool: Array.from({ length: 75 }, (_, i) => i + 1).filter((n) => !drawn.has(n)),
-        minChargeMs: m.timing.charge,
-        deadlineMs: m.timing.deadline,
-      })
-      const stop = await this.spin.stopped()
-      this.spinning = false
-      if (!live()) return
-      if (stop.by === 'tap') this.send({ type: 'stop', drawNo })
-      const n = await number
-      if (!live()) return
-      const j = this.judge(n)
-      // 最新の番号と履歴は、スロットの本体の下に先に出しておく（本体が引っ込むと見える）
-      this.$('.ph-latest b').textContent = labelOf(n)
+      const j = this.judge(m.n)
+      if (j.justWon) this.rank = m.totals.winners - m.newBingo + 1
+      // 最新の番号と履歴は、手元の演出の下に先に出しておく（演出が引っ込むと見える）
+      this.$('.ph-latest b').textContent = m.label
       replay(this.$('.ph-latest'), 'pop')
-      this.history.push(n)
+      this.history.push(m.n)
       this.renderHistory()
-      await this.spin.resolve({ outcome: j.outcome, label: labelOf(n) })
-      if (!live()) return
-      await this.applyNumber(j)
-      if (!j.justWon) return
-      // 順位は、大画面の答え合わせ（同じ回に何人上がったか）が届いてから出す
-      const r = await reveal
+      await this.spin.reveal(m.n)
       if (gen !== this.generation) return
-      this.rank = r.totals.winners - r.newBingo + 1
-      this.renderChip()
+      await this.spin.resolve({ outcome: j.outcome, label: m.label })
+      if (gen !== this.generation) return
+      await this.applyNumber(j)
+      if (gen !== this.generation || !j.justWon) return
       await playBingo(this.root, { rank: this.rank, speed: this.speed })
     } finally {
       done()
@@ -323,9 +333,9 @@ export class PhoneView {
   }
 
   private judge(n: number): Judge {
-    const before = lineState(this.mask)
+    const before = lineState(this.mask, this.filled)
     const cell = this.won ? -1 : this.cells.indexOf(n)
-    const after = cell >= 0 ? lineState(this.mask | (1 << cell)) : before
+    const after = cell >= 0 ? lineState(this.mask | (1 << cell), this.filled) : before
     const justWon = cell >= 0 && after.bingo > 0
     const ch = this.challenge
     const chCell = ch ? ch.cells.indexOf(n) : -1
@@ -367,14 +377,6 @@ export class PhoneView {
     }
   }
 
-  // 大画面の答え合わせ。STOP しないまま締め切られていたら、ここで止める
-  private onRevealed(m: MsgOf<'numberRevealed'>): void {
-    if (m.drawNo !== this.drawNo) return
-    this.gotNumber?.(m.n)
-    if (this.spinning) this.spin.forceStop()
-    this.gotReveal?.(m)
-  }
-
   private onBulk(numbers: number[]): void {
     let mine = 0
     for (const n of numbers) {
@@ -390,7 +392,7 @@ export class PhoneView {
       if (ch && c >= 0) ch.mask |= 1 << c
     }
     this.stats.hits += mine
-    this.stats.maxReach = Math.max(this.stats.maxReach, lineState(this.mask).reach)
+    this.stats.maxReach = Math.max(this.stats.maxReach, lineState(this.mask, this.filled).reach)
     this.renderCard()
     this.renderChallenge()
     this.renderHistory()
@@ -400,10 +402,26 @@ export class PhoneView {
 
   // ---- 景品と上位チャレンジ -------------------------------------------------
 
-  private async onMyPrize(e: PrizeEntry): Promise<void> {
+  private async onMyPrize(e: PrizeEntry, lastOne: { dropAt: number; durationMs: number; entries: PrizeEntry[] } | null): Promise<void> {
     const gen = this.generation
-    await this.celebration
-    if (gen !== this.generation) return
+    if (lastOne && e.kind === 'normal') {
+      // ラストワン争奪: 大画面の発表と同時に玉が出るので、当たりの演出の終わりを待たずに始める
+      const pool = lastOne.entries.filter((x) => x.kind === 'normal')
+      await playLastOneGarapon(this.root, {
+        speed: this.speed,
+        dropAt: lastOne.dropAt,
+        durationMs: lastOne.durationMs,
+        color: ballColor(e.rarity),
+        prize: e.prize ?? undefined,
+        contestants: pool.length,
+        prizes: pool.filter((x) => x.rarity).length,
+      })
+      // 外れ（運がなかった・ダブルチャンスの玉 3 個）は、ガラポンの画面で伝え終わっている
+      if (gen !== this.generation || !e.rarity) return
+    } else {
+      await this.celebration
+      if (gen !== this.generation) return
+    }
     if (e.kind === 'challenge') {
       this.clearChallenge()
       await playChallengeResult(this.root, { speed: this.speed, success: true, rarity: e.rarity ?? undefined, prize: e.prize ?? undefined })
@@ -520,6 +538,13 @@ export class PhoneView {
     el.textContent = text
     replay(el, 'on')
   }
+}
+
+// ラストワン争奪のガラポンの玉の色（外れは白）
+function ballColor(rarity: Rarity | null): BallColor {
+  if (rarity === 'UR') return 'rainbow'
+  if (rarity === 'SR') return 'gold'
+  return rarity ? 'red' : 'white'
 }
 
 function challengeWaiting(mask: number): number[] {

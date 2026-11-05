@@ -1,0 +1,770 @@
+/* ラストワン争奪のガラポン（大画面）。クラスは fxls- で始める。抽選器と玉の絵は garapon.css（fxg-）のものを使う。
+   1 回きりの動きの長さは --k（= 1 / 速度）を掛ける。
+   繰り返す動き（「？」の玉のゆれ・当たりの札の呼吸・光の筋の回転）は、速度を上げても速くしない（光過敏への配慮）。
+   入場のアニメーションは fill-mode を backwards にして、終わった後の見た目はクラスの値で持つ */
+
+.fxls {
+  --k: 1;
+  position: absolute;
+  inset: 0;
+  z-index: 44;
+  overflow: hidden;
+  pointer-events: none;
+  color: #fff;
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
+}
+
+.fxls *,
+.fxls *::before,
+.fxls *::after {
+  box-sizing: border-box;
+}
+
+/* 暗転（夜の紺）。不透明度は TS で変える */
+.fxls-dim {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background:
+    radial-gradient(70% 60% at 50% 0%, rgba(58, 40, 10, 0.5) 0%, rgba(22, 32, 74, 0) 70%),
+    radial-gradient(90% 70% at 50% 0%, rgba(22, 32, 74, 0.95) 0%, rgba(22, 32, 74, 0) 70%),
+    linear-gradient(180deg, #0c1232 0%, #080b1d 60%, #05070f 100%);
+}
+
+/* 揺らす層 */
+.fxls-body {
+  position: absolute;
+  inset: 0;
+}
+
+/* 全面の光。1 回の演出につき 1 回まで、不透明度 0.14 まで（立ち上がりは TS で 150ms 以上にする） */
+.fxls-glow {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+}
+
+.fxls-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 60;
+  pointer-events: none;
+}
+
+@keyframes fxls-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fxls-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fxls-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---- 見出し ---- */
+
+.fxls-head {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 34px;
+  text-align: center;
+}
+
+.fxls-kicker {
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: #c9d2ff;
+  opacity: 0;
+}
+
+.fxls-kicker.on {
+  opacity: 1;
+  animation: fxls-rise calc(400ms * var(--k)) ease-out backwards;
+}
+
+/* 文字のふち（後ろに同じ文字を太く描く） */
+.fxls-ol {
+  position: relative;
+  display: inline-block;
+}
+
+.fxls-ol::before {
+  content: attr(data-text);
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: #2a1a00;
+  -webkit-text-stroke: 20px #2a1a00;
+  filter: drop-shadow(0 8px 0 rgba(0, 0, 0, 0.35));
+}
+
+.fxls-ol > b {
+  position: relative;
+  font-weight: 900;
+}
+
+.fxls-title {
+  margin-top: 2px;
+  font-size: 100px;
+  line-height: 1.12;
+  color: #ffe08a;
+  white-space: nowrap;
+  opacity: 0;
+}
+
+.fxls-title.on {
+  opacity: 1;
+  animation: fxls-pop calc(520ms * var(--k)) cubic-bezier(0.2, 1.4, 0.4, 1) backwards;
+}
+
+/* 「残り○個を○人で」と、発表後の「○○ さんが獲得！」を同じ場所で入れ替える */
+.fxls-line {
+  position: relative;
+  height: 70px;
+  margin-top: 6px;
+}
+
+.fxls-sub,
+.fxls-result {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  white-space: nowrap;
+}
+
+.fxls-sub {
+  font-size: 42px;
+  font-weight: 900;
+  opacity: 0;
+  transition: opacity calc(300ms * var(--k)) ease;
+}
+
+.fxls-sub b {
+  margin: 0 0.2em;
+  font-size: 1.25em;
+  color: #ffe08a;
+}
+
+.fxls-sub.on {
+  opacity: 1;
+  animation: fxls-rise calc(400ms * var(--k)) ease-out backwards;
+}
+
+.fxls-sub.on.off {
+  opacity: 0;
+}
+
+.fxls-result {
+  overflow: hidden;
+  padding: 0 60px;
+  font-size: 54px;
+  font-weight: 900;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  color: #ffe08a;
+  text-shadow:
+    0 5px 0 #2a1a00,
+    0 0 24px rgba(245, 197, 66, 0.7);
+  opacity: 0;
+}
+
+.fxls-result.on {
+  opacity: 1;
+  animation: fxls-pop calc(450ms * var(--k)) cubic-bezier(0.2, 1.4, 0.4, 1) backwards;
+}
+
+/* ---- 大きな抽選器（左）。後ろに、あたたかい灯りと、ゆっくり回る光の筋 ---- */
+
+.fxls-mwrap {
+  position: absolute;
+  left: 110px;
+  top: 290px;
+  width: 420px;
+  height: 420px;
+  opacity: 0;
+  transform: translateY(40px) scale(0.92);
+  transition:
+    opacity calc(700ms * var(--k)) ease,
+    transform calc(700ms * var(--k)) cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.fxls-mwrap.on {
+  opacity: 1;
+  transform: none;
+}
+
+.fxls[data-phase='reveal'] .fxls-mwrap.on {
+  opacity: 0.5;
+}
+
+.fxls-warm {
+  position: absolute;
+  left: -30px;
+  top: 121px;
+  width: 700px;
+  height: 700px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 170, 80, 0.3), rgba(255, 140, 60, 0.1) 55%, rgba(255, 140, 60, 0) 100%);
+  opacity: 0;
+  transition: opacity calc(800ms * var(--k)) ease;
+}
+
+.fxls-warm.on {
+  opacity: 1;
+}
+
+.fxls[data-phase='reveal'] .fxls-warm.on {
+  opacity: 0.4;
+}
+
+/* 光の筋（画面の 1/3 より十分小さく、1 周 40 秒。速度によらず一定） */
+.fxls-rays {
+  position: absolute;
+  left: -60px;
+  top: 91px;
+  width: 760px;
+  height: 760px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, rgba(255, 224, 138, 0.16) 0deg 6deg, rgba(255, 224, 138, 0) 6deg 18deg);
+  -webkit-mask: radial-gradient(circle, transparent 0 16%, #000 26%, rgba(0, 0, 0, 0.35) 40%, transparent 50%);
+  mask: radial-gradient(circle, transparent 0 16%, #000 26%, rgba(0, 0, 0, 0.35) 40%, transparent 50%);
+  opacity: 0;
+  transition: opacity calc(800ms * var(--k)) ease;
+  animation: fxls-spin 40s linear infinite;
+}
+
+.fxls-rays.on {
+  opacity: 1;
+}
+
+/* ---- 抽選器の下: 「全員スマホでガラポン！」と 3・2・1、発表後は人数 ---- */
+
+.fxls-status {
+  position: absolute;
+  left: 30px;
+  width: 580px;
+  top: 726px;
+  text-align: center;
+}
+
+.fxls-banner,
+.fxls-hint {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity calc(500ms * var(--k)) ease-out,
+    transform calc(500ms * var(--k)) ease-out;
+}
+
+.fxls-banner.on,
+.fxls-hint.on {
+  opacity: 1;
+  transform: none;
+}
+
+.fxls[data-phase='reveal'] .fxls-banner.on,
+.fxls[data-phase='reveal'] .fxls-hint.on {
+  opacity: 0;
+  transition-duration: calc(250ms * var(--k));
+}
+
+.fxls-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  font-size: 44px;
+  font-weight: 900;
+  white-space: nowrap;
+  color: #ffe2b8;
+  text-shadow: 0 0 20px rgba(255, 170, 80, 0.4);
+}
+
+.fxls-phone {
+  flex: none;
+  width: 36px;
+  height: 58px;
+  animation: fxls-tilt 1.4s ease-in-out infinite alternate;
+}
+
+@keyframes fxls-tilt {
+  from {
+    transform: rotate(-8deg);
+  }
+  to {
+    transform: rotate(8deg);
+  }
+}
+
+.fxls-hint {
+  margin-top: 4px;
+  font-size: 28px;
+  font-weight: 700;
+  color: #c9cfe6;
+}
+
+.fxls-hint b {
+  color: #fff4e0;
+}
+
+.fxls-count {
+  height: 150px;
+  display: grid;
+  place-items: center;
+}
+
+.fxls-count b {
+  font-size: 136px;
+  font-weight: 900;
+  line-height: 1;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  text-shadow:
+    0 6px 0 rgba(0, 0, 0, 0.35),
+    0 0 40px rgba(255, 200, 120, 0.55);
+  opacity: 0;
+}
+
+/* 動きを減らす設定ではアニメーションが止まるので、出しっぱなしにする */
+.fxls-count b.tick {
+  opacity: 1;
+  animation: fxls-tick calc(900ms * var(--k)) ease-out both;
+}
+
+@keyframes fxls-tick {
+  0% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+  18% {
+    opacity: 1;
+    transform: none;
+  }
+  72% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+
+.fxls-tally {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 18px;
+  opacity: 0;
+}
+
+.fxls-tally.on {
+  opacity: 1;
+  animation: fxls-rise calc(500ms * var(--k)) ease-out backwards;
+}
+
+.fxls-tally b {
+  display: block;
+  font-size: 58px;
+  font-weight: 900;
+  color: #ffe08a;
+  text-shadow:
+    0 5px 0 #2a1a00,
+    0 0 24px rgba(245, 197, 66, 0.55);
+}
+
+.fxls-tally small {
+  display: block;
+  margin-top: 6px;
+  font-size: 32px;
+  font-weight: 800;
+  color: #c9cfe6;
+}
+
+/* ---- 名前の札（右）。位置と大きさは TS で決める（--fs 名前、--sd 玉、--pad 左の余白） ---- */
+
+.fxls-grid {
+  --fs: 40px;
+  --sd: 76px;
+  --pad: 20px;
+  position: absolute;
+  inset: 0;
+}
+
+.fxls-card {
+  position: absolute;
+  opacity: 0;
+  transition: transform calc(350ms * var(--k)) cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+/* 抽選器の胴から配られる */
+.fxls-card.on {
+  opacity: 1;
+  animation: fxls-deal calc(520ms * var(--k)) cubic-bezier(0.2, 1, 0.3, 1) backwards;
+  animation-delay: calc(var(--dk, 0) * 1000ms * var(--k));
+}
+
+@keyframes fxls-deal {
+  from {
+    opacity: 0;
+    transform: translate(var(--fx), var(--fy)) scale(0.3);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.fxls-in {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 22px 0 var(--pad);
+  border: 3px solid rgba(245, 197, 66, 0.35);
+  border-radius: 22px;
+  background: linear-gradient(180deg, #1c2554, #0d1331);
+  box-shadow: 0 8px 0 rgba(0, 0, 0, 0.35);
+  transition:
+    opacity calc(450ms * var(--k)) ease,
+    filter calc(450ms * var(--k)) ease;
+}
+
+.fxls-slot {
+  position: relative;
+  flex: none;
+  width: var(--sd);
+  height: var(--sd);
+}
+
+.fxls-q,
+.fxls-res {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  transition:
+    opacity calc(240ms * var(--k)) ease,
+    transform calc(420ms * var(--k)) cubic-bezier(0.2, 1.5, 0.4, 1);
+}
+
+/* 「？」の玉。それぞれのスマホで回っている様子を、ゆっくりしたゆれで見せる */
+.fxls-q {
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #4a5ba8 0%, #26306a 58%, #121839 100%);
+  box-shadow:
+    inset 0 0 0 2px rgba(245, 197, 66, 0.45),
+    0 4px 10px rgba(0, 0, 0, 0.35);
+  animation: fxls-wobble 1.5s ease-in-out infinite alternate;
+  animation-delay: var(--wob, 0s);
+}
+
+@keyframes fxls-wobble {
+  from {
+    transform: rotate(-12deg);
+  }
+  to {
+    transform: rotate(12deg);
+  }
+}
+
+.fxls-q i {
+  font-size: calc(var(--sd) * 0.5);
+  font-style: normal;
+  font-weight: 900;
+  line-height: 1;
+  color: #ffe08a;
+}
+
+.fxls-res {
+  opacity: 0;
+  transform: scale(0.3);
+}
+
+.fxls-res .fxg-ball {
+  --d: var(--sd);
+}
+
+.fxls-card.done .fxls-q {
+  opacity: 0;
+  transform: scale(0.4);
+  animation: none;
+}
+
+.fxls-card.done .fxls-res {
+  opacity: 1;
+  transform: none;
+}
+
+/* 当たりの印: こげ茶の丸に金の王冠（金の札の上でも、金の玉とも見分けられるように） */
+.fxls-crown {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #6b4a12 0%, #3a2400 60%, #1f1300 100%);
+  box-shadow:
+    0 0 0 3px #fff4cc,
+    0 0 22px rgba(255, 224, 138, 0.8);
+}
+
+.fxls-crown svg {
+  width: 68%;
+  height: 68%;
+}
+
+.fxls-txt {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.fxls-txt b {
+  overflow: hidden;
+  font-size: var(--fs);
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.fxls-txt small {
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: calc(var(--fs) * 0.55);
+  font-weight: 800;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #8a93b8;
+}
+
+.fxls-card.me .fxls-in {
+  border-color: #5ad2ff;
+}
+
+.fxls-card.me .fxls-txt small {
+  color: #9be3ff;
+}
+
+.fxls-me {
+  position: absolute;
+  top: -18px;
+  right: -10px;
+  z-index: 2;
+  padding: 2px 14px;
+  border-radius: 999px;
+  background: #5ad2ff;
+  color: #04121f;
+  font-size: 22px;
+  font-style: normal;
+  font-weight: 900;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.3);
+}
+
+.fxls-more .fxls-in {
+  border-style: dashed;
+  background: linear-gradient(180deg, #161d44, #0b1029);
+}
+
+.fxls-more .fxls-q {
+  background: radial-gradient(circle at 34% 30%, #3a4680 0%, #1f2654 60%, #10153a 100%);
+}
+
+/* 当たり: 金に光る（呼吸の周期は速度によらず 1.6 秒。明滅ではなく、ゆっくり明るさが揺れるだけ） */
+.fxls-card.win {
+  z-index: 2;
+  transform: scale(1.06);
+}
+
+.fxls-card.win .fxls-in,
+.fxls-card.some .fxls-in {
+  border-color: #fff;
+  background: linear-gradient(180deg, #fff4cc, #f5c542);
+  box-shadow:
+    0 0 38px rgba(255, 224, 138, 0.85),
+    0 8px 0 rgba(0, 0, 0, 0.35);
+}
+
+.fxls-card.win .fxls-in {
+  animation: fxls-breathe 1.6s ease-in-out infinite;
+}
+
+@keyframes fxls-breathe {
+  0%,
+  100% {
+    box-shadow:
+      0 0 26px rgba(245, 197, 66, 0.7),
+      0 8px 0 rgba(0, 0, 0, 0.35);
+  }
+  50% {
+    box-shadow:
+      0 0 56px rgba(255, 248, 220, 0.9),
+      0 8px 0 rgba(0, 0, 0, 0.35);
+  }
+}
+
+.fxls-card.win .fxls-txt b,
+.fxls-card.some .fxls-txt b {
+  color: #2a1a00;
+}
+
+.fxls-card.win .fxls-txt small,
+.fxls-card.some .fxls-txt small {
+  color: #6b4e00;
+}
+
+/* 外れ: 白い玉を見せてから暗くする（「あなた」の印は暗くしない） */
+.fxls-card.out .fxls-in {
+  opacity: 0.32;
+  filter: grayscale(0.7);
+}
+
+/* ---- 下（札の欄の下）: 当たりの決まり → 発表後はダブルチャンス ---- */
+
+.fxls-foot {
+  position: absolute;
+  left: 620px;
+  width: 1240px;
+  top: 962px;
+  height: 76px;
+}
+
+.fxls-rule,
+.fxls-dc {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 30px;
+  font-weight: 800;
+  white-space: nowrap;
+  color: #c9d6ff;
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity calc(500ms * var(--k)) ease-out,
+    transform calc(500ms * var(--k)) ease-out;
+}
+
+.fxls-rule.on,
+.fxls-dc.on {
+  opacity: 1;
+  transform: none;
+}
+
+/* 入れ替えは、前の行がすっと消えてから次の行を出す（重ならないように） */
+.fxls-dc.on {
+  transition-delay: calc(220ms * var(--k));
+}
+
+.fxls-rule.on.off {
+  opacity: 0;
+  transform: translateY(-12px);
+  transition-duration: calc(220ms * var(--k));
+}
+
+.fxls-rule .fxg-ball {
+  --d: 34px;
+}
+
+.fxls-rule-t {
+  margin-left: 6px;
+}
+
+.fxls-rule-w {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 28px;
+  color: #8a93b8;
+}
+
+.fxls-dc b {
+  margin: 0 14px 0 10px;
+  color: #fff;
+}
+
+/* ダブルチャンスの玉（白い外れの玉や金の当たりの玉と見分けられるよう、淡い青に「？」） */
+.fxls-token {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  font-size: 24px;
+  font-style: normal;
+  font-weight: 900;
+  color: #26306a;
+  background: radial-gradient(circle at 34% 30%, #ffffff 0%, #dfe7ff 26%, #9fb4ff 68%, #5b6fc4 100%);
+  box-shadow:
+    inset 0 -3px 6px rgba(0, 0, 0, 0.2),
+    0 3px 8px rgba(0, 0, 0, 0.35);
+}
+
+/* ---- 会場のあちこちの「ガラガラ」（1 つずつ 1 回だけ出る） ---- */
+
+.fxls-pops {
+  position: absolute;
+  inset: 0;
+}
+
+.fxls-pop {
+  position: absolute;
+  font-size: 30px;
+  font-weight: 900;
+  white-space: nowrap;
+  color: #ffd9a8;
+  text-shadow: 0 3px 0 rgba(90, 40, 0, 0.55);
+  animation: fxls-word calc(1500ms * var(--k)) ease-out forwards;
+}
+
+@keyframes fxls-word {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0) rotate(var(--r, 0deg)) scale(0.8);
+  }
+  25% {
+    opacity: 0.9;
+    transform: translate(-50%, -10px) rotate(var(--r, 0deg)) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50px) rotate(var(--r, 0deg)) scale(1);
+  }
+}
+
+/* 動きを減らす設定: 動きを止めて、色と文字だけで伝える（暗転だけは、急に暗くならないようになめらかに変える） */
+.fxls-rm *:not(.fxls-dim),
+.fxls-rm *::before,
+.fxls-rm *::after {
+  animation: none !important;
+  transition: none !important;
+}
