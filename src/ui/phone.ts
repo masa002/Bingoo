@@ -117,7 +117,7 @@ export class PhoneView {
         void this.onRevealed(m)
         return
       case 'questStart':
-        if (!this.joined) this.join()
+        if (!this.joined) this.join(false)
         void this.onQuestStart(m)
         return
       case 'questResult':
@@ -197,12 +197,13 @@ export class PhoneView {
     q(this.root, '.ph-join-btn').addEventListener('click', () => this.join())
   }
 
-  private join(): void {
+  // deal を false にすると、カードを配る動きを省く（すぐにカードのマスの位置を測る演出が続くとき）
+  private join(deal = true): void {
     if (this.joined) return
     this.joined = true
     this.send({ type: 'join' })
     this.closeOverlay()
-    void this.card.deal()
+    if (deal) void this.card.deal()
   }
 
   private renderCard(): void {
@@ -268,7 +269,7 @@ export class PhoneView {
   }
 
   // ---- 緊急クエスト「モグラ撃退」 ---------------------------------------------
-  // 狙われた人は自分のリーチのマスを守るために叩く。やられるのは、狙われた人の中で叩いた数が少ない人から
+  // 狙われた人は自分のリーチのマスを守るために叩く。やられるのは、叩いた数が会場の下位に入った人
 
   private async onQuestStart(m: MsgOf<'questStart'>): Promise<void> {
     const gen = this.generation
@@ -282,6 +283,7 @@ export class PhoneView {
   private async onQuestResult(m: MsgOf<'questResult'>): Promise<void> {
     const gen = this.generation
     const me = m.me
+    this.quest.setSpeed(this.speed) // 結果は、いまの速度で見せる（権威の待ち時間とそろえる）
     await this.quest.result({ score: me.score, lost: me.lost, need: me.need, total: m.total, rank: me.rank, players: m.totals.size })
     if (gen !== this.generation || !me.lost || me.cell === null) return
     this.mask &= ~(1 << me.cell)

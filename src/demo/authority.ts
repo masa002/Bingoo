@@ -37,8 +37,9 @@ export type EventKind = 'wild' | 'mole' | 'moleMe'
 
 // ペースの調整役のモグラ（緊急クエスト）は、1 ゲームにこの回数まで
 const MAX_MOLES = 5
-// 緊急クエスト「モグラ撃退」の時間割（ms）。警報 → 叩く時間 → 結果（スマホの結果は、やられた人で約 6.3 秒かかる）
-const QUEST = { intro: 2600, play: 10000, grace: 800, result: 7000 }
+// 緊急クエスト「モグラ撃退」の時間割（ms）。警報 → 叩く時間 → 結果（スマホの結果は、やられた人で約 6.3 秒かかる）。
+// maxScore は 1 人が叩ける数の上限（10 秒で出るモグラは約 31 匹。届いた数はこの範囲に丸める）
+const QUEST = { intro: 2600, play: 10000, grace: 800, result: 7000, maxScore: 40 }
 // ラストワン争奪のガラポン。dropAt で全員のスマホの玉が出て、大画面が当たりを発表する
 const LAST_ONE = { dropAt: 6500, durationMs: 11000 }
 
@@ -141,7 +142,11 @@ export class DemoAuthority {
 
   command(cmd: PhoneCommand): void {
     if (cmd.type === 'join') this.join()
-    else if (cmd.type === 'questScore') this.questScore?.(cmd.score)
+    else if (cmd.type === 'questScore') {
+      // 端末から届く数は信用しない（数でなければ 0、範囲の外は丸める）
+      const score = Number.isFinite(cmd.score) ? Math.min(QUEST.maxScore, Math.max(0, Math.round(cmd.score))) : 0
+      this.questScore?.(score)
+    }
     else if (cmd.type === 'choice') this.choiceNow?.(cmd.kind)
     else if (this.phase === 'dc-entry' && !this.entrants.has(0)) {
       this.entrants.add(0)
@@ -270,14 +275,16 @@ export class DemoAuthority {
     let botTotal = 0
     for (const s of scores.values()) botTotal += s
     const mine = new Promise<number>((r) => (this.questScore = r))
-    await this.clock.wait(QUEST.intro)
-    if (gen !== this.generation) return
-    for (let t = 500; t <= QUEST.play; t += 500) {
-      await this.clock.wait(500)
+    // 叩く時間の終わりは、始まったときの速度で決める（スマホと大画面も同じ決め方。途中で速度を変えても、先に締め切らない）
+    const playEnd = this.clock.wait(QUEST.intro + QUEST.play)
+    const ticks = Array.from({ length: QUEST.play / 500 }, (_, i) => ({ at: QUEST.intro + (i + 1) * 500, k: (i + 1) / (QUEST.play / 500) }))
+    const stopTicks = this.clock.run(ticks, (b) => {
       if (gen !== this.generation) return
-      const k = t / QUEST.play
-      this.hub.publish({ type: 'questProgress', total: Math.round(botTotal * (0.6 * k + 0.4 * k * k)) }) // 後半ほどモグラが多い
-    }
+      this.hub.publish({ type: 'questProgress', total: Math.round(botTotal * (0.6 * b.k + 0.4 * b.k * b.k)) }) // 後半ほどモグラが多い
+    })
+    await playEnd
+    stopTicks()
+    if (gen !== this.generation) return
     const myScore = await Promise.race([mine, this.clock.wait(QUEST.grace).then(() => 0)])
     this.questScore = null
     if (gen !== this.generation) return
@@ -466,6 +473,10 @@ export class DemoAuthority {
       }
       entries.push(this.entry(idx, 'normal', prize, from, final))
     }
+    // 自分が当たっていれば、パックの開封と選択を待つ（スマホから choice が届く）。
+    // チャレンジ成功の人はラストワン争奪の演出中に選び終えることもあるので、配る前から受け取れるようにしておく
+    const mine = entries.find((e) => e.isMe)
+    const choice = mine?.rarity ? new Promise<'receive' | 'challenge'>((r) => (this.choiceNow = r)) : null
     // ラストワン争奪は、同じ回に上がった人がそれぞれスマホでガラポンを回す（結果はくじで、上の並びで決まっている）
     this.hub.publish({ type: 'prizeTime', entries, lastOne: lastOne ? LAST_ONE : null, final })
     if (lastOne) {
@@ -473,14 +484,9 @@ export class DemoAuthority {
       if (gen !== this.generation) return
     }
 
-    // 自分が当たっていれば、パックの開封と選択を待つ（スマホから choice が届く）
-    const mine = entries.find((e) => e.isMe)
     let myChoice: 'receive' | 'challenge' = 'receive'
-    if (mine?.rarity) {
-      myChoice = await Promise.race([
-        new Promise<'receive' | 'challenge'>((r) => (this.choiceNow = r)),
-        this.clock.wait(40000).then(() => 'receive' as const),
-      ])
+    if (choice) {
+      myChoice = await Promise.race([choice, this.clock.wait(40000).then(() => 'receive' as const)])
       this.choiceNow = null
     } else {
       await this.clock.wait(lastOne ? 1500 : 3600)

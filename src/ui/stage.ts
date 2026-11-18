@@ -52,6 +52,7 @@ export class StageView {
   private readonly machine: DrawMachine
   private dc: DoubleChanceStage | null = null
   private quest: MoleQuestStage | null = null
+  private lastOne: AbortController | null = null
   private timers: number[] = []
   private cancelBeats: () => void = () => {}
   private drawn = new Set<number>()
@@ -157,6 +158,8 @@ export class StageView {
     this.firstBingo = false
     this.quest?.destroy()
     this.quest = null
+    this.lastOne?.abort()
+    this.lastOne = null
     this.machine.setSpeed(this.clock.speed)
     this.machine.reset()
     this.drawn = new Set(m.drawn)
@@ -253,6 +256,7 @@ export class StageView {
     this.setTotals(m.totals)
     this.venue.refresh()
     if (!quest) return
+    quest.setSpeed(this.clock.speed) // 結果は、いまの速度で見せる（権威の待ち時間とそろえる）
     await quest.result({ total: m.total, targets: m.targets, defended: m.defended, lost: m.lost, lostReach: m.lostReach, top: m.top })
     if (this.quest !== quest) return
     quest.destroy()
@@ -344,7 +348,10 @@ export class StageView {
     if (m.entries.length > 12) list.append(h('li', 'more', `ほか ${fmt(m.entries.length - 12)} 人`))
     if (m.lastOne) {
       const pool = m.entries.filter((e) => e.kind === 'normal')
+      this.lastOne?.abort()
+      this.lastOne = new AbortController()
       void playLastOneGarapon(this.root, {
+        signal: this.lastOne.signal,
         speed: this.clock.speed,
         prizes: pool.filter((e) => e.rarity).length,
         dropAt: m.lastOne.dropAt,

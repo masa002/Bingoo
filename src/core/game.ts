@@ -276,17 +276,19 @@ export class Game {
     return change
   }
 
-  // モグラ（緊急クエスト）が狙うマス: リーチのラインにかかっている開いたマス（リーチでなければ、開いたマスのどれか。FREE は対象外）
+  // モグラ（緊急クエスト）が狙うマス: リーチのラインにかかっている開いたマス（リーチでなければ、開いたマスのどれか。FREE は対象外）。
+  // 番号がもう出ているマスだけを狙う。虹玉で開いたマスは番号がこれから出るので、埋めても「もう開かない」にならない
   aimMole(p: Player, rng: Rng): number | null {
-    const open = p.mask & ~FREE_MASK
-    if (!open) return null
     const cells: number[] = []
-    for (let cell = 0; cell < 25; cell++) if (open & (1 << cell)) cells.push(cell)
+    for (let cell = 0; cell < 25; cell++) {
+      if (cell !== FREE_CELL && p.mask & (1 << cell) && this.drawnSet.has(p.cells[cell])) cells.push(cell)
+    }
+    if (!cells.length) return null
     const waiting = cells.filter((c) => LINES.some((line) => line & (1 << c) && popcount(p.mask & line) === 4 && !(line & ~p.mask & p.filled)))
     return rng.pick(waiting.length ? waiting : cells)
   }
 
-  // モグラに穴を埋められる（その番号はもう出ているので、二度と開かない）。リーチが減ったら true
+  // モグラに穴を埋められる（その番号はもう出ているので、虹玉で開け直さない限り開かない）。リーチが減ったら true
   fillByMole(idx: number, cell: number): boolean {
     const p = this.players[idx]
     const before = p.reach

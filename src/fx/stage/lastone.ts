@@ -29,10 +29,13 @@ export interface LastOneStageOptions extends StageEventBase {
   dropAt: number // 始まってからこの ms で当たりを発表する
   durationMs: number
   entrants: { name: string; isMe: boolean; win: boolean }[]
+  signal?: AbortSignal // 途中でやめるとき（新しいゲームを始めたときなど）。その場で片付けて解決する
 }
 
 export async function playLastOneGarapon(host: HTMLElement, o: LastOneStageOptions): Promise<void> {
   const show = new LastOneShow(host, o)
+  if (o.signal?.aborted) show.cancel()
+  o.signal?.addEventListener('abort', () => show.cancel(), { once: true })
   safe(() => bgm.duck(true))
   try {
     await show.run()
@@ -353,6 +356,11 @@ class LastOneShow {
       this.canvas.style.opacity = '0'
     }
     await this.until(T)
+  }
+
+  // 待っている until は、すぐに CANCELLED で抜ける
+  cancel(): void {
+    this.tl.cancel()
   }
 
   dispose(): void {
