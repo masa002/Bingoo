@@ -82,8 +82,7 @@ export type Msg =
       style: MachineStyle // 抽選機の回し方の型（大画面とスマホで着地をそろえる）
       timing: Timing
       beats: Beat[]
-      // 本人宛て。sure は先バレ（オリパの「ポヒュン」）: この番号は自分のカードに必ず当たる。始まった瞬間に知らせる
-      personal: { tier: Tier; waiting: string[]; sure: boolean }
+      personal: { tier: Tier; waiting: string[] } // 本人宛て
     }
   | { type: 'awaitPush'; drawNo: number; ms: number }
   | {

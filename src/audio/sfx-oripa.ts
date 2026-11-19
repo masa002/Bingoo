@@ -3,22 +3,17 @@ import type { OripaSfx } from './types'
 
 // オリパ（オンラインのトレカくじ）のお約束の合図の効果音。スマホの手元の演出で鳴らす。音声ファイルは使わず、すべて合成する。
 //
-//   pohyun（先バレ「ポヒュン！」。抽選が始まった瞬間に鳴る、当たり確定の合図）
 //   puchun（「プチュン」。電源を抜いたように音が切れて、画面が暗転する）→ 約 0.5 秒の暗転 → revive（復活）→ aoriSuccess（成功）
 //
 //   - 作り方は sfx-spin.ts・sfx-quest.ts と同じ（役割の違う層を重ね、時刻は engine.now を基準に予約する）。部品はその 2 つから書き写した
 //   - 音程のある音は、すべてハ長調の五音音階（ド レ ミ ソ ラ）に乗せる
-//   - pohyun は、回り出す音 spinStart（カチャッ・こもったモーター・雑音の風切り）に重なっても聞き分けられるよう、
-//     雑音ではなく澄んだ口笛のような音で、spinStart の風切りより速く・高く抜ける。頭の「ポ」は音程のある丸い音にする
 //   - puchun は残響へ送らない（切れたあとが本当の無音になる）。revive はソの和音（ソ ド レ）で止めて、解決しないまま終わる。
 //     続く aoriSuccess のドの和音が、その答えになる
-//   - 音量（重ねたピーク。リミッターの手前をオフラインで描き出して測った値）: pohyun 0.21、puchun 0.23、revive 0.30（弾ける瞬間）。
-//     手元のあおり aoriStart（同じ測り方で、緑 0.10、赤 0.29、金 0.33、虹 0.28）の赤〜金と同じくらいで、金を超えない。
-//     spinStart（0.11）に pohyun を重ねても 0.22
-//   - 9kHz より上は鳴らさない（音程のある成分は 8.4kHz まで。雑音のすそ野は、出口の 8kHz のローパスで削る）
+//   - 音量（重ねたピーク。リミッターの手前をオフラインで描き出して測った値）: puchun 0.23、revive 0.30（弾ける瞬間）。
+//     手元のあおり aoriStart（同じ測り方で、緑 0.10、赤 0.29、金 0.33、虹 0.28）の赤〜金と同じくらいで、金を超えない
+//   - 9kHz より上は鳴らさない（音程のある成分は 9kHz より上に置かない。雑音のすそ野は、出口の 8kHz のローパスで削る）
 //   - BGM には触らない（下げる・戻すは、演出の側の bgm.duck に任せる）
 //   - 長さの目安（演出の時刻合わせ用）:
-//       pohyun 0.5 秒（0 秒で「ポ」、0.085 秒から「ヒュン」、0.25 秒あたりでいちばん大きく、0.45 秒で抜けきる。0.40 秒に「キラッ」）
 //       puchun 0.33 秒（0 秒で「プ」、0.05 秒で「チュ」、0.30 秒で音が切れる。そのあとは無音）
 //       revive 1.0 秒（0 秒で底を蹴り、0.40 秒で弾ける。和音は 0.82 秒から消えていく。aoriSuccess は 1.0 秒後に呼ぶとつながる）
 
@@ -315,45 +310,6 @@ function crash(t: number, o: { gain: number; tau: number; reverb?: number }): vo
   }
 }
 
-// ---- 先バレ「ポヒュン！」 -----------------------------------------------------
-
-// 0.5 秒。「ポ」: 唇がはじける小さな破裂と、下から跳ね上がってソに乗る丸い音。
-// 「ヒュン」（0.085 秒から）: 澄んだ口笛が、ソから 2 オクターブ半上のドへ、加速しながら抜けていく（音程つきの息の音が一緒に上がる）。
-// いちばん大きいのは 0.23 秒（まだ 1.2kHz あたり）で、高くなるほど細くなって消えるので、高い音は伸びない。
-// 最後に「キラッ」（レ → ソ）と小さく光って、当たりの合図だと分かるようにする
-function pohyun(): void {
-  if (!live()) return
-  open()
-  const t = soon()
-  burst(t, { type: 'lowpass', f: 1200, gain: 0.1, tau: 0.007 })
-  pop(t, midi(79) / 1.5, { gain: 0.18, tau: 0.028, drop: 1.5 })
-  pop(t, midi(67) / 1.5, { gain: 0.07, tau: 0.022, drop: 1.5, type: 'triangle' })
-
-  const s = t + 0.085
-  const len = 0.36
-  const end = s + len + 0.02
-  const f0 = midi(79) // ソ（784Hz）
-  const f1 = midi(108) // ド（4186Hz）
-  const rise = (x: number): number => f0 * Math.pow(f1 / f0, Math.pow(x, 1.6))
-  const g = amp(dest({ reverb: 0.25 }))
-  shape(g.gain, s, len, (x) => 0.155 * swell(x, 0.4), 24)
-  const lp = filter('lowpass', 6500, 0.7, g)
-  for (const [type, mul, level] of [
-    ['sine', 1, 1],
-    ['triangle', 1, 0.3],
-    ['sine', 2, 0.18],
-  ] as const) {
-    shape(osc(type, f0 * mul, s, end, amp(lp, level)).frequency, s, len, (x) => rise(x) * mul, 24)
-  }
-  // 息の音（口笛の少し上を、細い帯域でなぞる）
-  const bp = filter('bandpass', f0 * 1.5, 4, amp(lp, 1.4))
-  shape(bp.frequency, s, len, (x) => Math.min(rise(x) * 1.5, 6500), 24)
-  noise(s, end, bp)
-
-  glint(t + 0.4, midi(98), { gain: 0.02, pan: -0.2, reverb: 0.4 })
-  glint(t + 0.44, midi(103), { gain: 0.016, pan: 0.2, reverb: 0.4 })
-}
-
 // ---- 「プチュン」と復活 ---------------------------------------------------------
 
 // 0.33 秒。「プ」: 小さな破裂と、すぐ落ちる丸い音。「チュ」（0.05 秒）: 歯のすき間の「チッ」。
@@ -434,7 +390,6 @@ function revive(): void {
 }
 
 export const oripaSfx: OripaSfx = {
-  pohyun,
   puchun,
   revive,
 }

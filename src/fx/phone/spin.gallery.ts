@@ -10,15 +10,15 @@ import { HandSpin } from './spin'
 // 手元の抽選演出のギャラリー。見本の画面は ui/phone.ts と同じ並び（ステータス・名前・リーチの札・カード・最新の番号・履歴）にして、
 // カードを上に置いたまま流す。拍の列と抽選機の型は権威と同じく、大画面の段階から makePlan → schedule・pickStyle で毎回作る
 // （timing は reveal・push だけを使う）。
-// 呼ぶ順番も組み込みと同じ: start → （金・虹は reveal の時刻に awaitPush → MC の PUSH を待つ）→ reveal → resolve → スタンプなど。
-// オリパの合図の見本もここにある: 先バレ（sure。始まった瞬間に「当たり確定！」）、昇格（手元だけ色が上がる）、
+// 呼ぶ順番も組み込みと同じ: start → （金・虹は reveal の時刻に awaitPush → 司会の合図（公開）を待つ）→ reveal → resolve → スタンプなど。
+// オリパの合図の見本もここにある: 昇格（手元だけ色が上がる）、
 // 復活（青・緑のままリーチ・ビンゴになった回。「はずれ…？」→ 暗転 → 当たり）。
-// ステータスの行の真ん中に、大画面の拍（STEP・カットイン・PUSH 待ちなど）を小さく出す（見本だけ。そろい方を確かめるため）
+// ステータスの行の真ん中に、大画面の拍（期待度の目盛り・カットイン・公開待ちなど）を小さく出す（見本だけ。そろい方を確かめるため）
 
 const G = 'スマホ: 手元の抽選（大画面と同じ流れ）'
 const CARD5 = [3, 22, 38, 51, 67, 12, 17, 44, 59, 70, 7, 28, 0, 48, 62, 15, 19, 33, 56, 74, 1, 25, 41, 53, 65]
 const HISTORY = [20, 3, 17, 56, 22, 74] // 見本の履歴（新しい順）
-const PUSH_WAIT = 2200 // 見本で MC が PUSH を押すまで
+const PUSH_WAIT = 2200 // 見本で、司会が公開の合図を出すまで
 const bits = (...cells: number[]): number => cells.reduce((m, i) => m | (1 << i), 0)
 const DIAG4 = bits(0, 6, 12, 18) // 斜めがあと 1 つ（O65）
 const QUIET = bits(1, 12, 19) // リーチなし
@@ -54,7 +54,6 @@ interface Spec {
   n: number // 出る番号
   outcome: AoriOutcome
   rank?: number
-  sure?: boolean // 先バレ（この番号は自分のカードに必ず当たる）
 }
 
 // ---- 見本の画面 ----------------------------------------------------------------
@@ -140,7 +139,7 @@ function describe(b: Beat): string {
     case 'rainbowPhones':
       return '全台が虹'
     case 'push':
-      return 'PUSH 待ち'
+      return '公開待ち'
     case 'reveal':
       return '公開の予定'
     default:
@@ -187,7 +186,6 @@ async function run(host: HTMLElement, tl: Timeline, s: Spec): Promise<void> {
     revealAt: t.reveal,
     venueTier: s.venue,
     venueVariant: pickStyle(plan, [], Math.random),
-    sure: s.sure,
   })
   for (const b of beats) {
     const text = describe(b)
@@ -195,9 +193,9 @@ async function run(host: HTMLElement, tl: Timeline, s: Spec): Promise<void> {
   }
   if (!(await hold(tl, t.reveal))) return
   if (t.push) {
-    // 金・虹は、大画面が MC の PUSH を待つ
+    // 金・虹は、大画面が司会の合図（公開）を待つ
     spin.awaitPush()
-    m.venue.textContent = '会場: 司会の PUSH 待ち…'
+    m.venue.textContent = '会場: 司会の合図待ち…'
     if (!(await hold(tl, PUSH_WAIT))) return
   }
   m.venue.textContent = `会場: 公開 ${label(s.n)}`
@@ -236,19 +234,16 @@ const SPECS: Spec[] = [
   { id: 'v0-p0', label: '会場 青 × 自分 青 → はずれ（静かなまま）', venue: 0, tier: 0, mask: QUIET, waiting: [], n: 36, outcome: 'none' },
   { id: 'v2-p0', label: '会場 赤 × 自分 青 → はずれ（会場は熱いが、手元は上がらない）', venue: 2, tier: 0, mask: QUIET, waiting: [], n: 36, outcome: 'none' },
   { id: 'v1-p1', label: '会場 緑 × 自分 緑 → カードにヒット', venue: 1, tier: 1, mask: QUIET, waiting: [], n: 28, outcome: 'hit' },
-  { id: 'v3-p1', label: '会場 金 × 自分 緑 → はずれ（手元は緑で止まる・PUSH 待ち）', venue: 3, tier: 1, mask: DIAG4, waiting: [24], n: 36, outcome: 'none' },
+  { id: 'v3-p1', label: '会場 金 × 自分 緑 → はずれ（手元は緑で止まる・公開待ち）', venue: 3, tier: 1, mask: DIAG4, waiting: [24], n: 36, outcome: 'none' },
   { id: 'v0-p2', label: '会場 青 × 自分 赤 → リーチ（昇格！ 手元だけ上がる）', venue: 0, tier: 2, mask: bits(2, 7, 12), waiting: [], n: 33, outcome: 'reach' },
   { id: 'v2-p2', label: '会場 赤 × 自分 赤 → はずれ', venue: 2, tier: 2, mask: DIAG4, waiting: [24], n: 36, outcome: 'none' },
   { id: 'v2-p2-double', label: '会場 赤 × 自分 赤 → ダブルリーチ', venue: 2, tier: 2, mask: DIAG4 | bits(10, 11), waiting: [24], n: 48, outcome: 'double' },
   { id: 'v1-p3', label: '会場 緑 × 自分 金 → はずれ（昇格！ 手元だけ金）', venue: 1, tier: 3, mask: DIAG4, waiting: [24], n: 36, outcome: 'none' },
-  { id: 'v3-p3', label: '会場 金 × 自分 金 → ビンゴ（PUSH 待ち）', venue: 3, tier: 3, mask: DIAG4, waiting: [24], n: 65, outcome: 'bingo', rank: 3 },
-  { id: 'v3-p4', label: '会場 金 × 自分 虹 → ビンゴ確定（PUSH 待ち）', venue: 3, tier: 4, mask: DIAG4, waiting: [24], n: 65, outcome: 'bingo', rank: 1 },
+  { id: 'v3-p3', label: '会場 金 × 自分 金 → ビンゴ（公開待ち）', venue: 3, tier: 3, mask: DIAG4, waiting: [24], n: 65, outcome: 'bingo', rank: 3 },
+  { id: 'v3-p4', label: '会場 金 × 自分 虹 → ビンゴ確定（公開待ち）', venue: 3, tier: 4, mask: DIAG4, waiting: [24], n: 65, outcome: 'bingo', rank: 1 },
   { id: 'v0-p4', label: '会場 青 × 自分 虹 → ビンゴ確定（静かな会場で、手元だけ確定）', venue: 0, tier: 4, mask: DIAG4, waiting: [24], n: 65, outcome: 'bingo', rank: 2 },
   { id: 'v2-p4', label: '会場 赤 × 自分 虹 → ビンゴ確定', venue: 2, tier: 4, mask: DIAG4, waiting: [24], n: 65, outcome: 'bingo', rank: 4 },
   // ---- オリパの合図 ----
-  { id: 'sure-hit', label: '先バレ: 当たり確定！ → 青のまま → カードにヒット', venue: 0, tier: 0, mask: QUIET, waiting: [], n: 25, outcome: 'hit', sure: true },
-  { id: 'sure-up', label: '先バレ: 当たり確定！ → どこまで上がる？ → 金まで昇格 → ビンゴ', venue: 2, tier: 3, mask: DIAG4, waiting: [24], n: 65, outcome: 'bingo', rank: 2, sure: true },
-  { id: 'sure-rainbow', label: '先バレ: 当たり確定！ → ビンゴ確定（虹）', venue: 1, tier: 4, mask: DIAG4, waiting: [24], n: 65, outcome: 'bingo', rank: 1, sure: true },
   { id: 'revive-reach', label: '復活: 青のまま → はずれ…？ → 暗転 → リーチ！', venue: 0, tier: 0, mask: bits(2, 7, 12), waiting: [], n: 33, outcome: 'reach' },
   { id: 'revive-bingo', label: '復活: 緑のまま → はずれ…？ → 暗転 → ビンゴ！', venue: 1, tier: 1, mask: DIAG4, waiting: [24], n: 65, outcome: 'bingo', rank: 5 },
 ]

@@ -1331,7 +1331,7 @@
   }
 }
 
-/* ---- PUSH 待ち（1 秒に 1 回のゆっくりした脈動） -------------------------- */
+/* ---- 公開待ち（司会の合図を待つ間。1 秒に 1 回のゆっくりした脈動） ------- */
 
 .fxd-push {
   position: absolute;
@@ -1341,7 +1341,7 @@
   display: flex;
   align-items: center;
   gap: 18px;
-  padding: 6px 48px 6px 20px;
+  padding: 8px 56px;
   border-radius: 999px;
   background: linear-gradient(180deg, #fff8dc 0%, #ffe08a 30%, #f5c542 55%, #c8900f 100%);
   color: #1a1240;
@@ -1367,7 +1367,7 @@
   animation: fxd-push var(--pp, 1s) ease-in-out infinite;
 }
 
-/* だれが何をすると公開されるかを、ボタンの名前の上に書く */
+/* 見ている人が押すものではないので、ボタンの絵は出さず、これから何が起きるかだけを書く */
 .fxd-push p {
   margin: 0;
   display: flex;

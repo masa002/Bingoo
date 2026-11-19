@@ -16,21 +16,20 @@ import './spin.css' // card.css・aori.css より後に読み込む（カード�
 //   - 大画面より低い段階なら途中で上がり止まるか、静かなまま。高ければ（自分のリーチ・ビンゴに絡む回）手元だけで上げる（昇格！）。
 //     虹は自分のビンゴ確定のときだけ（時が止まる → 窓のガラスにヒビ → 「ビンゴ確定！」）
 //   - オリパのお約束の合図:
-//       先バレ（sure）: 始まった瞬間に、音（ポヒュン）と短い光で「当たり確定！」。そのあとは、どこまで上がるかを見る
 //       昇格: 途中で色が上がる
 //       復活: 青・緑のままだったのにリーチ・ビンゴになった回は、「はずれ…？」→ 一瞬の暗転（プチュン）→ 当たりに覆る
 //   - 番号は大画面の公開と同時に出す。着地の時刻は fx/landing.ts のモデル（大画面の抽選機と同じ数字）で求める
 //
 //   const spin = new HandSpin(phone, { speed, sound: 'personal' })   // 本番のスマホは sound: 'all'
-//   spin.start({ tier: 2, waiting: ['O65'], pool, beats, revealAt: t.reveal, venueTier: 1, venueVariant: style, sure })   // drawScheduled
-//   spin.awaitPush()                                  // 金・虹の回だけ（大画面が MC の PUSH 待ちに入った）
+//   spin.start({ tier: 2, waiting: ['O65'], pool, beats, revealAt: t.reveal, venueTier: 1, venueVariant: style })   // drawScheduled
+//   spin.awaitPush()                                  // 金・虹の回だけ（大画面が、司会の合図（公開）を待ちはじめた）
 //   await spin.reveal(48)                             // numberRevealed（大画面の公開と同時）
 //   await spin.resolve({ outcome: 'double', label: 'G48' })
 //   await card.stamp(13) …                            // スタンプ・リーチの札・BINGO は組み込み側で
 //
 // 層は host 全体（inset 0、z-index 12、pointer-events: none）。本体（あなたの期待度・リールの窓・「あと O65」）は y 530〜830（--fxs-top）。
 // 赤以上では画面を暗くし、同じ host の中にある CardView の「あと 1 つ」のマス（.fxc-cell.is-wait）だけを照らして脈動させる。
-// 音: sound が 'personal'（既定）なら、自分だけの音（先バレ・自分の段階が上がる・確定・復活・成功・失敗）だけを鳴らす
+// 音: sound が 'personal'（既定）なら、自分だけの音（自分の段階が上がる・確定・復活・成功・失敗）だけを鳴らす
 //     （デモは大画面と同じ PC から鳴るため）。'all' なら、回り出し・期待度の目盛り・着地の音も鳴らす（本番のスマホ）
 
 export interface HandSpinStart {
@@ -38,12 +37,10 @@ export interface HandSpinStart {
   waiting: readonly string[] // 「あと O65」
   pool: readonly number[] // リールに流す候補（まだ出ていない番号）
   beats: readonly Beat[] // 大画面と同じ拍の列（at は start からの ms）
-  revealAt: number // 大画面の公開の予定時刻（ms）。金・虹は、ここから MC の PUSH を待つ
+  revealAt: number // 大画面の公開の予定時刻（ms）。金・虹は、ここから司会の合図（公開）を待つ
   venueTier: Tier // 大画面の段階
   // 大画面の抽選機の型（権威が決めて配る）。カードめくり型・パタパタ型は、着地の衝撃が少し遅い。省略するとリール型にそろえる
   venueVariant?: MachineStyle
-  // 先バレ（オリパの「ポヒュン」）: この番号は自分のカードに必ず当たる。始まった瞬間に「当たり確定！」を出す
-  sure?: boolean
 }
 
 export type HandSpinSound = 'personal' | 'all'
@@ -138,8 +135,7 @@ interface KakuteiPlan {
 }
 
 // 虹（自分のビンゴ確定）の時刻。大画面に確定の拍があればそれにそろえ、なければ大画面の山場（金の縁・赤のカットイン・ライザー・鼓動）に重ねる
-// earliest は、時が止まってよい最初の時刻（先バレの合図と重ねないため）
-function planKakutei(list: readonly Beat[], r: number, earliest: number): KakuteiPlan {
+function planKakutei(list: readonly Beat[], r: number): KakuteiPlan {
   const k = list.find((b) => b.kind === 'kakutei')
   if (k) {
     const f = list.find((b) => b.kind === 'freeze' && b.at < k.at)
@@ -152,7 +148,7 @@ function planKakutei(list: readonly Beat[], r: number, earliest: number): Kakute
   const gold = list.find((b) => b.kind === 'goldEdge' && ok(b))
   const peaks = list.filter((b) => ok(b) && ((b.kind === 'cutin' && (b.tier ?? 0) >= 2) || b.kind === 'riser' || b.kind === 'heartbeat'))
   const peak = gold ? gold.at : peaks.length ? peaks[peaks.length - 1].at : Math.max(Math.min(1900, r - 1200), r - 2400)
-  const freezeAt = Math.max(earliest, peak - 1370)
+  const freezeAt = Math.max(400, peak - 1370)
   const at = Math.max(peak, freezeAt + 700)
   return { freezeAt, crackAt: Math.max(freezeAt + 200, at - 720), at }
 }
@@ -347,7 +343,6 @@ export class HandSpin {
   private calm = false // 間（ま）に入った（鼓動を止める）
   private rising = false
   private still = false
-  private sure = false // 先バレ（この番号は自分のカードに必ず当たる）
   private pool: number[] = []
   private waits: number[] = []
   private lastPick = 0
@@ -358,7 +353,6 @@ export class HandSpin {
   private e0 = 0
   private t0 = 0
   private msgText = ''
-  private msgHold = 0 // この時刻までは、大画面のテロップで一行を上書きしない
   private flashed = false // 全面の光は 1 回の演出につき 1 回まで
   private beating = false
   private dusting = false
@@ -419,7 +413,6 @@ export class HandSpin {
     // 虹は「確定」の前に、大画面にどこまでついていくかを毎回変える（静かなまま突然・緑・赤・金からの昇格）
     this.cap = tier === 4 ? pickOne<Tier>([0, 1, 2, 3, 3]) : tier
     this.still = prefersReducedMotion()
-    this.sure = !!o.sure
     this.pool = o.pool.filter((x) => Number.isInteger(x) && x >= 1 && x <= 75)
     this.waits = o.waiting.map(numOf).filter((x) => x >= 1 && x <= 75)
     this.e0 = 0
@@ -450,19 +443,14 @@ export class HandSpin {
     const s = this.sched
     this.beats.forEach((b, i) => s.at(b.at, () => this.onBeat(b, slotOf(this.beats, i))))
     if (!this.beats.some((b) => b.kind === 'spin' || b.kind === 'goldEdge' || b.kind === 'freeze')) s.at(300, () => this.runReel(reelRun.spin(STYLE)))
-    if (this.sure) {
-      // 先バレ: 始まった瞬間に知らせる。合図が終わるまでは、段階を上げない
-      this.lastRaise = 600
-      s.at(260, () => this.sakibare())
-    }
-    if (tier === 4) this.kk = planKakutei(this.beats, this.o.revealAt, this.sure ? 1500 : 400)
+    if (tier === 4) this.kk = planKakutei(this.beats, this.o.revealAt)
     this.planExtra()
     if (this.kk) this.scheduleKakutei(this.kk)
     this.last = 0
     this.raf = requestAnimationFrame(this.frame)
   }
 
-  // 大画面が MC の PUSH 待ちに入った（金・虹）。番号は見せず、溜めたまま一緒に待つ
+  // 大画面が、司会の合図（公開）を待ちはじめた（金・虹）。番号は見せず、溜めたまま一緒に待つ
   awaitPush(): void {
     if (this.phase !== 'run') return
     if (this.frozen) {
@@ -473,7 +461,7 @@ export class HandSpin {
     this.el.dataset.phase = 'push'
     this.el.classList.add('is-push')
     this.endRise()
-    this.msg('司会がボタンを押すと、番号が開きます')
+    this.msg('まもなく番号が開きます')
     if (this.still) return
     // ゆっくりした鼓動で待つ（自分の段階が赤以上のとき。1 秒に約 1 回より速くしない）
     const tl = this.tl
@@ -549,12 +537,12 @@ export class HandSpin {
     const tl = (this.tl = new Timeline(this.speed))
     const t = this.tier
     if (o.outcome === 'none') {
-      // あおったのに外れた（先バレの回は、外れで届くことはない）
-      if (t >= 1 && t <= 3 && !this.sure) await this.fail(tl, o.label)
+      // あおったのに外れた
+      if (t >= 1 && t <= 3) await this.fail(tl, o.label)
       else await this.quiet(tl)
     } else {
-      // 復活: 青・緑のままだったのに、リーチ・ビンゴになった（先バレの回には出さない）
-      const revived = t <= 1 && !this.sure && o.outcome !== 'hit'
+      // 復活: 青・緑のままだったのに、リーチ・ビンゴになった
+      const revived = t <= 1 && o.outcome !== 'hit'
       if (revived) await this.revive(tl)
       if (!tl.cancelled) await this.success(tl, o.outcome, revived)
     }
@@ -603,7 +591,6 @@ export class HandSpin {
           <div class="fxs-next"><b>まだ止まらない！</b><em></em></div>
           <i class="fxs-glass"></i>
           <i class="fxs-pay is-l">▶</i><i class="fxs-pay is-r">◀</i>
-          <span class="fxs-tag">✓ 当たり確定</span>
         </div>
         <div class="fxs-msg"></div>
         ${waits}
@@ -709,7 +696,7 @@ export class HandSpin {
         void this.pseudo(b.index ?? 0, slot)
         break
       case 'telop':
-        if (b.text && this.now() >= this.msgHold) this.msg(escapeHtml(b.text)) // 先バレの知らせは、テロップで上書きしない
+        if (b.text) this.msg(escapeHtml(b.text))
         break
       case 'decel':
         this.runReel(reelRun.decel(slot))
@@ -805,57 +792,6 @@ export class HandSpin {
   }
 
   // ---- オリパの合図 -------------------------------------------------------------
-
-  // 先バレ（オリパの「ポヒュン」）: 始まった瞬間に、音と短い光で「当たり確定！」を知らせる。このあとは、どこまで上がるかを見る。
-  // 光は窓のまわりにだけ 1 回差す（全面の光ではない。点滅もさせない）。音に合わせて、0.25 秒でいちばん明るく、0.40 秒で星が散る
-  private sakibare(): void {
-    const p = this.parts
-    if (!p || (this.phase !== 'run' && this.phase !== 'push')) return
-    const tl = this.tl
-    sfx.pohyun()
-    vibrate(30)
-    this.el.classList.add('is-sure')
-    this.setLamp(this.shown, !this.still)
-    this.msg('<b>当たり確定！</b> この番号は、あなたのカードにあります')
-    this.msgHold = this.now() + 1300
-    const sign = el('div', 'fxs-sure', `<div class="fxs-sure-in">${txt('当たり確定！')}<small>この番号は、あなたのカードに当たります</small></div>`)
-    p.fx.append(sign)
-    const inner = sign.firstElementChild as HTMLElement
-    const k = this.fit(inner)
-    if (this.still) {
-      inner.style.transform = `scale(${k.toFixed(3)})`
-      void play(inner, [{ opacity: 0 }, { opacity: 1, offset: 0.15 }, { opacity: 1, offset: 0.85 }, { opacity: 0 }], 1400, tl, { fill: 'forwards' }).then(() => sign.remove())
-      return
-    }
-    void play(
-      inner,
-      [
-        { transform: `scale(${k * 2})`, opacity: 0, easing: 'cubic-bezier(.2,.9,.3,1)' },
-        { transform: `scale(${k * 0.92})`, opacity: 1, offset: 0.14 },
-        { transform: `scale(${k})`, opacity: 1, offset: 0.2 },
-        { transform: `scale(${k})`, opacity: 1, offset: 0.8, easing: 'ease-in' },
-        { transform: `translateY(150px) scale(${k * 0.5})`, opacity: 0 },
-      ],
-      1300,
-      tl,
-      { fill: 'forwards', easing: 'linear' },
-    ).then(() => sign.remove())
-    // 窓のまわりの光（立ち上がりは 120ms 以上。速度を上げても守る）
-    const b = boxIn(p.win, this.el)
-    const glow = el('i', 'fxs-pohyun')
-    glow.style.left = `${b.x}px`
-    glow.style.top = `${b.y}px`
-    glow.style.width = `${b.w}px`
-    glow.style.height = `${b.h}px`
-    p.fx.append(glow)
-    void play(glow, [{ opacity: 0 }, { opacity: 1, offset: 0.33 }, { opacity: 0 }], 750, tl, { min: 480, fill: 'forwards' }).then(() => glow.remove())
-    const W = this.el.clientWidth || 390
-    this.px?.burst(W / 2, this.centerY(), { count: 40, colors: ['#ff7a3d', '#ffd27a', '#fff4cc', '#ffffff'], speed: 8, shape: 'spark', life: 40 })
-    tl.at(400, () => sparkBurst(p.fx, W / 2, this.centerY(), tl, { count: 12, colors: GOLD, dist: 150, size: 12, ms: 700, shape: 'star' }))
-    tl.at(1300, () => {
-      if (this.phase === 'run' && this.shown === 0) this.msg('どこまで上がるか…！')
-    })
-  }
 
   // 復活（オリパのお約束）: 青・緑のままだったのに、リーチ・ビンゴになった回。外れに見せてから、
   // 一瞬の暗転（プチュン）をはさんで、当たりに覆す。時刻は音に合わせる:
@@ -1357,7 +1293,7 @@ export class HandSpin {
     )
   }
 
-  // 時が動き出す。止まっている間に来た大画面の拍（金の縁・間・PUSH）に合わせる
+  // 時が動き出す。止まっている間に来た大画面の拍（金の縁・間・公開待ち）に合わせる
   private thaw(): void {
     if (!this.frozen) return
     this.frozen = false
@@ -1644,7 +1580,7 @@ export class HandSpin {
     if (power >= 2) sparkBurst(p.fx, cx, wb.y, tl, { count: 10, colors, dist: 150, size: 12, ms: 800, shape: 'star' })
     if (t >= 3) shake(this.el.parentElement ?? this.el, tl, t === 4 ? 7 : 5, 260)
     // 全面のやわらかい光は赤・金だけ（虹は確定で使った。ビンゴはこのあと playBingo が使う）。20% 以下で、ゆっくり立ち上げる
-    if (!this.flashed && !this.sure && (t === 2 || t === 3) && outcome !== 'bingo') {
+    if (!this.flashed && (t === 2 || t === 3) && outcome !== 'bingo') {
       this.flashed = true
       void play(p.flash, [{ opacity: 0 }, { opacity: 0.16, offset: 0.2 }, { opacity: 0 }], 700, tl, { min: 600 })
     }
@@ -1775,7 +1711,7 @@ export class HandSpin {
   // 青（と、あおっていない外れ）: 番号を少し見せてから、静かに引っ込む
   private async quiet(tl: Timeline): Promise<void> {
     const n = this.n
-    if (n !== null && !this.sure) this.msg(`<b>${letterOf(n)} ${n}</b> は、${FAIL_TEXT}`)
+    if (n !== null) this.msg(`<b>${letterOf(n)} ${n}</b> は、${FAIL_TEXT}`)
     this.fadeAura(tl, 300)
     await tl.wait(700)
     if (!tl.cancelled) await this.retract(tl)
@@ -1901,8 +1837,7 @@ export class HandSpin {
     const p = this.parts
     if (!p) return
     p.lamp.dataset.t = String(t)
-    // 先バレの回は、青のままでも「当たり確定」
-    p.lamp.innerHTML = `<i>${TIER_SHAPE[t]}</i><b>${t === 0 && this.el.classList.contains('is-sure') ? '当たり確定！' : LAMP_WORD[t]}</b>`
+    p.lamp.innerHTML = `<i>${TIER_SHAPE[t]}</i><b>${LAMP_WORD[t]}</b>`
     // 期待度の目盛り（4 段。虹はすべて点いて虹色になる）
     p.meter.forEach((m, k) => {
       m.classList.toggle('on', k < t)
@@ -2010,14 +1945,12 @@ export class HandSpin {
     this.covered = false
     this.calm = false
     this.rising = false
-    this.sure = false
     this.drawnPos = Number.NaN
     this.drawnV = Number.NaN
     this.n = null
     this.onLanded?.() // resolve() が待っていたら、先へ進めて抜けさせる（gen が変わっている）
     this.onLanded = null
     this.msgText = ''
-    this.msgHold = 0
     this.flashed = false
     this.beating = false
     this.dusting = false

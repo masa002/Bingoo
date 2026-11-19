@@ -1,5 +1,5 @@
-import { LINES, labelOf, popcount, waitingCells } from '../core/card'
-import { CH_LINES, Game, challengeChance, type Impact } from '../core/game'
+import { FREE_CELL, LINES, labelOf, popcount, waitingCells } from '../core/card'
+import { CH_FREE, CH_LINES, Game, challengeChance, type Impact } from '../core/game'
 import { fakeName } from '../core/names'
 import { PrizeStock, RANKS, commitHash, doubleChancePrizes, packLook, type Prize, type Rarity } from '../core/prizes'
 import { Rng } from '../core/rng'
@@ -244,19 +244,22 @@ export class DemoAuthority {
   // 緊急クエスト「モグラ撃退」。狙われるのはリーチの人で、ボスモグラがリーチのマスを狙う。
   // 持っているものを失うのは、自分が挑んだ結果としてだけにする: やられる割合（ratio）は景品のペースのために先に決め、
   // 叩いた数が会場全体の下から ratio の割合に入った人がやられる。だから「あと何匹で守れた」は本当の数字になる。
-  // forceMe（操作パネル）のときは、リーチでなくても自分を狙わせる（開いたマスがあれば）
+  // forceMe（操作パネル）のときは、リーチでなくても自分を本当に狙わせる（開いたマスがあれば）。
+  // スマホには、リーチでない人にもボスモグラを見せる（「狙われていない」と言われたら、叩く理由がなくなるため）。
+  // 見せるだけで、リーチでない人のマスは埋めない
   private async runQuest(ratio: number, forceMe: boolean, gen: number): Promise<void> {
     const g = this.game
     this.eventsDone.add('mole')
     this.lastEventAt = g.drawCount
     this.moles++
-    const aim = new Map<number, number>() // 狙われた人 → 狙われたマス
+    const aim = new Map<number, number>() // 本当に狙われた人（叩いた数が下位ならマスを埋められる） → 狙われたマス
     for (const p of g.players) {
       if (p.bingoDraw !== null || (p.reach === 0 && !(forceMe && p.isMe))) continue
       const cell = g.aimMole(p, this.rng)
       if (cell !== null) aim.set(p.idx, cell)
     }
-    const meCell = aim.get(0) ?? null
+    // 本番では、リーチでない人に見せるマスは、各自のスマホが自分のカードから選べばよい
+    const mine0 = aim.has(0) ? { cell: aim.get(0)!, label: labelOf(g.me.cells[aim.get(0)!]) } : this.bluffCell()
     this.hub.publish({
       type: 'questStart',
       kind: 'mole',
@@ -264,7 +267,7 @@ export class DemoAuthority {
       playMs: QUEST.play,
       targets: aim.size,
       players: g.size,
-      me: { target: meCell !== null, cell: meCell, label: meCell === null ? '' : labelOf(g.me.cells[meCell]) },
+      me: { target: true, cell: mine0.cell, label: mine0.label },
     })
     // 仮想参加者の叩いた数（本番では、各スマホが叩き終わったときに 1 回送る）
     const scores = new Map<number, number>()
@@ -311,11 +314,24 @@ export class DemoAuthority {
       lost: losers.size,
       lostReach,
       top,
-      me: { score: myScore, target: meCell !== null, lost: losers.has(0), cell: meCell, need, rank, reachBefore: before, reachAfter: g.me.reach },
+      me: { score: myScore, target: true, lost: losers.has(0), cell: mine0.cell, need, rank, reachBefore: before, reachAfter: g.me.reach },
       totals: this.totals(),
       resultMs: QUEST.result,
     })
     await this.clock.wait(QUEST.result)
+  }
+
+  // リーチでない自分に見せる、ボスモグラが狙うマス（いま見えているカードの開いたマス。上位チャレンジ中は 3×3 のカード）。
+  // まだ 1 つも開いていなければ、真ん中の FREE を狙わせる（誰のカードにも必ず狙うマスがある）
+  private bluffCell(): { cell: number; label: string } {
+    const me = this.game.me
+    const ch = me.challenge
+    const cells = ch ? ch.cells : me.cells
+    const mask = ch ? ch.mask : me.mask
+    const open = cells.flatMap((n, c) => (n && mask & (1 << c) ? [c] : []))
+    if (!open.length) return { cell: ch ? CH_FREE : FREE_CELL, label: 'FREE' }
+    const cell = this.rng.pick(open)
+    return { cell, label: labelOf(cells[cell]) }
   }
 
   // 仮想参加者の叩いた数: 見ていない人が 1 割ほど、なんとなく叩く人（3〜12 匹）、熱心な人（18〜30 匹）。
@@ -348,11 +364,7 @@ export class DemoAuthority {
     const style = pickStyle(plan, this.styles, () => this.rng.next())
     this.styles = [...this.styles.slice(-3), style]
     const t = timing(tier, g.size)
-    const outcome = this.myOutcome(imp)
-    const myTier = personalTier(outcome, this.rng)
-    // 先バレ: 自分のカードに当たる回の 4 回に 1 回は、始まった瞬間に「当たり確定」を知らせる（虹はそれ自体が確定の合図）
-    const sure = outcome !== 'none' && myTier < 4 && this.rng.chance(0.25)
-    const personal = { tier: myTier, waiting: this.myWaiting(), sure }
+    const personal = { tier: personalTier(this.myOutcome(imp), this.rng), waiting: this.myWaiting() }
     this.forcedNumber = null
     this.forcedTier = null
     const drawNo = g.drawCount + 1

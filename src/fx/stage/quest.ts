@@ -35,7 +35,7 @@ import { STAGE_H, STAGE_W } from '../theme'
 export interface MoleQuestStageStart {
   introMs: number // 警報の長さ（スマホとそろえる）
   playMs: number // 叩ける時間
-  targets: number // 狙われたリーチの人数
+  targets: number // 本当に狙われた人数（リーチの人。スマホでは全員にボスモグラを見せる）
   players: number // 参加人数
 }
 
@@ -1375,8 +1375,8 @@ export class MoleQuestStage {
     this.el.dataset.phase = 'idle'
     const players = fmt(this.players)
     const targets = fmt(this.targets)
-    const top = '▲ EMERGENCY QUEST ▲　緊急クエスト「モグラ撃退」　◆ スマホでモグラを叩いて リーチを守れ！ ◆　'.repeat(3)
-    const bot = `◆ 狙われたリーチ ${targets} 人 ◆　会場みんなで叩いて守れ！　▲ WARNING ▲　`.repeat(4)
+    const top = '▲ EMERGENCY QUEST ▲　緊急クエスト「モグラ撃退」　◆ スマホでモグラを叩いて カードを守れ！ ◆　'.repeat(3)
+    const bot = `◆ リーチの人 ${targets} 人が大ピンチ ◆　会場みんなで叩いて守れ！　▲ WARNING ▲　`.repeat(4)
     // 狙われた人数は桁が多いほど小さく
     const tgtSize = targets.length <= 3 ? 110 : targets.length <= 5 ? 86 : 66
     this.el.innerHTML = `
@@ -1396,8 +1396,8 @@ export class MoleQuestStage {
         <div class="fxqs-raid"><div class="fxqs-raid-in"><div class="fxqs-ol" data-text="モグラ襲来！"><b>モグラ襲来！</b></div><small>ドドドド…</small></div></div>
         <div class="fxqs-brief">
           <p class="fxqs-brief-a">スマホでモグラを叩いて</p>
-          <div class="fxqs-brief-b fxqs-ol" data-text="リーチを守れ！"><b>リーチを守れ！</b></div>
-          <div class="fxqs-brief-t">${RETICLE}<span>狙われたリーチ</span><b>0</b><small>人</small></div>
+          <div class="fxqs-brief-b fxqs-ol" data-text="カードを守れ！"><b>カードを守れ！</b></div>
+          <div class="fxqs-brief-t">${RETICLE}<span>大ピンチのリーチ</span><b>0</b><small>人</small></div>
           <p class="fxqs-brief-p">参加 ${players} 人</p>
         </div>
         <div class="fxqs-hud">
@@ -1408,7 +1408,7 @@ export class MoleQuestStage {
             <div class="fxqs-pace"><span>いまのペース</span><b>―</b><small>匹/秒</small><span class="fxqs-meter">${'<i></i>'.repeat(16)}</span></div>
           </div>
           <div class="fxqs-p fxqs-tgt">
-            <div class="fxqs-tgt-h">${RETICLE}<span>狙われたリーチ</span></div>
+            <div class="fxqs-tgt-h">${RETICLE}<span>大ピンチのリーチ</span></div>
             <div class="fxqs-tgt-n" style="--fs:${tgtSize}px"><b>${targets}</b><small>人</small></div>
             <div class="fxqs-tgt-s">叩いて守れ！</div>
             <p class="fxqs-tgt-p">参加 ${players} 人</p>
@@ -1622,7 +1622,7 @@ function resultHtml(mood: Mood, targets: number, defended: number, lost: number,
         <div class="fxqs-card def">
           <div class="fxqs-card-h"><i>◆</i>守りきった</div>
           <div class="fxqs-card-n" style="--fs:${fs(defended)}px"><b>0</b><small>人</small></div>
-          <div class="fxqs-card-s">狙われた ${fmt(targets)} 人のうち</div>
+          <div class="fxqs-card-s">リーチの ${fmt(targets)} 人のうち</div>
         </div>
         <div class="fxqs-card lost">
           <div class="fxqs-card-h"><i>▼</i>やられた</div>

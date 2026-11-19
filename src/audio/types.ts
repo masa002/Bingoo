@@ -92,7 +92,6 @@ export interface QuestSfx {
 
 // オリパのお約束の合図（スマホの手元の演出で使う）
 export interface OripaSfx {
-  pohyun(): void // 先バレ「ポヒュン！」。始まった瞬間に鳴る、当たり確定の合図（短く、はっきり分かる音）
   puchun(): void // 「プチュン」。画面が一瞬暗転する合図（音がすっと切れる）。このあと復活が来る
   revive(): void // 復活。外れに見えたところから、当たりに覆る
 }

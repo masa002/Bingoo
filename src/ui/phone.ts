@@ -198,7 +198,6 @@ export class PhoneView {
           <h4>スマホの演出の見方</h4>
           <p>色は「この番号が、あなたのカードに当たりそうか」です。熱い色でも外れることがあります。</p>
           <ol class="tier-guide">${tierGuide(MY_TIER_WORD, '静か')}</ol>
-          <p>始まった瞬間に「ポヒュン！」と光ったら、当たり確定です。</p>
         </div>
       </div>`)
     q(this.root, '.ph-join-btn').addEventListener('click', () => this.join())
@@ -312,7 +311,6 @@ export class PhoneView {
       revealAt: m.timing.reveal,
       venueTier: m.tier,
       venueVariant: m.style, // 大画面と同じ型の着地に合わせる
-      sure: m.personal.sure, // 先バレ: 始まった瞬間に、当たり確定を知らせる
     })
   }
 

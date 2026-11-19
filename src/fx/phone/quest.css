@@ -11,6 +11,7 @@
   --fxq-spin-ms: 12000ms;
   --fxq-drift-ms: 2400ms;
   --fxq-dots-ms: 1500ms;
+  --fxq-tap-ms: 1300ms;
   position: absolute;
   inset: 0;
   z-index: 21;
@@ -652,6 +653,224 @@
   }
 }
 
+/* ---- 遊び方の案内 ---------------------------------------------------------- */
+/* 指と輪の動きは --fxq-tap-ms（1 秒に 1 回より速くしない）。動きを減らす設定では、指がモグラに触れた絵のまま止める */
+
+/* タップする指（指先は絵の上の真ん中あたり。そこを支点に少し傾ける） */
+.fxq .fxq-finger {
+  position: absolute;
+  display: block;
+  transform-origin: 48% 3%;
+  transform: rotate(-16deg);
+  filter: drop-shadow(0 3px 2px rgba(0, 0, 0, 0.5));
+  animation: fxq-tap var(--fxq-tap-ms) ease-in-out infinite;
+}
+
+.fxq .fxq-finger svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+@keyframes fxq-tap {
+  0%,
+  72%,
+  100% {
+    transform: translate(26%, 30%) rotate(-16deg);
+  }
+  28%,
+  44% {
+    transform: translate(0%, 0%) rotate(-16deg);
+  }
+}
+
+/* 指が触れた瞬間に広がる輪 */
+@keyframes fxq-tap-ring {
+  0%,
+  27% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  31% {
+    opacity: 1;
+    transform: scale(0.7);
+  }
+  64%,
+  100% {
+    opacity: 0;
+    transform: scale(1.3);
+  }
+}
+
+@keyframes fxq-tap-squash {
+  0%,
+  27%,
+  48%,
+  100% {
+    transform: scale(1, 1);
+  }
+  34% {
+    transform: scale(1.12, 0.8);
+  }
+}
+
+/* 下の欄の見本: 穴から顔を出したモグラを、指がトンと押す（警報の間から、最初の 1 匹を叩くまで） */
+.fxq .fxq-howto {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 194, 26, 0.2), rgba(255, 194, 26, 0.08));
+  box-shadow: inset 0 0 0 2px rgba(255, 194, 26, 0.75);
+}
+
+.fxq .fxq-demo {
+  position: relative;
+  flex: none;
+  width: 84px;
+  height: 84px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #232e6c, #19214f);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.25);
+}
+
+.fxq .fxq-demo-pit {
+  position: absolute;
+  left: 5%;
+  right: 5%;
+  top: 68%;
+  height: 24%;
+  display: block;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 45%, #0b0502 0 44%, #2e1a0b 62%, #6e4a2a 70%, rgba(110, 74, 42, 0) 74%);
+}
+
+.fxq .fxq-demo-clip {
+  position: absolute;
+  left: -6%;
+  right: -6%;
+  top: -38%;
+  bottom: 20%;
+  overflow: hidden;
+}
+
+.fxq .fxq-demo-mole {
+  position: absolute;
+  left: 10%;
+  width: 80%;
+  bottom: 0;
+  transform-origin: 50% 100%;
+  animation: fxq-tap-squash var(--fxq-tap-ms) ease-out infinite;
+}
+
+.fxq .fxq-demo-mole svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.fxq .fxq-demo-ring {
+  position: absolute;
+  left: 14%;
+  top: 2%;
+  width: 72%;
+  height: 72%;
+  display: block;
+  border-radius: 50%;
+  border: 3px solid #fff4cc;
+  box-shadow: 0 0 8px rgba(255, 224, 138, 0.8);
+  animation: fxq-tap-ring var(--fxq-tap-ms) ease-out infinite;
+}
+
+.fxq .fxq-demo .fxq-finger {
+  left: 40%;
+  top: 40%;
+  width: 46%;
+}
+
+.fxq .fxq-howto-txt b {
+  display: block;
+  font-size: 23px;
+  font-weight: 900;
+  line-height: 1.25;
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.5);
+}
+
+.fxq .fxq-howto-txt small {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffe9b0;
+}
+
+/* 顔を出したモグラに付く「ここをタップ」の印（指・輪・文字）。最初の 1 匹を叩くまで（.is-guide の間）だけ見せる */
+.fxq .fxq-cue {
+  position: absolute;
+  inset: 0;
+  display: block;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.fxq.is-guide .fxq-hole.is-up .fxq-cue {
+  opacity: 1;
+}
+
+.fxq .fxq-cue-ring {
+  position: absolute;
+  left: 8%;
+  top: -4%;
+  width: 84%;
+  height: 84%;
+  display: block;
+  border-radius: 50%;
+  border: 3px solid #fff4cc;
+  box-shadow:
+    0 0 10px rgba(255, 224, 138, 0.9),
+    inset 0 0 8px rgba(255, 224, 138, 0.5);
+  animation: fxq-cue-ring var(--fxq-tap-ms) ease-in-out infinite;
+}
+
+@keyframes fxq-cue-ring {
+  0%,
+  100% {
+    transform: scale(0.86);
+    opacity: 0.65;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+}
+
+.fxq .fxq-cue .fxq-finger {
+  left: 46%;
+  top: 46%;
+  width: 46%;
+}
+
+.fxq .fxq-cue b {
+  position: absolute;
+  left: 50%;
+  top: -24%;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.35;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  color: #1a1405;
+  background: linear-gradient(180deg, #ffe08a, #ffc21a);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
+}
+
 /* ---- 結果の札（下の点数と同じ場所） ------------------------------------------- */
 
 .fxq .fxq-resbox {
@@ -993,6 +1212,50 @@
   font-style: italic;
 }
 
+/* 「よーい…」の下に、何をするかを 1 行で添える */
+.fxq .fxq-ban.is-ready .fxq-ban-note {
+  display: block;
+  width: max-content;
+  margin: 8px auto 0;
+  color: #ffe08a;
+  box-shadow: inset 0 0 0 1.5px rgba(255, 194, 26, 0.7);
+}
+
+/* 「タップで 叩け！」: 指で触ることが分かるように、上に小さく添える */
+.fxq .fxq-ban.is-go .fxq-ban-pre {
+  margin-bottom: -6px;
+}
+
+.fxq .fxq-ban.is-go .fxq-ban-pre .fxa-txt {
+  --fill: linear-gradient(180deg, #ffffff, #ffe9a8);
+  font-size: 34px;
+  font-style: normal;
+  letter-spacing: 2px;
+}
+
+/* 1 回も押していない人への「モグラをタップ！」（下のモグラが見えるよう、帯は半分透かす） */
+.fxq .fxq-ban.is-nudge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 0;
+  background: linear-gradient(90deg, rgba(8, 11, 28, 0), rgba(8, 11, 28, 0.72) 18%, rgba(8, 11, 28, 0.72) 82%, rgba(8, 11, 28, 0));
+}
+
+.fxq .fxq-ban.is-nudge .fxa-txt {
+  --stroke: #1a1405;
+  --fill: linear-gradient(180deg, #ffffff 0%, #ffe08a 60%, #ffc21a 100%);
+  font-size: 36px;
+}
+
+.fxq .fxq-ban.is-nudge .fxq-finger {
+  position: relative;
+  flex: none;
+  width: 40px;
+}
+
 .fxq .fxq-ban.is-end .fxa-txt {
   --stroke: #0b1440;
   --fill: linear-gradient(180deg, #ffffff 0%, #bfe6ff 55%, #5ad2ff 100%);
@@ -1049,6 +1312,14 @@
 .fxq.is-still .fxq-pit,
 .fxq.is-still .fxq-bpit {
   transform: none;
+}
+
+/* 案内の指は触れた位置のまま、輪は見せたまま止める（下の media の animation: none と合わせて働く） */
+.fxq.is-still .fxq-finger,
+.fxq.is-still .fxq-demo-mole,
+.fxq.is-still .fxq-demo-ring,
+.fxq.is-still .fxq-cue-ring {
+  animation: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

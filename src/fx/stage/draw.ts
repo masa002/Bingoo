@@ -446,7 +446,7 @@ const HTML = `
 </div>
 <div class="fxd-flock"></div>
 <div class="fxd-telop"><b></b></div>
-<div class="fxd-push"><span></span><p><small>司会がボタンを押すと公開</small><b>PUSH!</b></p></div>
+<div class="fxd-push"><p><small>このあと番号が開きます</small><b>まもなく公開！</b></p></div>
 <div class="fxd-cut"><div class="fxd-cut-rot">
   <div class="fxd-cut-band"><i></i><i></i><i></i><div class="fxd-cut-txt"><em></em><span class="fxd-cut-word"><b class="o"></b><b class="f"></b></span><em></em></div></div>
   <div class="fxd-cut-slash"></div>

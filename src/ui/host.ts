@@ -17,7 +17,7 @@ const HOST_HTML = `
   <h2>主催コンソール</h2>
   <div class="hc-status">準備中</div>
   <button class="hc-next">次へ ▶</button>
-  <button class="hc-push" disabled>PUSH</button>
+  <button class="hc-push" disabled>公開する</button>
   <div class="hc-row">
     <label><input type="checkbox" class="hc-auto" /> 自動進行</label>
     <label><input type="checkbox" class="hc-sound" checked /> 音</label>
@@ -25,16 +25,16 @@ const HOST_HTML = `
   <div class="hc-row hc-speed">速度
     <button data-speed="0.5">×0.5</button><button data-speed="1" class="on">×1</button><button data-speed="2">×2</button><button data-speed="4">×4</button>
   </div>
-  <p class="hc-keys">キー操作: Space 次へ ／ P PUSH</p>
+  <p class="hc-keys">キー操作: Space 次へ ／ P 公開する</p>
 </section>
 <section class="dp">
   <h3>操作パネル <small>デモ専用</small></h3>
   <div class="dp-msg"></div>
   <h4>イベント（次の「次へ」で起きる）</h4>
   <div class="dp-ev">
-    <button data-ev="wild">🌈 全員確定（虹玉）</button><button data-ev="mole">モグラ撃退クエスト</button><button data-ev="moleMe">モグラ撃退（自分も狙われる）</button>
+    <button data-ev="wild">🌈 全員確定（虹玉）</button><button data-ev="mole">モグラ撃退クエスト</button><button data-ev="moleMe">モグラ撃退（自分が本当に狙われる）</button>
   </div>
-  <p class="dp-note">指定しなくても、景品の減り方に合わせて自動で出ます（ビンゴが速すぎればモグラ撃退、静かすぎれば虹玉）。モグラ撃退では、狙われた人のうち叩いた数が会場の下位に入った人が、リーチのマスを埋められます</p>
+  <p class="dp-note">指定しなくても、景品の減り方に合わせて自動で出ます（ビンゴが速すぎればモグラ撃退、静かすぎれば虹玉）。モグラ撃退では、全員のスマホにボスモグラが出ます。実際にマスを埋められるのは、リーチの人のうち叩いた数が会場の下位に入った人だけです</p>
   <h4>次の番号 <label class="dp-spoil-label"><input type="checkbox" class="dp-spoil" /> ネタバレ表示</label></h4>
   <div class="dp-grid"></div>
   <p class="dp-legend">数字をクリックで次の番号に指定。ネタバレ: <b class="b">B</b>=新規ビンゴ人数 <b class="r">R</b>=新規リーチ人数 ★=あなたがビンゴ ●=あなたがリーチ ・=あなたにヒット</p>
@@ -184,7 +184,7 @@ export class HostView {
         this.status('🌈 全員確定（虹玉）！')
         break
       case 'questStart':
-        this.status(`緊急クエスト「モグラ撃退」— 狙われたリーチ ${m.targets.toLocaleString('ja-JP')} 人。スマホで叩いて守る`)
+        this.status(`緊急クエスト「モグラ撃退」— 全員がスマホで叩く。大ピンチのリーチ ${m.targets.toLocaleString('ja-JP')} 人`)
         break
       case 'questProgress':
         return
@@ -200,7 +200,7 @@ export class HostView {
         break
       case 'awaitPush':
         this.pushReady = true
-        this.status('PUSH を押してください（3 秒で自動）')
+        this.status('「公開する」を押してください（3 秒で自動）')
         break
       case 'numberRevealed':
         this.pushReady = false

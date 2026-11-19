@@ -6,6 +6,7 @@ import { MoleQuest, type MoleQuestResult } from './quest'
 // 緊急クエスト「モグラ撃退」のスマホ側のギャラリー。見本の画面は ui/phone.ts と同じ並び（ステータス・名前・リーチの札・カード・最新の番号・履歴）。
 // 叩く時間は、自動の叩き手がそれらしく叩く（やられる回は下手に、守りきる回は上手に）。
 // 見ている人が画面をタップしたら、自動の叩き手は止まり、そこからは自分で遊べる。
+// 「初めての人」だけは自動の叩き手を付けず、誰も押さないときの遊び方の案内（見本・タップの印・促し）を見る。
 // 大画面がないので、音は警報・合図も含めてすべて鳴らす（sound: 'all'）。
 // 結果のあとは、組み込み側の呼び方の見本として、埋められたマスとリーチの札を描き直す
 
@@ -36,7 +37,7 @@ interface Spec {
   cell: number | null // ボスが狙うマス（狙われていなければ null）
   lost: boolean
   need: number
-  skill: Skill
+  skill: Skill | null // null は自動の叩き手なし（誰も押さないと、遊び方の案内がどう出るかを見る）
 }
 
 const SPECS: Spec[] = [
@@ -69,6 +70,18 @@ const SPECS: Spec[] = [
     lost: false,
     need: 0,
     skill: MID,
+  },
+  {
+    // 遊び方の案内を確かめる: 警報の間の見本 → 顔を出したモグラの「タップ」の印 → 約 2.5 秒で「モグラをタップ！」→ 数秒おきの促し。
+    // 自分でモグラを 1 匹叩くと、印と見本が消える。最後まで押さなければ、リーチでない人の「セーフ！」になる
+    id: 'first',
+    label: '初めての人（自動で叩かない: 見本・タップの印・促し）',
+    mask: bits(1, 12, 19),
+    waiting: [],
+    cell: 19,
+    lost: false,
+    need: 0,
+    skill: null,
   },
 ]
 
@@ -213,7 +226,7 @@ function item(spec: Spec): GalleryItem {
         cell,
         label: cell === null ? '' : label(CARD5[cell]),
       })
-      void autoWhack(q, tl, spec.skill) // play を呼んだあと（警報が始まってから）見張り始める
+      if (spec.skill) void autoWhack(q, tl, spec.skill) // play を呼んだあと（警報が始まってから）見張り始める
       const score = await playing
       // 権威が結果を決めるまで（約 0.8 秒）
       if (!(await hold(tl, 800))) return

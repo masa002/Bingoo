@@ -29,6 +29,11 @@ import './quest.css' // aori.css より後に読み込む（縁取り文字の�
 // 警報と叩く時間の間は、画面のどこを押しても pointerdown を受ける（伝播は止めない）。叩く時間が終わったら、タップを下へ通す。
 // cancel / destroy で途中でも片付く（待っている play は、その時点の数で解決する）。
 //
+// 遊び方の案内（急に始まるので、初めての人でも 1 秒で分かるように）:
+//   警報の間: 下に「出てきたモグラを 指でタップ！」と、指がモグラをトンと押す見本を出す。「よーい…」にも同じ文を添える
+//   叩く時間: 合図は「タップで 叩け！」。最初の 1 匹を叩くまで、顔を出したモグラに指・輪・「タップ」の印を付ける（叩いたら消す）
+//   約 2.5 秒たっても 1 回も押していなければ「モグラをタップ！」を真ん中に出し、そのあとも押すまで数秒おきに控えめにくり返す
+//
 // モグラの出方（×1、10 秒）: 始めは約 0.6 秒ごとに 1 匹・1.1 秒出ている → 終わりは約 0.2 秒ごと・同時に最大 6 匹・0.6 秒。
 // 全部で約 31 匹（29〜33。3×3 のカードは約 28 匹）。叩ける数の目安（仮想の叩き手で見積もった）は、
 // 熱心に叩けば 19〜32 匹（多くは 22〜28、うまい人で 30 前後）、なんとなくなら 3〜13 匹（多くは 5〜10）。
@@ -37,7 +42,7 @@ import './quest.css' // aori.css より後に読み込む（縁取り文字の�
 export interface MoleQuestStart {
   introMs: number // 警報の長さ（大画面とそろえる）
   playMs: number // 叩ける時間
-  target: boolean // 自分のリーチが狙われている
+  target: boolean // ボスモグラが自分のカードを狙っている（リーチでない人にも見せる。実際に埋められるのはリーチの人だけ）
   cell: number | null // ボスモグラが狙う、card のマスの番号（0 から。狙われていなければ null）
   label: string // そのマスの番号（「N38」。狙われていなければ空）
 }
@@ -109,6 +114,7 @@ interface Parts {
   num: HTMLElement
   combo: HTMLElement
   mission: HTMLElement
+  howto: HTMLElement
   res: HTMLElement
   banner: HTMLElement
   fx: HTMLElement
@@ -129,6 +135,8 @@ const COOL = 260 // 同じ穴を次に使えるまで
 const MIN_UP = 380 // 実時間: 速度を上げても、叩けるだけの長さは残す
 const COMBO_GAP = 2000 // 実時間: これより間が空いたら、コンボは切れる（空振りでも切れる）
 const BURST = 420 // 実時間: bossAppear を呼んでから「ドバッ！」と飛び出す音まで（音の担当と合わせた）
+const NUDGE_FIRST = 2500 // 叩く時間が始まってから 1 回も押していない人に、もう一度「モグラをタップ！」と出すまで
+const NUDGE_GAP = 3200 // そのあとも押さない人に、控えめにくり返す間隔
 
 const ONOMA = ['ポカッ', 'ペチッ', 'ボコッ', 'ポコッ', 'バシッ'] as const
 const COMBO_WORD: Readonly<Record<number, string>> = { 5: 'ナイス！', 10: 'すごい！', 15: '達人！', 20: '神業！', 25: '伝説！', 30: '撃退王級！' }
@@ -183,6 +191,12 @@ const HAMMER_SVG = `<svg viewBox="0 0 80 50" aria-hidden="true">
   <rect x="2" y="0" width="28" height="9" rx="4.5" fill="#ffd34d"/>
   <rect x="2" y="35" width="28" height="9" rx="4.5" fill="#ffd34d"/>
   <rect x="8" y="10" width="6" height="24" rx="3" fill="#fff" opacity=".45"/>
+</svg>`
+
+// タップする指（指先は上の (23, 2)）。viewBox は 48×60
+const FINGER_SVG = `<svg viewBox="0 0 48 60" aria-hidden="true">
+  <path d="M17 26 V8 a6 6 0 0 1 12 0 V24 l9 2 a6 6 0 0 1 5 6 V42 a14 14 0 0 1 -14 14 H26 a14 14 0 0 1 -12 -7 L6 36 a5 5 0 0 1 8 -6 Z" fill="#fff" stroke="#1a1405" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M29 26 V33 M36 28 V34" stroke="#1a1405" stroke-width="2.4" stroke-linecap="round"/>
 </svg>`
 
 // ボスが掘り進むひび（マスの中の 0〜100 の座標）。[形, 描き始める進み具合, 描き終わる進み具合]
@@ -246,6 +260,10 @@ export class MoleQuest {
   private dangerShown = -1
   private bannerGen = 0
   private washed = false // 全面の光は 1 回の演出につき 1 回まで
+  private guiding = false // 最初の 1 匹を叩くまで、顔を出したモグラに「ここをタップ」の印を付ける
+  private tapped = false // 叩く時間に 1 回でも押した
+  private nudgeAt = 0 // 次に「モグラをタップ！」と促す時刻（実時間）
+  private nudges = 0
   private raf = 0
   private onScore: ((score: number) => void) | null = null
   private readonly gates = new Map<string, number>()
@@ -278,6 +296,7 @@ export class MoleQuest {
     set('--fxq-spin-ms', 12000, 10000)
     set('--fxq-drift-ms', 2400, 1200)
     set('--fxq-dots-ms', 1500, 1000)
+    set('--fxq-tap-ms', 1300, 1000) // 案内の指と輪（1 秒に 1 回より速くしない）
   }
 
   // play からの演出上の ms
@@ -398,6 +417,10 @@ export class MoleQuest {
           <div class="fxq-combo"></div>
         </div>
         <div class="fxq-mission"></div>
+        <div class="fxq-howto">
+          <div class="fxq-demo"><i class="fxq-demo-pit"></i><div class="fxq-demo-clip"><div class="fxq-demo-mole">${MOLE_SVG}</div></div><i class="fxq-demo-ring"></i><i class="fxq-finger">${FINGER_SVG}</i></div>
+          <div class="fxq-howto-txt"><b>出てきたモグラを<br>指でタップ！</b><small>このあとすぐ、カードのマスから顔を出す</small></div>
+        </div>
       </div>
       <div class="fxq-resbox"></div>
       <canvas class="fxq-px"></canvas>
@@ -424,7 +447,7 @@ export class MoleQuest {
       const node = el(
         'div',
         'fxq-hole',
-        `<i class="fxq-pit"></i><div class="fxq-clip"><div class="fxq-mole">${MOLE_SVG}${DAZE_SVG}</div></div>`,
+        `<i class="fxq-pit"></i><div class="fxq-clip"><div class="fxq-mole">${MOLE_SVG}${DAZE_SVG}</div></div><i class="fxq-cue"><i class="fxq-cue-ring"></i><i class="fxq-finger">${FINGER_SVG}</i><b>タップ</b></i>`,
       )
       node.style.cssText = `left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px`
       node.dataset.i = String(i)
@@ -460,6 +483,7 @@ export class MoleQuest {
       num: $('.fxq-num'),
       combo: $('.fxq-combo'),
       mission: $('.fxq-mission'),
+      howto: $('.fxq-howto'),
       res: $('.fxq-resbox'),
       banner: $('.fxq-banner'),
       fx: $('.fxq-fx'),
@@ -533,6 +557,7 @@ export class MoleQuest {
       this.spawnUntil(t, real)
       this.drawTimer(t, k)
       if (this.boss) this.drawDanger(k)
+      this.nudge(t, real)
       if (k >= 1) this.finish()
     }
     this.retire(real)
@@ -581,7 +606,7 @@ export class MoleQuest {
       else this.teaser(I * 0.3)
     })
     tl.at(I * 0.78, () => ok() && this.reveal(p.hud, -24))
-    tl.at(I * 0.84, () => ok() && void this.showBanner(`<div class="fxq-ban is-ready">${txt('よーい…')}</div>`, -1))
+    tl.at(I * 0.84, () => ok() && void this.showBanner(`<div class="fxq-ban is-ready">${txt('よーい…')}<div class="fxq-ban-note">出てきたモグラを 指でタップ！</div></div>`, -1))
   }
 
   // ボスが狙うマスから出てきて、ひと言いってから潜る（until は潜り始めるまでの演出上の ms）。潜ったあとは影・ひび・照準が残る。
@@ -649,14 +674,20 @@ export class MoleQuest {
     this.el.classList.remove('is-alarm')
     this.nextAt = this.introMs + FIRST
     this.cue(() => sfx.questGo())
+    // 最初の 1 匹を叩くまで、顔を出したモグラに「ここをタップ」の印を付ける
+    this.guiding = true
+    this.el.classList.add('is-guide')
+    this.nudgeAt = performance.now() + this.real(NUDGE_FIRST, 1200)
     const p = this.parts
     if (!p) return
     this.setMission('play')
+    const sub = p.howto.querySelector('small')
+    if (sub) sub.textContent = '顔を出したら、引っ込む前にタップ'
     this.reveal(p.floor, 0)
     this.reveal(p.panel, 0)
     this.reveal(p.hud, 0)
     if (this.boss && !this.armed) this.arm(200)
-    void this.showBanner(`<div class="fxq-ban is-go">${txt('叩け！')}</div>`, 220)
+    void this.showBanner(`<div class="fxq-ban is-go"><div class="fxq-ban-pre">${txt('タップで')}</div>${txt('叩け！')}</div>`, 260)
   }
 
   // 叩く時間の終わり。叩いた数で play を解決し、タップを下へ通す
@@ -665,13 +696,15 @@ export class MoleQuest {
     const real = performance.now()
     this.phase = 'over'
     this.el.dataset.phase = 'over'
-    this.el.classList.remove('is-live', 'is-alarm')
+    this.el.classList.remove('is-live', 'is-alarm', 'is-guide')
+    this.guiding = false
     this.overAt = real
     for (const h of this.holes) if (h.state === 'up') this.lower(h, real, true)
     const p = this.parts
     if (p) {
       p.fill.style.transform = 'scaleX(0)'
       p.sec.textContent = '0'
+      p.howto.style.visibility = 'hidden' // 1 匹も叩かないまま終わった人の見本も、ここで消す
       void this.showBanner(`<div class="fxq-ban is-end">${txt('そこまで！')}</div>`, 520)
       this.setMission('wait')
     }
@@ -817,6 +850,7 @@ export class MoleQuest {
       return
     }
     if (this.phase !== 'play') return
+    this.tapped = true
     const real = performance.now()
     const h = this.holeAt(pt, real)
     if (h) this.whack(h, pt, real)
@@ -889,6 +923,7 @@ export class MoleQuest {
     this.drawScore()
     this.drawCombo()
     if (this.boss) this.flinch()
+    if (this.guiding) this.endGuide()
   }
 
   // 空振り: 小さなハンマーと土ぼこりだけ（控えめに）。コンボは切れる
@@ -1003,6 +1038,28 @@ export class MoleQuest {
       const b = boxIn(p.combo, this.el)
       this.px?.burst(b.x + b.w / 2, b.y + b.h / 2, { count: 24, colors: c >= 10 ? GOLD : SPARK, speed: 6, gravity: 0.15, life: 34, size: 5, shape: 'spark' })
     }
+  }
+
+  // ---- 遊び方の案内 -------------------------------------------------------------
+
+  // 最初の 1 匹を叩いた: モグラの「ここをタップ」の印と、下の見本を消す
+  private endGuide(): void {
+    this.guiding = false
+    this.el.classList.remove('is-guide')
+    const node = this.parts?.howto
+    if (node) void play(node, [{ opacity: 1 }, { opacity: 0 }], 260, this.tl, { fill: 'forwards' })
+  }
+
+  // 叩く時間が始まっても 1 回も押していない人に、もう一度はっきり「モグラをタップ！」と出す。
+  // そのあとも押さなければ、時計の下のひと言で控えめにくり返す（押したら、もう出さない）
+  private nudge(t: number, real: number): void {
+    const p = this.parts
+    if (!p || this.tapped || real < this.nudgeAt) return
+    this.nudgeAt = real + this.real(NUDGE_GAP, 1800)
+    if (t > this.introMs + this.playMs - 1300) return // 終わりの間際には出さない（「そこまで！」とぶつかる）
+    if (this.nudges++ === 0) void this.showBanner(`<div class="fxq-ban is-nudge"><i class="fxq-finger">${FINGER_SVG}</i>${txt('モグラをタップ！')}</div>`, 760)
+    else this.hypeText('出てきたモグラを タップ！')
+    if (!this.still && this.guiding) this.anim(p.howto, [{ transform: 'scale(1)' }, { transform: 'scale(1.06)', offset: 0.4 }, { transform: 'scale(1)' }], 360, { min: 220 })
   }
 
   // ---- 時計とあおり -------------------------------------------------------------
@@ -1247,8 +1304,9 @@ export class MoleQuest {
       sfx.questDefend()
       this.washOnce()
     }
-    const lbl = this.label ? `${escapeHtml(this.label)} を守りきった！` : 'リーチを守りきった！'
-    void this.showBanner(`<div class="fxq-ban is-win"><div class="fxq-ban-main">${txt('防衛成功！')}</div><div class="fxq-ban-note">${lbl}</div></div>`, 900)
+    // 1 匹も叩かずに済んだ人には「守りきった」とは言わない
+    const lbl = r.score < 1 ? 'モグラはあきらめて帰っていった' : this.label ? `${escapeHtml(this.label)} を守りきった！` : 'カードを守りきった！'
+    void this.showBanner(`<div class="fxq-ban is-win"><div class="fxq-ban-main">${txt(r.score < 1 ? 'セーフ！' : '防衛成功！')}</div><div class="fxq-ban-note">${lbl}</div></div>`, 900)
     await tl.wait(1150)
     if (!alive()) return
     this.showResult(this.resultHtml('win', r))
@@ -1275,14 +1333,15 @@ export class MoleQuest {
     const rank = `<span>会場 <b>${fmt(r.rank)}</b> 位 / ${fmt(r.players)} 人</span>`
     const combo = this.best >= 5 ? `<span>最大 <b>${this.best}</b> COMBO</span>` : ''
     const king = r.rank >= 1 && r.rank <= 3 ? `<div class="fxq-king">★ 撃退王 第${r.rank}位！</div>` : ''
-    const chip = this.label ? `<b class="fxq-chip">${escapeHtml(this.label)}</b>` : 'リーチ'
+    const chip = this.label ? `<b class="fxq-chip">${escapeHtml(this.label)}</b>` : 'カード'
     if (kind === 'lost') {
       const main = r.need >= 1 ? `あと <b>${fmt(r.need)}</b> 匹 叩けば守れた！` : 'あと一歩で守れた！'
       return `<div class="fxq-res is-lost"><div class="fxq-res-head"><i>▼</i>守りきれなかった…</div><div class="fxq-res-main">${main}</div>
         <div class="fxq-res-sub"><span>ナイスファイト！</span><span>撃退 <b>${fmt(r.score)}</b> 匹</span>${rank}${combo}</div>${king}</div>`
     }
     if (kind === 'win') {
-      return `<div class="fxq-res is-win"><div class="fxq-res-head"><i>★</i>防衛成功</div><div class="fxq-res-main">${chip} を守りきった！</div>
+      const [head, main] = r.score < 1 ? ['セーフ', `${chip} は無事だった`] : ['防衛成功', `${chip} を守りきった！`]
+      return `<div class="fxq-res is-win"><div class="fxq-res-head"><i>★</i>${head}</div><div class="fxq-res-main">${main}</div>
         <div class="fxq-res-sub"><span>撃退 <b>${fmt(r.score)}</b> 匹</span>${rank}${combo}</div>${king}</div>`
     }
     return `<div class="fxq-res is-free"><div class="fxq-res-head"><i>✦</i>あなたの結果</div><div class="fxq-res-main">撃退 <b class="fxq-count">${this.still ? fmt(r.score) : '0'}</b> 匹</div>
@@ -1400,11 +1459,11 @@ export class MoleQuest {
     if (!node) return
     const chip = this.label ? `<b class="fxq-chip">${escapeHtml(this.label)}</b>` : ''
     const dots = '<em class="fxq-dots"><i>.</i><i>.</i><i>.</i></em>'
-    const sub = this.target ? '叩いた数が 会場の下位だと やられる' : '叩いた数は 会場の合計と撃退王に入る'
+    const sub = this.target ? '叩いた数が 会場の下位だと やられる' : '会場みんなで モグラを追い返せ'
     let head: string
     if (kind === 'wait') head = `<i>…</i><span>${this.target ? '判定中' : '集計中'}${dots}`
-    else if (this.target) head = kind === 'intro' ? `<i>▲</i><span>ボスモグラが ${chip || 'あなたのリーチ'} を狙っている！` : `<i>▲</i><span>${chip || 'リーチ'} を守れ！`
-    else head = kind === 'intro' ? '<i>✦</i><span>あなたは狙われていない' : '<i>✦</i><span>失うものはなし！ どんどん叩け'
+    else if (this.target) head = kind === 'intro' ? `<i>▲</i><span>ボスモグラが ${chip || 'あなたのカード'} を狙っている！` : `<i>▲</i><span>${chip || 'カード'} を守れ！`
+    else head = kind === 'intro' ? '<i>✦</i><span>モグラが会場に来た！' : '<i>✦</i><span>どんどん叩け！'
     node.innerHTML = `${head}<small>${sub}</small></span>`
   }
 
@@ -1472,6 +1531,10 @@ export class MoleQuest {
     this.hyped = 0
     this.dangerShown = -1
     this.washed = false
+    this.guiding = false
+    this.tapped = false
+    this.nudgeAt = 0
+    this.nudges = 0
     this.gates.clear()
     done?.(score)
   }

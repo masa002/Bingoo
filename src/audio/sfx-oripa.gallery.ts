@@ -3,10 +3,8 @@ import { registerGallery, type GalleryItem } from '../fx/gallery'
 import { el, type Timeline } from '../fx/runtime'
 import { engine, sfx } from './index'
 
-// オリパのお約束の合図（先バレ「ポヒュン！」・「プチュン」・復活）の効果音のギャラリー（URL に ?gallery を付けると開く）。
-// 1 つずつの音と、本番に近い流れを登録する:
-//   - 回り出す音 spinStart に pohyun を重ねる（先バレなしとの聞き比べ、すぐ連打が始まる場合）
-//   - プチュン → 暗転（約 0.5 秒）→ 復活 → aoriSuccess（赤・金・虹）
+// オリパのお約束の合図（「プチュン」・復活）の効果音のギャラリー（URL に ?gallery を付けると開く）。
+// 1 つずつの音と、本番に近い流れ（プチュン → 暗転（約 0.5 秒）→ 復活 → aoriSuccess（赤・金・虹））を登録する。
 // 画面には、音の名前と説明、いまの場面を出す。暗転のあいだは画面も暗くする
 
 type Cue = readonly [ms: number, fn: () => void]
@@ -85,22 +83,6 @@ const sayAnd =
     fn()
   }
 
-// 回り出す音に、先バレを重ねる
-function spinWith(): void {
-  sfx.spinStart()
-  sfx.pohyun()
-}
-
-// from ms から len ms のあいだの連打（1 秒に 12 回ほど。ゲージは 0 → 0.8 へ上がる）
-function taps(from: number, len: number): Cue[] {
-  const list: Cue[] = []
-  for (let ms = from; ms < from + len; ms += 70 + Math.random() * 30) {
-    const power = (0.8 * (ms - from)) / len
-    list.push([ms, () => sfx.spinTap(power)])
-  }
-  return list
-}
-
 // プチュン → 暗転 → 復活 → 成功。from はプチュンを鳴らす時刻
 function reviveCues(v: View, from: number, tier: Tier): Cue[] {
   return [
@@ -120,19 +102,6 @@ function reviveCues(v: View, from: number, tier: Tier): Cue[] {
 
 registerGallery(
   // ---- 1 つずつ -----------------------------------------------------------------
-  item(
-    'pohyun',
-    'pohyun 先バレ「ポヒュン！」',
-    '0.5 秒。丸い「ポ」→ 0.085 秒から、澄んだ口笛が「ヒュン」と上へ抜ける（0.25 秒あたりがいちばん大きい）→ 小さく「キラッ」',
-    once(sfx.pohyun, 1500),
-  ),
-  item('pohyun-3', 'pohyun 3 回（1 秒おき）', '何度聞いても同じ合図だと分かるか', (tl, v) =>
-    cue(
-      tl,
-      3500,
-      [0, 1000, 2000].map((ms, i): Cue => [ms, sayAnd(v, `${i + 1} 回目`, sfx.pohyun)]),
-    ),
-  ),
   item(
     'puchun',
     'puchun「プチュン」',
@@ -155,33 +124,6 @@ registerGallery(
       [0, sayAnd(v, '復活！', sfx.revive)],
       [REVIVE, sayAnd(v, '成功（aoriSuccess 金）', () => sfx.aoriSuccess(3))],
     ]),
-  ),
-
-  // ---- 流れ: 先バレ --------------------------------------------------------------
-  item(
-    'spin-pohyun',
-    'spinStart に pohyun を重ねる',
-    '抽選が始まった瞬間。回り出す音（カチャッ・モーター・風切り）の上で、先バレが聞き分けられるか',
-    (tl, v) => cue(tl, 1800, [[0, sayAnd(v, '先バレ！', spinWith)]]),
-    FLOW,
-  ),
-  item(
-    'spin-compare',
-    '聞き比べ: spinStart だけ → 先バレあり',
-    'いつもの回り出し（先バレなし）のあと、2 秒後に先バレありを鳴らす',
-    (tl, v) =>
-      cue(tl, 4000, [
-        [0, sayAnd(v, 'いつもの回り出し（先バレなし）', sfx.spinStart)],
-        [2000, sayAnd(v, '先バレ！', spinWith)],
-      ]),
-    FLOW,
-  ),
-  item(
-    'spin-pohyun-taps',
-    '先バレ → すぐ連打が始まる',
-    '回り出しから 0.25 秒で連打（1 秒に 12 回ほど）が始まっても、先バレが埋もれないか',
-    (tl, v) => cue(tl, 2600, [[0, sayAnd(v, '先バレ！', spinWith)], ...taps(250, 1700)]),
-    FLOW,
   ),
 
   // ---- 流れ: プチュン → 復活 -----------------------------------------------------
