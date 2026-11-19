@@ -1,0 +1,903 @@
+/* 本番の主催の画面（ゲームを作る・ログイン・主催コンソール）。クラス名は lh- で始める。
+   色と形は、デモの主催コンソール（styles.css の .hc）に合わせる。色の変数は styles.css の :root のもの。
+   司会が立ったまま、スマホでも押せるように、押すものは 44px 以上にする */
+
+.lh {
+  /* デモの #app の枠組み（上に 40px の帯）に左右されないよう、画面いっぱいに自分で敷く */
+  position: fixed;
+  inset: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  background: radial-gradient(1200px 700px at 50% -200px, #16204a, #05070f 75%) fixed #05070f;
+  color: var(--text, #e8ecff);
+  font-family: var(--font, system-ui, sans-serif);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-text-size-adjust: 100%;
+}
+
+.lh [hidden] {
+  display: none !important;
+}
+
+/* 下の 2 つは土台。:where で重みをなくして、あとのクラスの指定がそのまま効くようにする */
+:where(.lh) :where(h1, h2, h3, p) {
+  margin: 0;
+}
+
+:where(.lh) :where(button, input, textarea, select) {
+  font: inherit;
+  color: inherit;
+}
+
+.lh :focus-visible {
+  outline: 3px solid #5ad2ff;
+  outline-offset: 2px;
+}
+
+.lh-brand {
+  width: fit-content;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  background: var(--rainbow-face);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ---- ボタン ---------------------------------------------------------------- */
+
+/* 主ボタン（いま押してほしいボタン）は金。1 つの画面に 1 つだけ */
+.lh-primary,
+.lh-next {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 14px;
+  background: var(--primary);
+  color: var(--primary-ink);
+  font-weight: 900;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.lh-primary {
+  margin-top: 20px;
+  padding: 16px;
+  min-height: 60px;
+  font-size: 20px;
+}
+
+/* 押せないボタンは灰色の枠だけ。いま押すものだけが光る（デモと同じ） */
+.lh-primary:disabled,
+.lh-next:disabled {
+  background: none;
+  box-shadow: inset 0 0 0 2px #2a3360;
+  color: #6672a3;
+  opacity: 1;
+  cursor: default;
+}
+
+.lh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid #3a4680;
+  border-radius: 10px;
+  background: #141c44;
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.lh-btn:hover:not(:disabled) {
+  border-color: #5a69b0;
+  background: #1a2452;
+}
+
+.lh-btn.on,
+.lh-btn.done {
+  border-color: var(--gold);
+  background: var(--gold);
+  color: #1a1400;
+}
+
+/* 取り返しのつかない操作は、主ボタンにしない。赤い枠で、ほかと違うことだけ伝える */
+.lh-btn.lh-danger {
+  border-color: #b4474f;
+  background: #2a1220;
+  color: #ffb4b4;
+}
+
+.lh-btn.lh-danger:hover:not(:disabled) {
+  border-color: #ef4444;
+  background: #3a1626;
+}
+
+.lh-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ---- カード（ゲームを作る・ログイン・知らせ） ------------------------------ */
+
+.lh-card {
+  width: min(640px, 100% - 24px);
+  margin: 24px auto 48px;
+  padding: 22px 20px 26px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--pane);
+}
+
+.lh-card.lh-narrow {
+  width: min(440px, 100% - 24px);
+}
+
+.lh-card h1 {
+  margin-top: 2px;
+  font-size: 26px;
+  font-weight: 900;
+}
+
+.lh-card h2 {
+  margin: 24px 0 8px;
+  font-size: 17px;
+}
+
+.lh-card .lh-btn {
+  margin-top: 16px;
+}
+
+.lh-lead {
+  margin-top: 14px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.lh-code {
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+.lh-code b {
+  margin-left: 6px;
+  color: var(--gold);
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  vertical-align: -3px;
+}
+
+.lh-field {
+  display: block;
+  margin-top: 16px;
+}
+
+.lh-field > span {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 700;
+}
+
+.lh-field > span i {
+  margin-left: 4px;
+  color: var(--muted);
+  font-style: normal;
+  font-weight: 400;
+}
+
+.lh-field input,
+.lh-field textarea {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid #3a4680;
+  border-radius: 10px;
+  background: #080c1c;
+  font-size: 17px;
+}
+
+.lh-field textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.lh-field input[name='totp'] {
+  letter-spacing: 6px;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 22px;
+}
+
+.lh-note {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.lh-error,
+.lh-warn {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+.lh-error {
+  border-left: 4px solid var(--red);
+  background: #2a1220;
+  color: #ffc9c9;
+}
+
+.lh-warn {
+  border-left: 4px solid var(--gold);
+  background: #2a2208;
+  color: #ffe9a8;
+  font-size: 15px;
+}
+
+/* チェックの行。小さな四角だけでなく、行のどこを押しても切り替わる */
+.lh-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  margin-top: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.lh-check input {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  accent-color: var(--gold);
+}
+
+/* 景品の数: 数字の欄と、よく使う数のボタン */
+.lh-count {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.lh-count:first-child {
+  border-top: 0;
+  padding-top: 4px;
+}
+
+.lh-count label {
+  display: contents;
+  font-weight: 700;
+}
+
+.lh-num {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 400;
+}
+
+.lh-num input {
+  width: 96px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid #3a4680;
+  border-radius: 10px;
+  background: #080c1c;
+  font-size: 20px;
+  font-weight: 900;
+  text-align: right;
+}
+
+.lh-chips {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.lh-chips button {
+  min-width: 56px;
+  min-height: 40px;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #121a3e;
+  cursor: pointer;
+}
+
+.lh-chips button.on {
+  border-color: var(--gold);
+  background: var(--gold);
+  color: #1a1400;
+  font-weight: 800;
+}
+
+.lh-count small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.lh-names {
+  margin-top: 8px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #0d1330;
+}
+
+.lh-names[open] {
+  padding-bottom: 16px;
+}
+
+.lh-names summary,
+.lh-rehearsal summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+  min-height: 48px;
+  padding: 8px 0;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.lh-names summary::before,
+.lh-rehearsal summary::before {
+  content: '▸';
+  color: var(--gold);
+}
+
+.lh-names[open] summary::before,
+.lh-rehearsal[open] summary::before {
+  content: '▾';
+}
+
+.lh-names summary::-webkit-details-marker,
+.lh-rehearsal summary::-webkit-details-marker {
+  display: none;
+}
+
+.lh-names summary small {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 400;
+}
+
+/* 主催キー・認証アプリの箱。この画面でしか見られないものなので、ほかより目立たせる */
+.lh-keybox {
+  margin-top: 18px;
+  padding: 2px 16px 16px;
+  border: 2px solid var(--gold);
+  border-radius: 14px;
+  background: #151a38;
+}
+
+.lh-keybox h2 {
+  margin-top: 14px;
+}
+
+.lh-secret {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.lh-secret code {
+  flex: 1 1 200px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #05070f;
+  color: #fff4cc;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  word-break: break-all;
+  user-select: all;
+}
+
+.lh-secret .lh-btn {
+  margin-top: 0;
+}
+
+.lh-totp {
+  width: min(220px, 70%);
+  margin: 12px auto;
+}
+
+.lh-qr {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+/* URL の行 */
+.lh-url {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 4px 8px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.lh-url > span {
+  grid-column: 1 / -1;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.lh-url input {
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #080c1c;
+  color: #c9d2ff;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 14px;
+}
+
+.lh-url .lh-btn {
+  margin-top: 0;
+}
+
+.lh-kept {
+  margin-top: 24px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.lh-kept + .lh-primary {
+  margin-top: 12px;
+}
+
+/* ---- 主催コンソール -------------------------------------------------------- */
+
+.lh-console {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 12px 40px;
+}
+
+.lh-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 10px 2px 8px;
+}
+
+.lh-tag {
+  font-weight: 700;
+}
+
+.lh-game {
+  color: var(--muted);
+}
+
+.lh-game b {
+  color: var(--gold);
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 18px;
+  letter-spacing: 2px;
+}
+
+/* 接続の状態。つながっているときは小さく、切れているときは目立たせる */
+.lh-link {
+  margin-left: auto;
+  padding: 2px 12px;
+  border-radius: 999px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.lh-link::before {
+  content: '●';
+  margin-right: 6px;
+  color: var(--green);
+}
+
+.lh-link:not([data-s='live']) {
+  background: var(--gold);
+  color: #1a1400;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.lh-link:not([data-s='live'])::before {
+  content: '▲';
+  color: #1a1400;
+}
+
+.lh-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.lh-col {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  min-width: 0;
+}
+
+/* いまの状況と主ボタン。スマホでは、下の一覧を見ている間も画面の上に残す */
+.lh-main {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin: 0 -12px;
+  padding: 8px 12px 10px;
+  background: linear-gradient(#0a0f24 92%, transparent);
+}
+
+/* いま何をすればいいかは、ここに 1 行で出す。主催コンソールでいちばん読む場所 */
+.lh-status {
+  display: flex;
+  align-items: center;
+  min-height: 3.5em;
+  padding: 10px 14px;
+  border-left: 5px solid var(--gold);
+  border-radius: 10px;
+  background: #121a3e;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.lh-next {
+  margin-top: 10px;
+  min-height: 84px;
+  padding: 14px;
+  font-size: 28px;
+  box-shadow: 0 6px 24px #f5c54233;
+}
+
+.lh-next:not(:disabled):active {
+  transform: translateY(2px);
+}
+
+.lh-under {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 16px;
+  margin-top: 6px;
+}
+
+.lh-auto {
+  margin-top: 0;
+  padding: 0 12px 0 4px;
+}
+
+.lh-keys {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* Space キーの案内は、キーボードのない端末では出さない */
+@media (hover: none) {
+  .lh-keys {
+    display: none;
+  }
+}
+
+.lh-notice {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #2a2208;
+  color: #ffe9a8;
+  font-weight: 700;
+}
+
+/* 数字 */
+.lh-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 8px;
+}
+
+.lh-stat {
+  padding: 8px 12px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--pane);
+  line-height: 1.3;
+}
+
+.lh-stat span {
+  display: block;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.lh-stat b {
+  font-size: 28px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.lh-stat small {
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.lh-stat em {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  font-style: normal;
+}
+
+.lh-panel {
+  padding: 14px 16px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--pane);
+  min-width: 0;
+}
+
+.lh-panel h2,
+.lh-panel h3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  margin-bottom: 10px;
+  font-size: 17px;
+}
+
+.lh-panel h3 {
+  margin-top: 16px;
+  font-size: 16px;
+}
+
+.lh-panel :is(h2, h3) small {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.lh-share-in {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.lh-share-qr span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.lh-share-urls .lh-url:first-child {
+  margin-top: 0;
+}
+
+@media (max-width: 460px) {
+  .lh-share-in {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lh-share-qr {
+    width: 180px;
+    margin: 0 auto;
+  }
+}
+
+/* 当選者の一覧 */
+.lh-table {
+  max-height: 420px;
+  margin-top: 10px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.lh-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+.lh-table th,
+.lh-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.lh-table th {
+  position: sticky;
+  top: 0;
+  background: #121a3e;
+  color: var(--muted);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.lh-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.lh-table td:first-child {
+  font-weight: 700;
+}
+
+.lh-table td:nth-child(n + 3) {
+  white-space: nowrap;
+}
+
+/* 仮想の参加者は、色を落として札を付ける（景品を渡す相手ではない） */
+.lh-table tr.bot td {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.lh-table td i {
+  margin-left: 6px;
+  padding: 1px 8px;
+  border: 1px solid #55608f;
+  border-radius: 999px;
+  font-size: 12px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+/* ランクの色は、ほかの画面と同じ（C 銀、R 青緑、SR 金、UR 虹） */
+.lh-table b[data-r='C'] {
+  color: #c0c6d6;
+}
+
+.lh-table b[data-r='R'] {
+  color: #2dd4bf;
+}
+
+.lh-table b[data-r='SR'] {
+  color: #f5c542;
+}
+
+.lh-table b[data-r='UR'] {
+  background: var(--rainbow-face);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* リハーサルとやり直しは、本番中にまちがって押さないよう、たたんでおく */
+.lh-rehearsal {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.lh-rehearsal[open] {
+  padding-bottom: 16px;
+}
+
+.lh-hash {
+  color: #6b75a3;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+/* 確かめの窓 */
+.lh-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: #02030acc;
+}
+
+.lh-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(520px, 100%);
+  max-height: 100%;
+  border: 1px solid #3a4680;
+  border-radius: 16px;
+  background: #0d1330;
+}
+
+.lh-dialog h2 {
+  padding: 20px 20px 0;
+  font-size: 21px;
+  font-weight: 900;
+}
+
+/* 中身が長いとき（景品の数を変える）は、中だけを送る。ボタンは、いつも見えている */
+.lh-dialog-body {
+  min-height: 0;
+  padding: 0 20px 4px;
+  overflow: auto;
+}
+
+.lh-dialog-body p {
+  margin-top: 10px;
+}
+
+.lh-dialog-body .lh-counts {
+  margin-top: 4px;
+}
+
+.lh-dialog-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 16px 20px 20px;
+}
+
+.lh-dialog-btns .lh-btn {
+  flex: 1 1 160px;
+  min-height: 52px;
+  white-space: normal;
+}
+
+/* PC では 2 列。左に進行（状況・主ボタン・数字・イベント）、右に URL・当選者・リハーサル */
+@media (min-width: 900px) {
+  .lh-console {
+    padding: 0 20px 48px;
+  }
+
+  .lh-grid {
+    grid-template-columns: minmax(0, 11fr) minmax(0, 9fr);
+    gap: 18px;
+  }
+
+  .lh-col:first-child {
+    position: sticky;
+    top: 0;
+  }
+
+  .lh-main {
+    position: static;
+    margin: 0;
+    padding: 0;
+    background: none;
+  }
+
+  .lh-status {
+    font-size: 20px;
+  }
+
+  .lh-next {
+    min-height: 104px;
+    font-size: 34px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lh-next:not(:disabled):active {
+    transform: none;
+  }
+}

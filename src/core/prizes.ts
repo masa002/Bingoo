@@ -2,6 +2,7 @@ import { hash128, type Rng } from './rng'
 
 export type Rarity = 'C' | 'R' | 'SR' | 'UR'
 export type Glow = 'white' | 'gold' | 'rainbow' // パックの光（先バレ。ガセあり）
+export type BallColor = 'white' | 'red' | 'gold' | 'rainbow' // ガラポンの玉の色
 
 export const RANKS: readonly Rarity[] = ['C', 'R', 'SR', 'UR']
 
@@ -18,17 +19,33 @@ const NAMES: Record<Rarity, string[]> = {
   C: ['お菓子詰め合わせ', 'ドリップコーヒーセット', 'ハンドクリーム', 'オリジナルステッカー', 'エコバッグ', '入浴剤セット'],
 }
 
+// 景品の名前の指定（本番で、主催が実際の景品を入れる）。指定のないランクは見本の名前を使う。
+// 名前は 1 個ずつ。数より少なければ、頭から繰り返す
+export type PrizeNames = Partial<Record<Rarity | 'DC', string[]>>
+
+export interface StockDump {
+  lists: Record<Rarity, Prize[]>
+  lowerTotal: number
+  upperTotal: number
+  nextId: number
+}
+
 const DC_NAMES = ['ダブルチャンス賞 お菓子セット', 'ダブルチャンス賞 QUO カード', 'ダブルチャンス賞 ご当地グルメ']
 
 // 景品の在庫。下位（C・R）は通常のビンゴ、上位（SR・UR）は上位チャレンジ用。
 // 一番くじ型で数が決まっていて、足りなければ 1 つ上のランクから出す
 export class PrizeStock {
-  private readonly lists: Record<Rarity, Prize[]> = { C: [], R: [], SR: [], UR: [] }
-  readonly lowerTotal: number
-  readonly upperTotal: number
+  private lists: Record<Rarity, Prize[]> = { C: [], R: [], SR: [], UR: [] }
+  lowerTotal: number
+  upperTotal: number
   private nextId = 1
 
-  constructor(lower: number, upper: number, rng: Rng) {
+  constructor(
+    lower: number,
+    upper: number,
+    rng: Rng,
+    private readonly names: PrizeNames = {},
+  ) {
     const r = Math.max(lower >= 3 ? 1 : 0, Math.round(lower * 0.3))
     this.add('R', r)
     this.add('C', lower - r)
@@ -89,13 +106,28 @@ export class PrizeStock {
     return RANKS.flatMap((r) => this.lists[r].map((p) => `${p.id}:${r}:${p.name}`))
   }
 
+  dump(): StockDump {
+    return { lists: this.lists, lowerTotal: this.lowerTotal, upperTotal: this.upperTotal, nextId: this.nextId }
+  }
+
+  static load(d: StockDump): PrizeStock {
+    const stock = new PrizeStock(0, 0, { shuffle: <T>(x: T[]) => x } as Rng)
+    stock.lists = d.lists
+    stock.lowerTotal = d.lowerTotal
+    stock.upperTotal = d.upperTotal
+    stock.nextId = d.nextId
+    return stock
+  }
+
   private add(rarity: Rarity, k: number): void {
-    for (let i = 0; i < k; i++) this.lists[rarity].push({ id: this.nextId++, rarity, name: NAMES[rarity][i % NAMES[rarity].length] })
+    const names = this.names[rarity]?.length ? this.names[rarity]! : NAMES[rarity]
+    for (let i = 0; i < k; i++) this.lists[rarity].push({ id: this.nextId++, rarity, name: names[i % names.length] })
   }
 }
 
-export function doubleChancePrizes(count: number): Prize[] {
-  return Array.from({ length: count }, (_, i) => ({ id: 1000 + i, rarity: 'C' as const, name: DC_NAMES[i % DC_NAMES.length] }))
+export function doubleChancePrizes(count: number, names?: string[]): Prize[] {
+  const list = names?.length ? names : DC_NAMES
+  return Array.from({ length: count }, (_, i) => ({ id: 1000 + i, rarity: 'C' as const, name: list[i % list.length] }))
 }
 
 // 開封の見た目。パックの光はガセを混ぜ、カードの縁はレア度どおりに出す
@@ -113,7 +145,7 @@ export function packLook(rarity: Rarity | null, rng: Rng): { glow: Glow; upgrade
 // 抽選順と景品の並びをまとめたハッシュ。終了後にシードを公開すれば、誰でも照合できる
 export async function commitHash(deck: readonly number[], manifest: readonly string[], salt: string): Promise<string> {
   const text = JSON.stringify({ deck, manifest, salt })
-  if (globalThis.crypto?.subtle) {
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
     return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('')
   }

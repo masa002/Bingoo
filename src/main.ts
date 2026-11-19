@@ -14,8 +14,10 @@ import { StageView } from './ui/stage'
 const app = q(document, '#app')
 const params = new URLSearchParams(location.search)
 
-// ?gallery で、演出と音を 1 つずつ確かめるギャラリーを開く
-if (params.has('gallery')) void import('./gallery/main').then((m) => m.mountGallery(app))
+// ?g=CODE（参加者・大画面・主催コンソール）と ?host（ゲームを作る）は、サーバーにつなぐ本番の画面。
+// ?gallery で、演出と音を 1 つずつ確かめるギャラリーを開く。何も付けなければ、いままでのデモ
+if (params.has('g') || params.has('host')) void import('./live/main').then((m) => m.mountLive(app, params))
+else if (params.has('gallery')) void import('./gallery/main').then((m) => m.mountGallery(app))
 else startDemo()
 
 function startDemo(): void {

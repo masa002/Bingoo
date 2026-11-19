@@ -1,0 +1,33 @@
+// Bingoo の本番（Cloudflare Workers + Durable Objects）。構成は docs/tech-selection.md、手順は docs/deploy.md
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "bingoo",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-11-01",
+
+  // 画面（Vite のビルド結果）も同じ Worker から配る。/api だけ Worker が先に受ける（ほかは、Worker を起こさずに配られる）
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+
+  // GAME: ゲームごとに 1 つ（進行役）。ROOM: 接続の受け口（参加者 800 人ごとに 1 つ + 大画面・主催用の 'crew'）
+  "durable_objects": {
+    "bindings": [
+      { "name": "GAME", "class_name": "GameDO" },
+      { "name": "ROOM", "class_name": "RoomDO" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameDO", "RoomDO"] }],
+
+  "observability": { "enabled": true }
+
+  // 状態の退避先（R2）。R2 を有効にして `npx wrangler r2 bucket create bingoo-backup` を打ったら、
+  // 上の行の終わりに , を足して、下のコメントを外す。なくても動く（退避しないだけ）
+  // "r2_buckets": [{ "binding": "BACKUP", "bucket_name": "bingoo-backup" }]
+
+  // 秘密の値（wrangler.jsonc には書かない）:
+  //   ADMIN_KEY … ゲームを作るときの管理キー。本番は `npx wrangler secret put ADMIN_KEY`、手元は .dev.vars
+  //   DEV=1     … 手元だけ（.dev.vars）。ADMIN_KEY がなくてもゲームを作れるようにする
+}

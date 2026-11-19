@@ -6,10 +6,22 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "check": "tsc --noEmit && tsc --noEmit -p tsconfig.worker.json",
+    "cf:types": "wrangler types",
+    "cf:dev": "vite build && wrangler dev",
+    "cf:deploy": "npm run check && vite build && wrangler deploy",
+    "load": "node tools/load.mjs"
   },
   "devDependencies": {
     "typescript": "^7.0.2",
-    "vite": "^8.3.5"
+    "vite": "^8.3.5",
+    "vitest": "^5.1.1",
+    "wrangler": "^4.165.0"
+  },
+  "dependencies": {
+    "partyserver": "^0.5.10",
+    "qrcode-generator": "^2.0.4"
   }
 }

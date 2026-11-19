@@ -1,9 +1,14 @@
 # Bingoo
 
-社内のビンゴ大会向けのビンゴです。いまあるのは、サーバーなしで動く一人用のデモです。
+社内のビンゴ大会向けのビンゴです。2 つの動かし方があります。
 
-- デモ: https://masa002.github.io/Bingoo/
-- 演出ギャラリー（演出と音を 1 つずつ再生できる）: https://masa002.github.io/Bingoo/?gallery
+- **デモ**: サーバーなしで動く、一人用です。GitHub Pages に出しています。
+  - デモ: https://masa002.github.io/Bingoo/
+  - 演出ギャラリー（演出と音を 1 つずつ再生できる）: https://masa002.github.io/Bingoo/?gallery
+- **本番**: 参加者が自分のスマホで入る、複数人用です（1,000 人、最大 1 万人）。Cloudflare Workers + Durable Objects で動きます。
+  - サーバーは実装したところです。**まだ本物の Cloudflare には載せていません。**
+  - 手元のサーバー（`npm run cf:dev`）では、500 人をつないで、途中で全員を一度に切ってつなぎ直す負荷試験まで通っています（2026-11-19）。同じ PC の中での結果なので、本物の Cloudflare と回線での確認にはなりません。
+  - 載せる手順は [docs/deploy.md](docs/deploy.md) にあります。
 
 ## デモでできること
 
@@ -38,24 +43,57 @@
   - 全員確定やモグラ撃退を起こす
   - 早送りする
 
-キー操作は Space で次へ、P で発表（金の回）です。URL に `?seed=abc&size=1000&lower=30&upper=8` を付けると、同じ展開を再現できます。
+キー操作は Space で次へです。URL に `?seed=abc&size=1000&lower=30&upper=8` を付けると、同じ展開を再現できます。
+
+## 本番でできること
+
+ゲームの中身と演出は、デモと同じです。ちがうのは、参加者が本物で、それぞれのスマホからつなぐところです。画面は URL で切り替えます。
+
+| だれが | URL | すること |
+|---|---|---|
+| 作る人 | `?host` | 管理キーを入れて、景品の数を決めてゲームを作る |
+| 参加者 | `?g=コード` | 名前を入れて参加する |
+| 会場の大画面 | `?g=コード&view=stage` | 映しておく（参加用の QR コードが出る） |
+| 主催 | `?g=コード&view=host` | 主催キーでログインして進める |
+
+- 番号は、大画面でも全員のスマホでも、同じ瞬間に出ます（サーバーの時刻に合わせます）。
+- 回線が切れても、端末は自分でつなぎ直して、続きから戻ります。WebSocket が通らない回線では、別の方式に切り替えます。
+- 進行はサーバーが持っています。主催の PC が止まっても、別の端末からログインして続けられます。
+- リハーサル用に、主催コンソールから仮想の参加者を足せます。
+- 操作パネル（次の番号を指定する、など）は、デモ専用です。本番にはありません。
 
 ## 構成
 
 - `src/core/`: ゲームの規則（カード、判定、演出の段階、景品の在庫）。通信や描画には依存しません。
 - `src/fx/`: 演出の部品（大画面の抽選機・イベント・緊急クエスト・ダブルチャンス、スマホのカード・手元の抽選演出・緊急クエスト・景品・ガラポン）。ゲームの処理からは独立していて、使い回せます。共通のルールは `src/fx/GUIDE.md` にあります。
 - `src/audio/`: 効果音と BGM。すべて Web Audio で合成していて、音声ファイルはありません。
+- `src/ui/`: 3 つの画面。メッセージを受けて、演出の部品を呼びます。デモと本番で同じものを使います。
 - `src/demo/`: デモの権威。本番ではサーバーが担う部分を、ブラウザの中で動かします。
-- `src/ui/`: 3 つの画面。メッセージを受けて、演出の部品を呼びます。
+- `src/engine/`: 本番の進行役。山札・判定・演出の計画・景品の割り当てを、全員分まとめて受け持ちます。通信も保存も知りません。
+- `src/net/`: 通信。`protocol.ts` が画面に渡すメッセージ、`wire.ts` が本番の通信の約束、`remote.ts` がブラウザ側の接続です。
+- `src/live/`: 本番の入口（参加・大画面・主催コンソール・ゲームを作る画面）。
+- `worker/`: Cloudflare のサーバー。進行役を動かす Game と、接続の受け口の 2 種類の Durable Object があります。
+- `tools/load.mjs`: 負荷試験。仮の参加者をつないで、1 ゲームを最後まで回します。
 
-本番（1,000 人、最大 1 万人）で使う構成は [docs/tech-selection.md](docs/tech-selection.md) にあります。
+本番の構成と、選んだ理由は [docs/tech-selection.md](docs/tech-selection.md) にあります。
 
 ## 開発
 
 ```sh
 npm install
-npm run dev      # http://localhost:5173（?gallery でギャラリー）
+npm run dev      # デモ。http://localhost:5173（?gallery でギャラリー）
 npm run build    # dist/ に出力
+npm test         # 単体テスト
+npm run check    # 型の確認（ブラウザ側とサーバー側）
 ```
 
-main に push すると、GitHub Actions がビルドして GitHub Pages に出します。
+本番のサーバーを手元で動かすときは、次のとおりです（くわしくは [docs/deploy.md](docs/deploy.md)）。
+
+```sh
+cp .dev.vars.example .dev.vars   # はじめの 1 回だけ
+npm run cf:dev                    # http://localhost:8787（?host でゲームを作る）
+npm run load -- --admin-key dev --players 50   # 負荷試験の道具を、手元のサーバーに向けて動かす
+```
+
+- main に push すると、GitHub Actions がビルドして GitHub Pages に出します（デモ）。
+- Cloudflare へは、自分で `npm run cf:deploy` を打ったときか、GitHub Actions の「Cloudflare」を手で動かしたときだけ載ります。

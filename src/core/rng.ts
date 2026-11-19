@@ -39,6 +39,17 @@ export class Rng {
     for (let i = 0; i < 15; i++) this.next()
   }
 
+  // 途中の状態。サーバーが止まっても、同じ並びの続きから再開できるように保存する
+  state(): number[] {
+    return [this.a, this.b, this.c, this.d]
+  }
+
+  static restore(state: readonly number[]): Rng {
+    const rng = new Rng('')
+    ;[rng.a, rng.b, rng.c, rng.d] = state
+    return rng
+  }
+
   next(): number {
     const t0 = (this.a + this.b) | 0
     this.a = this.b ^ (this.b >>> 9)

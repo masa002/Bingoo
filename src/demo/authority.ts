@@ -147,7 +147,7 @@ export class DemoAuthority {
       this.questScore?.(score)
     }
     else if (cmd.type === 'choice') this.choiceNow?.(cmd.kind)
-    else if (this.phase === 'dc-entry' && !this.entrants.has(0)) {
+    else if (cmd.type === 'entry' && this.phase === 'dc-entry' && !this.entrants.has(0)) {
       this.entrants.add(0)
       this.hub.publish({ type: 'dcEntrants', count: this.entrants.size })
     }

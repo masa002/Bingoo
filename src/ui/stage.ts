@@ -10,13 +10,21 @@ import { playAllKakutei, playFinalBall } from '../fx/stage/events'
 import { openLastOneBrief, playLastOneGarapon } from '../fx/stage/lastone'
 import { MoleQuestStage } from '../fx/stage/quest'
 import type { LocalHub } from '../net/hub'
-import type { Msg, MsgOf, PrizeEntry, Totals } from '../net/protocol'
+import type { Msg, MsgOf, Phase, PrizeEntry, Totals } from '../net/protocol'
 import { countUp, esc, fit, fmt, h, q, tierGuide } from './dom'
 
 // 会場の大画面（1920×1080 で組んで縮小表示する）。抽選機・イベント・ダブルチャンスの演出は fx/ の部品で、
 // この画面は HUD・結果・会場ビュー・番号の盤と、メッセージから部品への振り分けを受け持つ。音（PA）はこの画面だけが鳴らす
 
 export type VenueSource = () => readonly Player[]
+
+// 本番（サーバーにつないだ会場の大画面）用の指定。何も渡さなければ、いままでのデモ
+export interface StageOptions {
+  // 受付の画面に出す、参加の案内（QR・URL・コード）。呼ぶ側が作って渡す（QR の部品をデモに持ち込まないため）。
+  // 渡すと本番の動きになる: 「会場のようす」（デモ用）を出さない・人数は「参加 N 人」・
+  // つなぎ直したら snapshot.live.phase を見て、受付でなければ盤と HUD をいまの状態にする
+  live?: { joinHtml: string }
+}
 
 const STAGE_HTML = `
 <header class="st-hud">
@@ -63,14 +71,17 @@ export class StageView {
   private scene: BgmScene = 'reception'
   private firstBingo = false
   private resultTimer = 0
+  private readonly live: StageOptions['live']
 
   constructor(
     host: HTMLElement,
     hub: LocalHub,
     private readonly clock: Clock,
     venueSource: VenueSource,
+    opts: StageOptions = {},
   ) {
-    this.root = h('div', 'stage', STAGE_HTML)
+    this.live = opts.live
+    this.root = h('div', this.live ? 'stage live' : 'stage', STAGE_HTML)
     host.append(this.root)
     fit(this.root, 1920, 1080)
     this.fx = new Particles(this.$<HTMLCanvasElement>('.st-fx'))
@@ -93,6 +104,8 @@ export class StageView {
         if (count) count.textContent = fmt(m.count)
         // デモの案内（スマホ枠の「参加する」）は、参加したら消す
         this.root.querySelector('.rcp-join')?.classList.toggle('done', m.meJoined)
+        // 本番は、始まったあとにも人が入ってくる（デモの HUD は、はじめから全員の数）
+        if (this.live) this.$('[data-k="size"]').textContent = fmt(m.count)
         return
       }
       case 'eventPlay':
@@ -135,7 +148,7 @@ export class StageView {
         this.setTotals(m.totals)
         // 同じ人を 2 行に出さない。景品の行を「上位チャレンジへ」に書き換える
         for (const c of m.challengers) {
-          const li = [...this.root.querySelectorAll<HTMLElement>('.st-names li')].find((x) => x.dataset.name === c.name)
+          const li = [...this.root.querySelectorAll<HTMLElement>('.st-names li')].find((x) => x.dataset.name === this.nameKey(c))
           if (li) {
             li.classList.add('chal')
             const small = li.querySelector('small') ?? li.appendChild(document.createElement('small'))
@@ -158,7 +171,9 @@ export class StageView {
       case 'dcSpin':
         return this.onDcSpin(m)
       case 'dcEnd':
-        void this.dc?.finish()
+        // 本番で、ガラポンのあとにつないだ大画面は、締めくくりの言葉だけ出す
+        if (!this.dc && this.live) this.showClosing(true)
+        else void this.dc?.finish()
         this.later(6000, () => bgm.stop(3000))
         return
       case 'challengeDeal':
@@ -188,17 +203,24 @@ export class StageView {
     this.machine.reset()
     this.drawn = new Set(m.drawn)
     this.last = 0
+    this.scene = 'reception'
+    // 本番では、つないだ時点の局面（live.phase）が付いてくる。デモの snapshot は、いつも受付
+    const phase = (this.live && m.live?.phase) || 'reception'
+    if (phase !== 'reception') return this.resume(m, phase)
     this.renderBoard()
     this.setTotals(m.totals)
     this.clearResult()
     this.venue.reset(m.size)
-    this.scene = 'reception'
     bgm.play('reception')
+    // 本番の受付: 参加用の QR と、いま参加している人数（デモ用の案内は出さない）
+    const head = this.live
+      ? `<div class="rcp-entry">${this.live.joinHtml}<div class="rcp-count"><span>参加</span><b>${fmt(m.live?.count ?? m.size)}</b><span>人</span></div></div>`
+      : `<div class="rcp-count"><b>0</b> / ${fmt(m.size)} 人</div>
+        <p class="rcp-join">スマホの「参加する」を押してね</p>`
     this.showOverlay(`
-      <div class="rcp">
+      <div class="${this.live ? 'rcp rcp-live' : 'rcp'}">
         <h2 class="st-head">受付中</h2>
-        <div class="rcp-count"><b>0</b> / ${fmt(m.size)} 人</div>
-        <p class="rcp-join">スマホの「参加する」を押してね</p>
+        ${head}
         <div class="rcp-guide">
           <h3>スマホの色の見方</h3>
           <p>次の番号が <b>あなたのカード</b>にありそうなほど、スマホが 青 → 緑 → 赤 → 金に変わります（なかった、もあります）</p>
@@ -206,6 +228,35 @@ export class StageView {
           <p>色が出るのは <b>スマホだけ</b>。虹が出たら、ビンゴ確定！</p>
         </div>
       </div>`)
+  }
+
+  // 本番で、始まったあとにつないだ（つなぎ直した）: 受付の画面は出さず、盤と HUD をいまの状態にする。
+  // 進行中だった演出は追いかけない（次のメッセージから普通に動く）
+  private resume(m: MsgOf<'snapshot'>, phase: Phase): void {
+    this.hideOverlay()
+    this.last = m.drawn[m.drawn.length - 1] ?? 0
+    this.renderBoard()
+    this.clearResult()
+    this.venue.reset(m.size)
+    this.setTotals(m.totals) // ゲーム中なら、ここで BGM がいまの局面になる
+    if (phase === 'playing') return
+    if (phase === 'over') {
+      this.setScene('final')
+      this.showOverlay(finHtml(m.totals, m.totals.upperLeft))
+    } else if (phase === 'done') {
+      this.showClosing(false)
+    } else {
+      this.setScene('cooldown') // ダブルチャンスの途中。ガラポンの画面は、dcSpin が来たら出す
+    }
+  }
+
+  // 「おつかれさまでした」だけを出す（本番で、ガラポンの画面を持たないままゲームが終わったとき）
+  private showClosing(sound: boolean): void {
+    this.hideOverlay()
+    this.eventOn()
+    this.dc?.destroy()
+    this.dc = new DoubleChanceStage(this.root, { speed: this.clock.speed, sound })
+    void this.dc.finish()
   }
 
   private buildBoard(): void {
@@ -381,14 +432,19 @@ export class StageView {
     }
   }
 
-  private addNames(names: { name: string; isMe: boolean; label?: string }[], cls: string): void {
+  private addNames(names: { name: string; isMe: boolean; idx?: number; label?: string }[], cls: string): void {
     const list = this.$('.st-names')
     names.forEach((x, i) => {
       const li = h('li', [cls, x.isMe ? 'me' : ''].join(' ').trim(), `<span>${x.isMe ? 'あなた' : esc(x.name)}</span>${x.label ? `<small>${x.label}</small>` : ''}`)
-      li.dataset.name = x.name
+      li.dataset.name = this.nameKey(x)
       li.style.animationDelay = `${this.clock.scale(400 + 150 * i)}ms`
       list.append(li)
     })
+  }
+
+  // 名前の行を探すときの鍵。本番は同じ名前の人がいるので、参加者の番号で見分ける
+  private nameKey(x: { name: string; idx?: number }): string {
+    return this.live && x.idx !== undefined ? `#${x.idx}` : x.name
   }
 
   // 名前は会場がいちばん沸く情報なので、大きく出す。名前があるときは、会場ビュー（デモ用）の場所まで欄を広げる。
@@ -419,7 +475,7 @@ export class StageView {
         ? 'ガラポンではずれ'
         : `${e.kind === 'challenge' ? 'チャレンジ成功 ' : ''}景品 ${e.rarity}${e.rankUp ? '（ランクアップ）' : ''}`
     this.addNames(
-      m.entries.slice(0, 12).map((e) => ({ name: e.name, isMe: e.isMe, label: label(e) })),
+      m.entries.slice(0, 12).map((e) => ({ name: e.name, isMe: e.isMe, idx: e.idx, label: label(e) })),
       '',
     )
     if (m.entries.length > 12) list.append(h('li', 'more', `ほか ${fmt(m.entries.length - 12)} 人`))
@@ -444,12 +500,7 @@ export class StageView {
 
   private onGameOver(m: MsgOf<'gameOver'>): void {
     this.setTotals(m.totals)
-    this.showOverlay(`
-      <div class="fin">
-        <h2 class="st-head">景品が ぜんぶ出ました！</h2>
-        <div class="fin-stats"><span>出た番号 <b>${m.totals.drawCount}</b> 個</span><span>ビンゴ <b>${fmt(m.totals.winners)}</b> 人</span></div>
-        <p>${m.leftoverUpper ? `残った上位景品 ${m.leftoverUpper} 個は、ダブルチャンスへ！ ` : ''}このあとは、ダブルチャンス！</p>
-      </div>`)
+    this.showOverlay(finHtml(m.totals, m.leftoverUpper))
     sfx.fanfare('big')
     this.fx.rain(500, RAINBOW)
   }
@@ -468,6 +519,14 @@ export class StageView {
   }
 
   private onDcSpin(m: MsgOf<'dcSpin'>): void {
+    if (!this.dc && this.live) {
+      // 本番で、エントリーの受付のあとにつないだ: ガラポンの画面を、ここで用意する（当たった人の発表を落とさない）
+      this.hideOverlay()
+      this.cancelAll()
+      this.eventOn()
+      this.setScene('cooldown')
+      this.dc = new DoubleChanceStage(this.root, { speed: this.clock.speed })
+    }
     const dc = this.dc
     if (!dc) return
     dc.setEntrants(m.entrants)
@@ -501,6 +560,16 @@ export class StageView {
     sfx.silence()
     engine.duckBgm(1)
   }
+}
+
+// 景品がぜんぶ出たあとの画面（ダブルチャンスを待つ間、出したままにする）
+function finHtml(totals: Totals, leftoverUpper: number): string {
+  return `
+      <div class="fin">
+        <h2 class="st-head">景品が ぜんぶ出ました！</h2>
+        <div class="fin-stats"><span>出た番号 <b>${totals.drawCount}</b> 個</span><span>ビンゴ <b>${fmt(totals.winners)}</b> 人</span></div>
+        <p>${leftoverUpper ? `残った上位景品 ${leftoverUpper} 個は、ダブルチャンスへ！ ` : ''}このあとは、ダブルチャンス！</p>
+      </div>`
 }
 
 // 番号が出たあと、カードの帯に出す結果の言葉（会場で何が起きたか）

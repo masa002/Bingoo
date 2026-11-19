@@ -435,6 +435,11 @@ export class MoleQuest {
     return (this.parts = this.build(m))
   }
 
+  // いま、たたいた数（本番で、たたいている途中の数を会場の合計に足すために、呼び出し側が読む）
+  get current(): number {
+    return this.score
+  }
+
   // 途中でも片付ける（待っている play は、その時点の数で解決する）
   cancel(): void {
     this.reset()

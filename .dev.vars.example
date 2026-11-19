@@ -1,0 +1,4 @@
+# 手元で動かすとき（npm run cf:dev）の秘密の値。このファイルを .dev.vars という名前で写して使う。
+# .dev.vars は Git に入れない。本番の管理キーは `npx wrangler secret put ADMIN_KEY` で入れる
+ADMIN_KEY=dev
+DEV=1

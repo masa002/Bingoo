@@ -1,0 +1,19 @@
+{
+  // サーバー（worker/）と、そこから読む共用のコードの型を確かめる。ブラウザの型（DOM）は入れない。
+  // Workers の型は worker-configuration.d.ts（`npm run cf:types` で作り直す）
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "types": []
+  },
+  "include": ["worker", "worker-configuration.d.ts", "src/core", "src/engine", "src/net/wire.ts", "src/net/protocol.ts"],
+  "exclude": ["**/*.test.ts"]
+}

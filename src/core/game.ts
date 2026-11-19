@@ -48,58 +48,106 @@ export interface CellChange {
   newDouble: number
 }
 
+// ある番号が、その人のカードにとって何を意味するか（スマホの期待度を決めるのに使う）
+export const OUT = { none: 0, hit: 1, reach: 2, bingo: 3 } as const
+// いまのカードで、このあと起こりうること（ビットの和）
+export const CAN = { hit: 1, reach: 2, bingo: 4 } as const
+
+// 保存用。カードの中身はシードとカード番号から作り直せるので、変わるものだけを持つ
+export interface GameDump {
+  seed: string
+  deckSeed: string
+  players: { name: string; cardNo: number }[]
+  mask: number[]
+  filled: number[]
+  wild: number[]
+  bingoDraw: (number | null)[]
+  challenges: [number, Challenge][]
+  drawn: number[]
+  winners: number[]
+}
+
 // 全員のカードと抽選の列。純粋な計算だけで、通信も描画も知らない
 export class Game {
   readonly seed: string
-  readonly size: number
   readonly players: Player[] = []
   readonly deck: number[]
   readonly drawn: number[] = []
   readonly winners: number[] = []
   private readonly drawnSet = new Set<number>()
   // 番号 → (人 × 32 + マス) の列。1 抽選の更新が「その番号を持つ人」だけで済む
-  private readonly index: Int32Array[] = []
+  private readonly index: number[][] = Array.from({ length: 76 }, () => [])
   private readonly challengers = new Set<number>()
+  private readonly usedCards = new Set<number>()
+  readonly deckSeed: string
 
-  constructor(opts: { seed: string; size: number }, nameOf: (rng: Rng) => string) {
+  // デモは、最初から size 人（0 番が自分、ほかは仮想の参加者）で作る。
+  // 本番は size を 0 にして、参加のたびに addPlayer で足す。seed はカードを作るシードで、端末にも配る。
+  // 抽選順のシード（deckSeed）は別にして、サーバーの外に出さない（同じにすると、端末から抽選順が分かってしまう）
+  constructor(opts: { seed: string; size: number; deckSeed?: string }, nameOf: (rng: Rng) => string) {
     this.seed = opts.seed
-    this.size = opts.size
+    this.deckSeed = opts.deckSeed ?? opts.seed
     const rng = new Rng(`${opts.seed}/players`)
-    const used = new Set<number>()
     for (let i = 0; i < opts.size; i++) {
       let cardNo = 0
       do {
         cardNo = 1 + rng.int(99999)
-      } while (used.has(cardNo))
-      used.add(cardNo)
-      this.players.push({
-        idx: i,
-        cardNo,
-        name: i === 0 ? 'あなた' : nameOf(rng),
-        isMe: i === 0,
-        cells: deriveCard(opts.seed, cardNo),
-        mask: FREE_MASK,
-        filled: 0,
-        wild: 0,
-        reach: 0,
-        bingoDraw: null,
-        challenge: null,
-      })
+      } while (this.usedCards.has(cardNo))
+      this.seat(cardNo, i === 0 ? 'あなた' : nameOf(rng), i === 0)
     }
-    const counts = new Array<number>(76).fill(0)
-    for (const p of this.players) for (const n of p.cells) if (n) counts[n]++
-    for (let n = 0; n <= 75; n++) this.index.push(new Int32Array(counts[n]))
-    const fill = new Array<number>(76).fill(0)
-    for (const p of this.players) {
-      p.cells.forEach((n, cell) => {
-        if (n) this.index[n][fill[n]++] = p.idx * 32 + cell
-      })
-    }
-    this.deck = new Rng(`${opts.seed}/deck`).shuffle(Array.from({ length: 75 }, (_, i) => i + 1))
+    this.deck = new Rng(`${this.deckSeed}/deck`).shuffle(Array.from({ length: 75 }, (_, i) => i + 1))
+  }
+
+  get size(): number {
+    return this.players.length
   }
 
   get me(): Player {
     return this.players[0]
+  }
+
+  private seat(cardNo: number, name: string, isMe: boolean): Player {
+    this.usedCards.add(cardNo)
+    const p: Player = {
+      idx: this.players.length,
+      cardNo,
+      name,
+      isMe,
+      cells: deriveCard(this.seed, cardNo),
+      mask: FREE_MASK,
+      filled: 0,
+      wild: 0,
+      reach: 0,
+      bingoDraw: null,
+      challenge: null,
+    }
+    this.players.push(p)
+    p.cells.forEach((n, cell) => {
+      if (n) this.index[n].push(p.idx * 32 + cell)
+    })
+    return p
+  }
+
+  // 参加者を 1 人足す（本番）。途中から入った人のカードは、もう出た番号を開けた状態で始める。
+  // 入った時点でビンゴになっているカードは配らない（何度か引き直してもだめなら null。終盤はもう入れない）
+  addPlayer(name: string): Player | null {
+    const rng = new Rng(`${this.seed}/seat/${this.players.length}`)
+    for (let tries = 0; tries < 40; tries++) {
+      const cardNo = 1 + rng.int(99999)
+      if (this.usedCards.has(cardNo)) continue
+      const cells = deriveCard(this.seed, cardNo)
+      let mask = FREE_MASK
+      cells.forEach((n, cell) => {
+        if (n && this.drawnSet.has(n)) mask |= 1 << cell
+      })
+      const s = lineState(mask)
+      if (s.bingo > 0) continue
+      const p = this.seat(cardNo, name, false)
+      p.mask = mask
+      p.reach = s.reach
+      return p
+    }
+    return null
   }
 
   get drawCount(): number {
@@ -165,6 +213,35 @@ export class Game {
     return this.remaining().map((n) => this.preview(n))
   }
 
+  // 番号 n が、全員それぞれのカードにとって何を意味するか（OUT の値。人の番号で引く）
+  outcomes(n: number): Uint8Array {
+    const out = new Uint8Array(this.players.length)
+    for (const e of this.index[n]) {
+      const p = this.players[e >> 5]
+      if (p.bingoDraw !== null) continue
+      const s = lineState(p.mask | (1 << (e & 31)), p.filled)
+      out[p.idx] = s.bingo > 0 ? OUT.bingo : s.reach > p.reach ? OUT.reach : OUT.hit
+    }
+    for (const idx of this.challengers) {
+      const ch = this.players[idx].challenge!
+      const cell = ch.cells.indexOf(n)
+      if (cell >= 0) out[idx] = challengeBingo(ch.mask | (1 << cell)) ? OUT.bingo : Math.max(out[idx], OUT.hit)
+    }
+    return out
+  }
+
+  // 残りの番号のどれかで、全員それぞれに起こりうること（CAN のビットの和。人の番号で引く）
+  possible(): Uint8Array {
+    const can = new Uint8Array(this.players.length)
+    const bit = [0, CAN.hit, CAN.hit | CAN.reach, CAN.hit | CAN.bingo]
+    for (const n of this.remaining()) {
+      const out = this.outcomes(n)
+      for (const e of this.index[n]) can[e >> 5] |= bit[out[e >> 5]]
+      for (const idx of this.challengers) can[idx] |= bit[out[idx]]
+    }
+    return can
+  }
+
   apply(n: number): Impact {
     const impact = this.preview(n)
     this.drawn.push(n)
@@ -190,6 +267,36 @@ export class Game {
     }
     this.winners.push(...impact.bingoIdx)
     return impact
+  }
+
+  // 保存した状態から戻す（restoreGame から呼ぶ）。
+  // 参加者の表（d.players）のほうが、マスの状態（d.mask など）より長くてもよい: 参加のたびに保存するのは表だけにして、
+  // 全員分のマスの状態は、抽選などで変わったときにだけ保存する（1 万人の受付で、1 人ごとに全員分を書かないため）。
+  // 足りない人は、そのあと何も起きていないので、「いま参加した」のと同じ形（もう出た番号が開いている）で戻せる
+  load(d: GameDump): void {
+    for (const n of d.drawn) {
+      this.drawn.push(n)
+      this.drawnSet.add(n)
+    }
+    d.players.forEach((x, i) => {
+      const p = this.seat(x.cardNo, x.name, false)
+      if (i < d.mask.length) {
+        p.mask = d.mask[i]
+        p.filled = d.filled[i]
+        p.wild = d.wild[i]
+        p.bingoDraw = d.bingoDraw[i]
+      } else {
+        p.cells.forEach((n, cell) => {
+          if (n && this.drawnSet.has(n)) p.mask |= 1 << cell
+        })
+      }
+      p.reach = p.bingoDraw === null ? lineState(p.mask, p.filled).reach : 0
+    })
+    for (const [idx, ch] of d.challenges) {
+      this.players[idx].challenge = ch
+      this.challengers.add(idx)
+    }
+    this.winners.push(...d.winners)
   }
 
   // 上位チャレンジを始める。カードは、まだ出ていない数字だけで作る（作れなければ null）
@@ -297,6 +404,27 @@ export class Game {
     p.reach = lineState(p.mask, p.filled).reach
     return p.reach < before
   }
+}
+
+export function dumpGame(g: Game): GameDump {
+  return {
+    seed: g.seed,
+    deckSeed: g.deckSeed,
+    players: g.players.map((p) => ({ name: p.name, cardNo: p.cardNo })),
+    mask: g.players.map((p) => p.mask),
+    filled: g.players.map((p) => p.filled),
+    wild: g.players.map((p) => p.wild),
+    bingoDraw: g.players.map((p) => p.bingoDraw),
+    challenges: g.activeChallengers().map((idx) => [idx, g.players[idx].challenge!]),
+    drawn: g.drawn,
+    winners: g.winners,
+  }
+}
+
+export function restoreGame(d: GameDump): Game {
+  const g = new Game({ seed: d.seed, deckSeed: d.deckSeed, size: 0 }, () => '')
+  g.load(d)
+  return g
 }
 
 // 3×3 のチャレンジカードが、あと k 回の抽選で成功する見込み（まだ出ていない u 個の番号から引く）。

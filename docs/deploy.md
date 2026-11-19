@@ -1,0 +1,187 @@
+# Cloudflare に載せる手順
+
+本番（複数人で遊ぶ）のサーバーを、自分の Cloudflare アカウントに載せる手順です。構成は [tech-selection.md](tech-selection.md) にあります。
+
+- 載るのは Worker が 1 つです。画面のファイルも、API も、Durable Objects も、この 1 つに入っています。
+- コマンドは、リポジトリのいちばん上のフォルダで打ちます。Node.js は 22 以上を使います。
+- wrangler のコマンドは 4.165 で確かめました。料金と制限の数字は、2026-11-19 に Cloudflare の公式ページで確かめたものです。
+- **まだ本物の Cloudflare には 1 回も載せていません。**
+- 手元のサーバー（`npm run cf:dev`）では、500 人をつないで、途中で全員を一度に切ってつなぎ直す負荷試験まで通っています（2026-11-19）。同じ PC の中での結果なので、本物の Cloudflare と回線での確認にはなりません。 本番の前に、「7. 本番の前に確かめること」の 3 つを本物の URL で回します。
+
+## 1. 手元で動かす
+
+Cloudflare のアカウントは要りません。
+
+```sh
+npm install
+cp .dev.vars.example .dev.vars   # PowerShell なら Copy-Item .dev.vars.example .dev.vars
+npm run cf:dev                    # http://localhost:8787
+```
+
+- `.dev.vars` には、手元用の管理キー（`dev`）が入っています。このファイルは Git に入れません。
+- `npm run cf:dev` は、画面をビルドしてからサーバーを起こします。画面のコードを直したら、止めて打ち直します。
+- ゲームを作るところからは「3. ゲームを作って遊ぶまで」と同じです。
+
+## 2. はじめて載せる
+
+```sh
+npx wrangler login                 # ブラウザが開くので、Cloudflare にログインして許可する
+npx wrangler secret put ADMIN_KEY  # 管理キー（ゲームを作るときの合言葉）を決めて入れる
+npm run cf:deploy                  # 型の確認 → 画面のビルド → デプロイ
+```
+
+- 管理キーは、長くて当てられないものにします。たとえば `node -p "require('crypto').randomBytes(24).toString('base64url')"` で作れます。
+- `secret put` で「bingoo という Worker がまだない。作るか？」と英語で聞かれたら、`y` で進めます。
+- はじめてのデプロイでは、workers.dev のサブドメインを登録するか聞かれることがあります。`y` で進めて、名前を決めます。
+- 終わると、URL（`https://bingoo.<サブドメイン>.workers.dev`）が出ます。これが本番の場所です。
+- 管理キーを入れ忘れると、ゲームを作るときに「管理キーが設定されていません」と出ます。
+
+2 回目からは `npm run cf:deploy` だけです。
+
+### GitHub から載せる（使いたいときだけ）
+
+`.github/workflows/cloudflare.yml` は、手で動かしたときだけデプロイします。push では動きません。
+
+1. Cloudflare のダッシュボードで API トークンを作ります。テンプレートは「Edit Cloudflare Workers」を選びます。
+2. GitHub のリポジトリの Settings → Secrets and variables → Actions に、`CLOUDFLARE_API_TOKEN`（作ったトークン）と `CLOUDFLARE_ACCOUNT_ID`（アカウント ID）を入れます。
+3. Actions の「Cloudflare」を開いて、Run workflow を押します。
+
+管理キー（`ADMIN_KEY`）は、ここでは入れません。先に手元から `npx wrangler secret put ADMIN_KEY` を済ませておきます。
+
+## 3. ゲームを作って遊ぶまで
+
+URL は 4 つです。`https://…` は、デプロイで出た URL（手元なら `http://localhost:8787`）です。
+
+| だれが | URL | すること |
+|---|---|---|
+| 作る人 | `https://…/?host` | 管理キーを入れて、景品の数を決めて作る |
+| 参加者 | `https://…/?g=コード` | 名前を入れて参加する |
+| 会場の大画面 | `https://…/?g=コード&view=stage` | 映しておく（参加用の QR コードが出る） |
+| 主催 | `https://…/?g=コード&view=host` | 主催キーでログインして進める |
+
+1. `?host` でゲームを作ります。コード（英数字 6 文字）と主催キーが出ます。
+   - **主催キーは、このときしか出ません。** 控えておきます。なくしたら、ゲームを作り直します。
+2. 大画面の URL を会場の画面に映します。最初に 1 回クリックすると、音が出るようになります。
+3. 参加者は、大画面の QR コードから入ります。
+4. 主催コンソールで「受付を締め切って開始 ▶」を押します。あとは「次へ ▶」か、自動進行です。
+
+- **リハーサル**: 受付中に、主催コンソールから仮想の参加者を足せます（30・100・500・1000 人）。1 人でも通しで試せます。
+- ゲームは、作ってから 48 時間たつと片付けられます。
+- 何も付けない URL と `?gallery` は、いままでどおりデモとギャラリーです。
+
+## 4. R2 に退避する（あとからでよい）
+
+入れなくても動きます。入れると、ゲームの状態が 5 秒に 1 回まで、R2 にも写されます。
+
+1. Cloudflare のダッシュボードで、R2 を使えるようにします（はじめてのときだけ。支払い方法の登録を求められるかは、要確認）。
+2. バケットを作ります。
+
+   ```sh
+   npx wrangler r2 bucket create bingoo-backup --location apac
+   ```
+
+3. `wrangler.jsonc` の終わりのほうにある `r2_buckets` の行のコメントを外します（その前の行の終わりに `,` を足します）。
+4. `npm run cf:deploy` を打ちます。
+
+- 入るのは `コード/state.json`（途中の状態）と、終わったあとの `コード/results.json`（当選者の一覧）です。
+- 取り出すとき: `npx wrangler r2 object get bingoo-backup/コード/results.json --file results.json --remote`
+- R2 に写した分は、自動では消えません。参加者の表示名が入っているので、要らなくなったら消します。
+
+## 5. 独自ドメインを使う
+
+ドメインが Cloudflare に入っている（ゾーンがある）ことが前提です。
+
+1. `wrangler.jsonc` に足します。
+
+   ```jsonc
+   "routes": [{ "pattern": "bingo.example.com", "custom_domain": true }]
+   ```
+
+2. `npm run cf:deploy` を打ちます。DNS の設定と証明書は、Cloudflare が作ります。
+
+- その名前に、もう CNAME のレコードがあると失敗します。先に消します。
+
+## 6. 料金の目安
+
+- **有料プラン（Workers Paid）は、月 5 ドルからです。** 本番と負荷試験は、有料プランで行います。
+  - 含まれる分: Workers のリクエスト 月 1,000 万回、Durable Objects のリクエスト 月 100 万回と 40 万 GB 秒、SQLite の書き込み 月 5,000 万行、保存 5 GB。
+- **画面のファイルを配る分は無料です。**
+- **WebSocket の数え方**
+  - つなぐときに 1 リクエストです。
+  - 端末から届くメッセージは、20 通で 1 リクエストです。サーバーから送る分は数えません。
+  - 受け口が眠っている間（Hibernation）は、時間の料金がかかりません。
+- **無料プランでも、少人数なら試せます。**
+  - 上限は 1 日あたり、Workers のリクエスト 10 万回、Durable Objects のリクエスト 10 万回と 13,000 GB 秒、SQLite の書き込み 10 万行です。
+  - 上限を超えると、その日は動かなくなります（UTC の 0 時に戻ります）。
+- **R2** は、10 GB、書き込み 月 100 万回、読み出し 月 1,000 万回まで無料です。
+- **1 回のビンゴで実際にどれだけ使うかは、まだ測っていません。** 負荷試験のあとに、ダッシュボードの使用量を見て確かめます。
+
+公式の料金ページ: [Workers](https://developers.cloudflare.com/workers/platform/pricing/)・[Durable Objects](https://developers.cloudflare.com/durable-objects/platform/pricing/)・[R2](https://developers.cloudflare.com/r2/pricing/)
+
+## 7. 本番の前に確かめること
+
+負荷試験の道具は `tools/load.mjs` です。仮の参加者をつないで、1 ゲームを最後まで回し、合格かどうかを表で出します。
+
+- 追加のインストールは要りません（Node.js 22 以上）。指定の一覧は `node tools/load.mjs --help` で出ます。
+- 既定の合格の基準は、つなげた 99.5% 以上、時刻（`at`）に間に合った 99% 以上、番号の発表を受け取った 99.9% 以上です。だめなら、終了コードが 1 になります。
+- 仮の参加者は、本物のスマホと同じように動きます。当たったら景品を選び、ダブルチャンスにエントリーします。
+- 3 回目の番号のあとで、モグラ撃退を 1 回起こします。全員が叩いた数を送るので、いちばん混む場面です。
+- 1 ゲームは、10〜20 分ほどかかる見込みです。
+- 管理キーは、環境変数 `BINGOO_ADMIN_KEY` でも渡せます（コマンドの履歴に残りません）。
+- まず手元で、道具が動くことを確かめます。
+
+  ```sh
+  npm run cf:dev                                        # 別の端末で
+  node tools/load.mjs --admin-key dev --players 50
+  ```
+
+本番の URL に対して、次の 3 つを確かめます。
+
+### (1) 1 万接続
+
+```sh
+node tools/load.mjs --url https://… --players 10000 --fallback 0.05
+```
+
+- `--fallback 0.05` は、5% の人を WebSocket 以外（SSE とポーリング）でつなぐ指定です。
+- 結果の「この道具の側」に「この PC が追いついていません」と出たら、PC を分けます。
+  - 1 台目: `node tools/load.mjs --url https://… --players 5000 --expect 10000`（最初にコードが出ます）
+  - 2 台目: `node tools/load.mjs --url https://… --code コード --no-host --players 5000`
+- Linux や macOS では、先に `ulimit -n 20000` で、開けるファイルの数を増やします。
+
+### (2) 試験中のデプロイ
+
+(1) と同じコマンドを打ち、抽選が何回か進んだところで、別の端末から `npm run cf:deploy` を打ちます。
+
+- 見るところは、結果の「切れた数と、つなぎ直し」です。「戻れず」が 0 で、ゲームが最後まで進めば合格です。
+- 先に、道具の側から全員を切る流れでも確かめられます。
+
+  ```sh
+  node tools/load.mjs --url https://… --players 1000 --scenario storm                     # すぐつなぎ直す
+  node tools/load.mjs --url https://… --players 1000 --scenario storm --storm-hold 6000   # 全員が「いまの状態」をもらい直す
+  ```
+
+### (3) 1 つの IP アドレスから 1,000 接続
+
+会場の Wi-Fi（または、同じ出口を通る回線）につないだ PC 1 台から打ちます。
+
+```sh
+node tools/load.mjs --url https://… --players 1000
+```
+
+- 「つなげた」が 100% で、途中で切られなければ合格です。
+- Cloudflare に止められたときは、結果の「気になること」に、HTTP 429 や 403 が並びます。
+- Cloudflare の側で、1 つの IP からの接続をいくつまで通すかは、要確認です（数字を確かめられていません。この試験で確かめます）。
+
+## 8. 当日の注意
+
+- **当日はデプロイしません。** デプロイすると、つながっている端末が切れることがあります（端末は自分でつなぎ直します）。前の日までに載せて、リハーサルを 1 回通しておきます。
+- **主催キーは、2 人が持っておきます。** 主催の PC が止まっても、別の端末から同じ URL でログインすれば続けられます。
+- **やり直したいとき**
+  - 主催コンソールの「最初からやり直す」を使います。参加者はそのままで、カードと景品を配り直します。
+  - それでもだめなら、`?host` で新しいゲームを作って、大画面を新しい URL に替えます。参加者は QR コードから入り直します。
+- **ようすを見たいとき**: `npx wrangler tail` で、サーバーのログが流れます。
+- **前の版に戻したいとき**: `npx wrangler rollback` です。これもデプロイと同じで、端末が切れることがあります。
+- **困ったらデモ**: GitHub Pages のデモ（<https://masa002.github.io/Bingoo/>）は、Cloudflare が止まっていても動きます。
+  - ただし、デモは 1 台の PC の中だけで動きます。参加者のスマホはつながりません。
+  - 大画面に映して会を続けるための、最後の手段です。当日の障害のときの手順は、まだ決めていません。

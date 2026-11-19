@@ -12,7 +12,7 @@ import { MoleQuest } from '../fx/phone/quest'
 import { HandSpin } from '../fx/phone/spin'
 import { RARITY_NAME, type BallColor } from '../fx/theme'
 import type { LocalHub } from '../net/hub'
-import type { Msg, MsgOf, PhoneCommand, PrizeEntry } from '../net/protocol'
+import type { LiveState, Msg, MsgOf, PhoneCommand, PrizeEntry } from '../net/protocol'
 import { esc, fit, fmt, h, q, replay, tierGuide } from './dom'
 
 // 参加者のスマホ（390×844 で組んで縮小表示する）。カード・手元の抽選演出・緊急クエスト・景品・ガラポンの演出は fx/ の部品。
@@ -42,6 +42,19 @@ const GUIDE_HTML = `
   <ol class="tier-guide">${tierGuide(MY_TIER_WORD, TIER_QUIET)}</ol>
   <p>色は <b>あなただけ</b>のもの。となりの人とは違います。虹が出たら、ビンゴ確定！</p>
 </div>`
+
+// 本番（サーバーにつないだ本物のスマホ）用の指定。何も渡さなければ、いままでのデモ
+export interface PhoneOptions {
+  // 枠とにせもののステータスバーを出さない・音は自分のスマホから全部鳴らす・参加はもう済んでいる（最初の画面は「はじめる」）・
+  // つなぎ直したら snapshot.live からいまの状態に戻る・モグラ撃退の途中経過を送る
+  live?: boolean
+}
+
+// 本番で、受付中に「はじめる」を押した人に出しておく知らせ（ゲームが動き出したら消す）
+const WAIT_NOTE = '始まるまで、このまま待っていてね'
+// 本番で、終わったあとにつないだ人に出す（締めくくりの画面と同じ言葉）
+const END_NOTE = 'おつかれさまでした。ご参加ありがとうございました'
+const QUEST_REPORT_MS = 2000 // モグラ撃退の途中経過を送る間隔
 
 interface MyChallenge {
   cells: number[]
@@ -88,23 +101,30 @@ export class PhoneView {
   private dcEnded: Promise<void> = Promise.resolve() // 大画面の締めくくり（スマホの最後の結果は、これに合わせて出す）
   private dcEndNow: (() => void) | null = null
   private dcEligible = true
+  private readonly live: boolean
+  private begun = false // 本番: 「はじめる」を押した（つなぎ直しで、参加の画面をもう一度出さない）
+  private waitNote = false // 本番: 「始まるまで…」の知らせを出している
 
   constructor(
     host: HTMLElement,
     hub: LocalHub,
     private readonly clock: Clock,
     private readonly send: (cmd: PhoneCommand) => void,
+    opts: PhoneOptions = {},
   ) {
-    // 画面の中身がちょうど 390×844 になるように、枠は外側の要素で描く
-    const frame = h('div', 'phone-frame')
-    this.root = h('div', 'phone', PHONE_HTML)
+    this.live = opts.live ?? false
+    // 画面の中身がちょうど 390×844 になるように、枠は外側の要素で描く（本番は枠なしで、画面いっぱいに合わせる）
+    const frame = h('div', this.live ? 'phone-frame live' : 'phone-frame')
+    this.root = h('div', this.live ? 'phone live' : 'phone', PHONE_HTML)
     frame.append(this.root)
     host.append(frame)
-    fit(frame, 410, 864)
+    if (this.live) fit(frame, 390, 844)
+    else fit(frame, 410, 864)
     this.card = new CardView(this.$('.ph-cardhost'), { size: 5, speed: clock.speed })
     // デモでは大画面と同じ PC から鳴るので、手元の演出は自分だけの音にする（本番のスマホは 'all'）
-    this.spin = new HandSpin(this.root, { speed: clock.speed, sound: 'personal' })
-    this.quest = new MoleQuest(this.root, { speed: clock.speed, sound: 'personal' })
+    const sound = this.live ? 'all' : 'personal'
+    this.spin = new HandSpin(this.root, { speed: clock.speed, sound })
+    this.quest = new MoleQuest(this.root, { speed: clock.speed, sound })
     this.$('.ph-help').addEventListener('click', () => this.showGuide())
     hub.subscribe((m) => this.on(m))
   }
@@ -118,6 +138,10 @@ export class PhoneView {
   }
 
   private on(m: Msg): void {
+    if (this.waitNote && (m.type === 'drawScheduled' || m.type === 'eventPlay' || m.type === 'questBrief' || m.type === 'questStart')) {
+      this.waitNote = false
+      this.setNote('')
+    }
     switch (m.type) {
       case 'snapshot':
         return this.onSnapshot(m)
@@ -176,7 +200,9 @@ export class PhoneView {
         void this.onDcSpin(m)
         return
       case 'dcEnd':
-        this.dcEndNow?.()
+        if (this.dcEndNow) this.dcEndNow()
+        // 本番で、ガラポンのあとにつないだ人は、締めくくりの画面を持っていない。知らせだけ出す
+        else if (this.live) this.setNote(END_NOTE)
         return
       default:
         return
@@ -213,27 +239,86 @@ export class PhoneView {
     this.history = []
     this.stats = { hits: 0, maxReach: 0, nearMiss: 0, won: undefined }
     this.joined = false
+    this.waitNote = false
+    this.dcEligible = true
     this.setNote('')
     this.setPrize(null, null)
     this.dcEnded = Promise.resolve()
     this.dcEndNow = null
+    // 本番では、つないだ時点の状態（live）が付いてくる。デモでは付かない
+    const live = this.live ? m.live : undefined
     this.$('.ph-name').textContent = this.name
     this.$('.ph-no').textContent = `No.${String(this.cardNo).padStart(5, '0')}`
-    this.$('.ph-count').textContent = '参加 0人'
+    this.$('.ph-count').textContent = `参加 ${fmt(live?.count ?? 0)}人`
     this.$('.ph-latest b').textContent = '--'
     this.syncSpeed()
     this.card.setCells(this.cells)
+    if (live) this.restore(m.drawn, live)
     this.renderCard()
     this.renderHistory()
+    if (live && live.phase !== 'reception') {
+      // もう始まっている: 参加の画面は出さずに、いまのカードを見せる
+      this.joined = true
+      this.closeOverlay()
+      return
+    }
+    if (this.live && this.begun) {
+      // 受付中のつなぎ直し・主催のやり直し: 「はじめる」は押してあるので、新しいカードを配るだけ
+      this.closeOverlay()
+      this.join()
+      this.setWaitNote()
+      return
+    }
     this.overlay(`
       <div class="ph-join">
         <div class="ph-logo">BINGOO</div>
         <p>ビンゴ大会へようこそ！</p>
-        <button class="ph-join-btn">参加する</button>
-        <small>このデモでは、あなた以外の ${fmt(m.size - 1)} 人はコンピューターです</small>
+        <button class="ph-join-btn">${this.live ? 'はじめる' : '参加する'}</button>
+        ${this.live ? '' : `<small>このデモでは、あなた以外の ${fmt(m.size - 1)} 人はコンピューターです</small>`}
         ${GUIDE_HTML}
       </div>`)
-    q(this.root, '.ph-join-btn').addEventListener('click', () => this.join())
+    q(this.root, '.ph-join-btn').addEventListener('click', () => {
+      if (this.joined) return // 閉じたあとの画面に残ったボタンが押されても、何もしない
+      this.join()
+      if (!this.live) return
+      this.begun = true
+      this.setWaitNote()
+    })
+  }
+
+  private setWaitNote(): void {
+    this.waitNote = true
+    this.setNote(WAIT_NOTE)
+  }
+
+  // 本番: つないだ（つなぎ直した）時点の自分の状態を、そのまま写す。進行中だった演出は追いかけない（次のメッセージから普通に動く）
+  private restore(drawn: number[], s: LiveState): void {
+    this.mask = s.mask | FREE_MASK
+    this.filled = s.filled
+    this.wild = s.wild
+    this.rank = s.rank
+    this.won = s.rank > 0 || lineState(this.mask, this.filled).bingo > 0
+    this.history = [...drawn]
+    this.stats.hits = popcount(this.mask & ~FREE_MASK)
+    this.stats.maxReach = lineState(this.mask, this.filled).reach
+    if (drawn.length) this.$('.ph-latest b').textContent = labelOf(drawn[drawn.length - 1])
+    if (s.challenge) {
+      this.openChallenge(s.challenge.cells, s.challenge.target, s.challenge.mask | (1 << CH_FREE))
+    } else if (s.prize) {
+      this.stats.won = s.prize.name
+      this.setPrize(s.prize.name, s.prize.rarity)
+    }
+    this.dcEligible = s.prize === null
+    // 節目の知らせは、あとからつないだ人にも見えるようにする
+    if (s.phase === 'over') this.setNote('景品がぜんぶ出ました。このあとはダブルチャンス！')
+    else if (s.phase === 'dc-entry') {
+      if (s.prize) this.setNote('あなたは、もう景品をもらっています。ダブルチャンスは、大画面で見ていてね')
+      else if (s.dcEntered) this.setNote('ダブルチャンスに参加ずみ。このまま待ってね。まもなくガラポン！')
+      // 受付の途中でつなぎ直した人にも、残りの時間でエントリーの画面を出す（残りが少なすぎるときは、押しても間に合わないので出さない）
+      else if (s.dcLeftMs >= 4000) void this.onDcEntry({ type: 'dcEntry', seconds: Math.floor(s.dcLeftMs / 1000), eligible: 0, meEligible: true })
+      else this.setNote('いま大画面で、ダブルチャンスの受付中！')
+    } else if (s.phase === 'dc-spin') this.setNote('いま大画面で、ダブルチャンスの当たりを発表中！')
+    else if (s.phase === 'done') this.setNote(END_NOTE)
   }
 
   // 演出の見方は、参加したあとも右上の「？」から見返せる
@@ -267,7 +352,8 @@ export class PhoneView {
   private join(deal = true): void {
     if (this.joined) return
     this.joined = true
-    this.send({ type: 'join' })
+    // 本番では、名前を入れたときにもう参加している（1 万台がいっせいに送らないように、ここでは送らない）
+    if (!this.live) this.send({ type: 'join' })
     this.closeOverlay()
     if (deal) void this.card.deal()
   }
@@ -347,8 +433,31 @@ export class PhoneView {
     this.syncSpeed()
     // モグラは、いま見えているカード（上位チャレンジ中は 3×3）のマスから顔を出す
     const card = this.challenge?.view ?? this.card
+    const stopReport = this.live ? this.reportQuest() : null
     const score = await this.quest.play(card, { introMs: m.introMs, playMs: m.playMs, target: m.me.target, cell: m.me.cell, label: m.me.label })
+    stopReport?.()
     if (gen === this.generation) this.send({ type: 'questScore', score })
+  }
+
+  // 本番: たたいている間、いまの数をときどき送る（大画面の「会場でたたいた数」が、たたいている最中に増えていくように）。
+  // 全員が同じ瞬間に送らないよう、最初の 1 回までの間を人ごとにずらす。戻り値で止める
+  private reportQuest(): () => void {
+    let sent = 0
+    let interval = 0
+    const report = () => {
+      const score = this.quest.current
+      if (score === sent) return
+      sent = score
+      this.send({ type: 'questProgress', score })
+    }
+    const first = window.setTimeout(() => {
+      report()
+      interval = window.setInterval(report, QUEST_REPORT_MS)
+    }, Math.random() * QUEST_REPORT_MS)
+    return () => {
+      window.clearTimeout(first)
+      window.clearInterval(interval)
+    }
   }
 
   private async onQuestResult(m: MsgOf<'questResult'>): Promise<void> {
@@ -381,7 +490,11 @@ export class PhoneView {
 
   // 大画面の公開と同時に手元でも番号に着地させ、自分のカードに押す
   private async onRevealed(m: MsgOf<'numberRevealed'>): Promise<void> {
-    if (m.drawNo !== this.drawNo) return
+    if (m.drawNo !== this.drawNo) {
+      // 本番で、抽選の途中からつないだ: 回す演出は見ていないので、番号だけをカードに押す（押しそこねると、カードがずれたままになる）
+      if (this.live) this.catchUp(m)
+      return
+    }
     const gen = this.generation
     let done = () => {}
     this.celebration = new Promise<void>((r) => (done = r))
@@ -403,6 +516,29 @@ export class PhoneView {
     } finally {
       done()
     }
+  }
+
+  private catchUp(m: MsgOf<'numberRevealed'>): void {
+    if (this.history.includes(m.n)) return
+    const j = this.judge(m.n)
+    if (j.justWon) this.rank = m.totals.winners - m.newBingo + 1
+    this.$('.ph-latest b').textContent = m.label
+    this.history.push(m.n)
+    if (j.cell >= 0) {
+      this.mask |= 1 << j.cell
+      this.filled &= ~(1 << j.cell)
+      this.stats.hits++
+      this.stats.maxReach = Math.max(this.stats.maxReach, j.reachAfter)
+      if (j.justWon) this.won = true
+    }
+    const ch = this.challenge
+    if (ch && j.chCell >= 0) {
+      ch.mask |= 1 << j.chCell
+      this.stats.hits++
+    }
+    this.renderCard()
+    this.renderChallenge()
+    this.renderHistory()
   }
 
   private judge(n: number): Judge {
@@ -553,17 +689,22 @@ export class PhoneView {
     const gen = this.generation
     await playChallengeStart(this.root, { speed: this.speed, target: m.target })
     if (gen !== this.generation) return
+    await this.openChallenge(m.cells, m.target, 1 << CH_FREE).deal()
+  }
+
+  // 3×3 のカードを置く（配る動きは、呼ぶ側で）。本番のつなぎ直しでは、途中まで開いた mask で置く
+  private openChallenge(cells: number[], target: Rarity, mask: number): CardView {
     this.clearChallenge()
     const host = this.$('.ph-cardhost')
     host.classList.add('challenge')
     // 条件は、挑んでいる間ずっと見えるようにする
-    this.$('.ph-rule').textContent = `1 列そろえば ${m.target} の景品！ 景品がなくなるまでにそろわないと、景品なし`
+    this.$('.ph-rule').textContent = `1 列そろえば ${target} の景品！ 景品がなくなるまでにそろわないと、景品なし`
     this.setPrize(null, null)
-    const view = new CardView(host, { size: 3, speed: this.speed, title: `上位チャレンジ ${m.target}` })
-    this.challenge = { cells: m.cells, mask: 1 << CH_FREE, target: m.target, view }
-    view.setCells(m.cells)
+    const view = new CardView(host, { size: 3, speed: this.speed, title: `上位チャレンジ ${target}` })
+    this.challenge = { cells, mask, target, view }
+    view.setCells(cells)
     this.renderChallenge()
-    await view.deal()
+    return view
   }
 
   private async onChallengeEnd(): Promise<void> {
@@ -615,8 +756,8 @@ export class PhoneView {
     await this.dcEnded
     if (gen !== this.generation) return
     this.setNote('')
-    // 締めの音は、景品を獲得済みの人のときは大画面が鳴らしている（デモでは同じ PC から鳴るので、重ねない）
-    await playFinalResult(this.root, { speed: this.speed, stats: this.finalStats(), sound: this.dcEligible })
+    // 締めの音は、景品を獲得済みの人のときは大画面が鳴らしている（デモでは同じ PC から鳴るので、重ねない。本番は自分のスマホで鳴らす）
+    await playFinalResult(this.root, { speed: this.speed, stats: this.finalStats(), sound: this.live || this.dcEligible })
   }
 
   private finalStats() {

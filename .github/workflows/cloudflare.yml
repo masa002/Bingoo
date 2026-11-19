@@ -1,0 +1,34 @@
+name: Cloudflare
+
+# 手で動かしたときだけ、Cloudflare に載せる。push では動かさない
+# （デプロイすると、つながっている端末が切れることがある。会の最中に勝手に載らないようにするため）。
+# 使う前に、リポジトリの Secrets に CLOUDFLARE_API_TOKEN と CLOUDFLARE_ACCOUNT_ID を入れる（docs/deploy.md）
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npx vite build
+      # wrangler は、npm ci で入った版（package.json）がそのまま使われる
+      - uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy

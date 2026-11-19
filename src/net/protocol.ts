@@ -1,6 +1,6 @@
-import type { Glow, Rarity } from '../core/prizes'
+import type { BallColor, Glow, Rarity } from '../core/prizes'
 import type { Beat, MachineStyle, Tier } from '../core/show'
-import type { BallColor } from '../fx/theme'
+import type { LiveSettings } from './wire'
 
 // 権威（本番はサーバー、デモはブラウザ内）から画面へ流れるメッセージ。
 // 全員宛てに配るのは共通の事実だけで、個人のカードの状態は各端末が手元で計算する。
@@ -21,6 +21,27 @@ export interface Totals {
   hitsLeft: number // 残りの番号のうち、出せば誰かがビンゴになる番号の数（オリパの「当たり残数」）
   drawCount: number
   tampered: boolean // デモの操作で抽選順を変えた
+  phase: Phase
+}
+
+// 名前の一覧の 1 人。本番では idx（参加者の番号）を付けて配り、受け取った端末が isMe（自分かどうか）を決める
+export interface Who {
+  name: string
+  isMe: boolean
+  idx?: number
+}
+
+// 本番で、途中から入った（つなぎ直した）端末に渡す、いまの状態。デモでは付かない
+export interface LiveState {
+  count: number // 参加人数
+  mask: number // 自分のカードの開いたマス
+  filled: number // モグラに埋められたマス
+  wild: number // 虹玉で開いたマス
+  rank: number // ビンゴした順位（まだなら 0）
+  prize: { name: string; rarity: Rarity | null } | null // 受け取った（または選んでいる途中の）景品
+  challenge: { cells: number[]; mask: number; target: Rarity } | null
+  dcEntered: boolean // ダブルチャンスにエントリー済み
+  dcLeftMs: number // ダブルチャンスの受付の残り時間（受付中でなければ 0）
   phase: Phase
 }
 
@@ -60,6 +81,22 @@ export type Msg =
       drawn: number[]
       deckHash: string
       totals: Totals
+      live?: LiveState // 本人宛て（大画面・主催には count と phase だけが意味を持つ）
+    }
+  // 主催の端末だけに送る、進行の状態（本番）。デモの主催コンソールは、権威を直接見ている
+  | {
+      type: 'host'
+      phase: Phase
+      busy: boolean // 抽選やイベントの最中（「次へ」は効かない）
+      hold: string | null // 説明の画面などで主催の合図を待っているときの、ボタンの名前
+      auto: boolean
+      players: number // 参加した人数（仮想の参加者を含む）
+      bots: number // そのうち、リハーサル用の仮想の参加者
+      connected: number // いまつながっている端末の数
+      drawCount: number
+      deckHash: string
+      event: 'wild' | 'mole' | null // 次の「次へ」で起きる、手で指定したイベント
+      settings: LiveSettings // いまの景品の数と名前（やり直しの窓に出す）
     }
   | { type: 'joined'; count: number; meJoined: boolean } // meJoined は本人宛て
   // 全員確定（虹玉）。durationMs が大画面の演出の長さ、resultAt に各自の結果を見せる
@@ -92,15 +129,15 @@ export type Msg =
       newReach: number
       moreReach: number
       newBingo: number
-      names: { name: string; isMe: boolean }[] // 大画面に出すのは 12 人まで
-      challengeWins: { name: string; isMe: boolean }[]
+      names: Who[] // 大画面に出すのは 12 人まで
+      challengeWins: Who[]
       totals: Totals
       resultMs: number
     }
   // lastOne は、上のランクまで景品が尽きて同じ回に上がった人で争うとき。争う人がそれぞれスマホでガラポンを回し、
   // dropAt で全員の玉が出るのと同時に大画面が当たりを発表する
   | { type: 'prizeTime'; entries: PrizeEntry[]; lastOne: { dropAt: number; durationMs: number } | null; final: boolean }
-  | { type: 'choices'; challengers: { name: string; isMe: boolean }[]; totals: Totals }
+  | { type: 'choices'; challengers: Who[]; totals: Totals }
   | { type: 'challengeDeal'; idx: number; cells: number[]; target: Rarity } // 本人宛て
   | { type: 'challengeEnd'; idx: number } // 決着しないままゲームが終わった（本人宛て）
   // 参加者の操作が要るイベントは、いきなり始めない。先に説明の画面（何が起きるか・何をすればいいか）を出して、
@@ -114,7 +151,7 @@ export type Msg =
       autoMs: number | null
       me: { target: boolean; cell: number | null; label: string } // 本人宛て
     }
-  | { type: 'lastOneBrief'; prizes: number; entrants: { name: string; isMe: boolean }[]; meIn: boolean; autoMs: number | null }
+  | { type: 'lastOneBrief'; prizes: number; entrants: Who[]; meIn: boolean; autoMs: number | null }
   // 緊急クエスト「モグラ撃退」。狙われるのはリーチの人。やられる割合は先に決まっていて、
   // 叩いた数が会場全体の下位（その割合）に入った人がやられる（持っているものを失うのは、自分が挑んだ結果としてだけにする）
   | {
@@ -135,7 +172,7 @@ export type Msg =
       defended: number
       lost: number
       lostReach: number
-      top: { name: string; score: number; isMe: boolean }[] // 撃退王（上位 3 人）
+      top: (Who & { score: number })[] // 撃退王（上位 3 人）
       // 本人宛て。need は、やられたときに、あと何匹叩けば守れたか（守れる数との差）
       me: { score: number; target: boolean; lost: boolean; cell: number | null; need: number; rank: number; reachBefore: number; reachAfter: number }
       totals: Totals
@@ -149,7 +186,7 @@ export type Msg =
   | {
       type: 'dcSpin'
       balls: { color: BallColor; prize?: string }[] // 本人宛て（エントリーしていなければ空）
-      winners: { name: string; color: BallColor; prize: string; isMe: boolean }[]
+      winners: (Who & { color: BallColor; prize: string })[]
       entrants: number
     }
   | { type: 'dcEnd' }
@@ -161,5 +198,7 @@ export type MsgOf<T extends Msg['type']> = Extract<Msg, { type: T }>
 export type PhoneCommand =
   | { type: 'join' }
   | { type: 'questScore'; score: number } // 叩き終わったときに 1 回だけ送る
+  // 叩いている途中の数（本番だけ。2 秒おきくらい）。大画面の「会場で叩いた数」に足すだけで、結果には使わない
+  | { type: 'questProgress'; score: number }
   | { type: 'choice'; kind: 'receive' | 'challenge' }
   | { type: 'entry' }

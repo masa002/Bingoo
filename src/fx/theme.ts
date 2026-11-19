@@ -3,11 +3,9 @@
 export type { Tier } from '../core/show'
 export { HEAT_LABEL, MY_TIER_WORD, TIER_NAME, TIER_QUIET, TIER_SHAPE } from '../core/show'
 export type { MachineStyle } from '../core/show'
-export type { Glow, Rarity } from '../core/prizes'
+export type { BallColor, Glow, Rarity } from '../core/prizes'
 import type { Tier } from '../core/show'
 import type { Rarity } from '../core/prizes'
-
-export type BallColor = 'white' | 'red' | 'gold' | 'rainbow'
 
 // 段階の色: 青 緑 赤 金。虹（4）は単色ではなく RAINBOW のグラデーションで描く
 export const TIER_COLOR: Readonly<Record<Tier, string>> = {
