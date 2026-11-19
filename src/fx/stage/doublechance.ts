@@ -86,12 +86,12 @@ export class DoubleChanceStage {
           </svg>
           <div class="fxdc-count-num"><b>0</b><small>秒</small></div>
         </div>
-        <div class="fxdc-entrants"><span>エントリー</span><b data-k="entrants">0</b><span>人</span></div>
-        <p class="fxdc-howto">スマホの「エントリー」ボタンを押してください</p>
+        <div class="fxdc-entrants"><span>参加</span><b data-k="entrants">0</b><span>人</span></div>
+        <p class="fxdc-howto">スマホの「参加する」ボタンをタップ！</p>
       </section>
       <div class="fxdc-spin">スマホをタップして、玉を出そう<small>参加<b data-k="entrants">0</b>人</small></div>
       <section class="fxdc-win">
-        <div class="fxdc-win-head"><b>当選者</b><span><b class="fxdc-win-n">0</b>人</span></div>
+        <div class="fxdc-win-head"><b>当たった人</b><span><b class="fxdc-win-n">0</b>人</span></div>
         <div class="fxdc-more"></div>
         <ol class="fxdc-list"></ol>
         <ol class="fxdc-top"></ol>
@@ -126,7 +126,7 @@ export class DoubleChanceStage {
 
   // エントリー受付。残り秒数を数え、0 になったら「受付終了」にする（次の spin() を待つ）
   entry(seconds: number): void {
-    this.setPhase('entry', 'エントリー受付中')
+    this.setPhase('entry', '参加 受付中')
     this.total = Math.max(0, seconds) * 1000
     this.left = this.total
     this.shownSec = -1
@@ -144,7 +144,7 @@ export class DoubleChanceStage {
 
   // 全員がスマホでガラポンを回している。大きなガラポンがゆっくり回る
   spin(): void {
-    this.setPhase('spin', '全員でガラポンを回しています')
+    this.setPhase('spin', 'みんなでガラポン！')
     if (this.sound && !this.voice) {
       this.voice = sfx.garaponStart()
       this.lastVoice = -1
@@ -212,7 +212,7 @@ export class DoubleChanceStage {
     if (this.dead) return
     if (this.phase !== 'winners' && this.phase !== 'fin') {
       // 最初の 1 人で、抽選器を左に寄せて、右に当選者の欄を出す
-      this.setPhase('winners', '当選者の発表')
+      this.setPhase('winners', '当たった人の発表')
       this.stopVoice()
       await this.tl.wait(900)
       if (this.dead) return
@@ -290,9 +290,9 @@ export class DoubleChanceStage {
           count.classList.toggle('soon', sec <= 5)
           if (this.sound && sec <= 5) sfx.countdown(sec)
         } else {
-          num.innerHTML = '<b>受付終了</b>'
+          num.innerHTML = '<b>しめきり！</b>'
           count.classList.add('closed')
-          this.$('.fxdc-sub').textContent = 'エントリーを締め切りました'
+          this.$('.fxdc-sub').textContent = '参加の受付は ここまで！'
         }
       }
       const ring = this.el.querySelector('.fxdc-count .fg')

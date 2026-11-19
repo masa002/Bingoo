@@ -6,7 +6,7 @@ import { STAGE_H, STAGE_W } from '../theme'
 
 // 大画面の特別なイベント（1920×1080 の大画面全体に重ねる）。どれも演出が終わったら自分で片付けてから解決する。
 //   playAllKakutei  全員確定（大画面の虹）。いちばんの見せ場（約 11 秒）
-//   playFinalBall   「この1球で景品が尽きる！」の予告（約 3.7 秒）
+//   playFinalBall   「この 1 球で景品がなくなる！」の予告（約 3.7 秒）
 // 重なり順はイベントの層が z-index 42（予告）と 46（全員確定）、粒子の canvas が 60。
 // 時間はすべて Timeline で進める（speed で縮む）。host が画面から外されたら、その場で片付けて解決する。
 // 山場では BGM を下げ（bgm.duck）、終わったら戻す。
@@ -282,7 +282,7 @@ function miniCard(): string {
 }
 
 // 全員確定（大画面の虹）: すべてを止める → 確定音 → 虹のヒビ → 「全員確定」 → 虹玉 → 全員のカードが 1 マス開く。
-// newReach / newDouble は、この 1 マスで新しくリーチ・ダブルリーチになった人数（結果として出す）
+// newReach はこの 1 マスでリーチになった人数、newDouble はリーチの本数が増えた人数（結果として出す）
 export async function playAllKakutei(host: HTMLElement, o: StageEventBase & { total: number; newReach: number; newDouble: number }): Promise<void> {
   const total = count(o.total)
   const newReach = count(o.newReach)
@@ -306,7 +306,7 @@ export async function playAllKakutei(host: HTMLElement, o: StageEventBase & { to
     const logo = s.add(
       'fxe-k-logo',
       `<div class="fxe-k-title" data-text="全員確定"><b class="fxe-rbtext">全員確定</b><i>全員確定</i></div>
-       <div class="fxe-k-sub"><span class="fxe-rbtext">✦</span>会場の <em>${fmt(total)} 人</em> 全員に当たり！<span class="fxe-rbtext">✦</span></div>`,
+       <div class="fxe-k-sub"><span class="fxe-rbtext">✦</span>会場の <em>${fmt(total)} 人</em>、みんな当たり！<span class="fxe-rbtext">✦</span></div>`,
     )
     const ball = s.add(
       'fxe-k-ball',
@@ -315,12 +315,12 @@ export async function playAllKakutei(host: HTMLElement, o: StageEventBase & { to
     )
     const panel = s.add(
       'fxe-k-panel',
-      `<div class="fxe-k-head">会場 ${fmt(total)} 人 全員のカードが <em class="fxe-rbtext">1 マス</em>開く！</div>
+      `<div class="fxe-k-head">会場 ${fmt(total)} 人、全員のカードが <em class="fxe-rbtext">1 マス</em>あく！</div>
        <div class="fxe-k-row">
          <div class="fxe-k-card">${miniCard()}</div>
          <div class="fxe-k-stats">
-           <div class="fxe-k-stat"><span class="fxe-k-sh">▲</span><span class="fxe-k-lb">新しくリーチ</span><span class="fxe-k-num">+<b>0</b><small>人</small></span></div>
-           <div class="fxe-k-stat"><span class="fxe-k-sh">◆</span><span class="fxe-k-lb">ダブルリーチ</span><span class="fxe-k-num">+<b>0</b><small>人</small></span></div>
+           <div class="fxe-k-stat"><span class="fxe-k-sh">▲</span><span class="fxe-k-lb">リーチになった人</span><span class="fxe-k-num"><b>0</b><small>人</small></span></div>
+           <div class="fxe-k-stat"><span class="fxe-k-sh">◆</span><span class="fxe-k-lb">リーチが増えた人</span><span class="fxe-k-num"><b>0</b><small>人</small></span></div>
          </div>
        </div>`,
     )
@@ -390,7 +390,7 @@ export async function playAllKakutei(host: HTMLElement, o: StageEventBase & { to
     fx?.burst(960, 560, { count: 320, colors: RAINBOW, speed: 16, shape: 'spark', gravity: 0.1, life: 75 })
     fx?.burst(960, 560, { count: 160, colors: RAINBOW, speed: 10, shape: 'dot', gravity: 0.08, life: 90, size: 9 })
 
-    // 5. 「会場 ○ 人 全員のカードが 1 マス開く！」→ 結果の数字をカウントアップ（パネルは HUD と番号の盤の間に収める）
+    // 5. 「会場 ○ 人、全員のカードが 1 マスあく！」→ 結果の数字をカウントアップ（パネルは HUD と番号の盤の間に収める）
     await s.until(6250)
     on(panel)
     await s.until(6750)
@@ -415,9 +415,9 @@ export async function playAllKakutei(host: HTMLElement, o: StageEventBase & { to
   })
 }
 
-// ---- 「この1球で景品が尽きる！」 -------------------------------------------------
+// ---- 「この 1 球で景品がなくなる！」 -----------------------------------------------
 
-// 「この1球で景品が尽きる！」の予告（抽選を始める前に出す）。
+// 「この 1 球で景品がなくなる！」の予告（抽選を始める前に出す）。
 // 警報のような高まりを、赤の点滅ではなく金と白のゆっくりした脈動で作る
 export async function playFinalBall(host: HTMLElement, o: StageEventBase & { prizesLeft: number }): Promise<void> {
   const left = count(o.prizesLeft)
@@ -426,7 +426,7 @@ export async function playFinalBall(host: HTMLElement, o: StageEventBase & { pri
     // 流れる文字と光の振れは、速度を上げても速くなりすぎないようにする
     s.root.style.setProperty('--marq', `${Math.max(6000, s.tl.ms(12000))}ms`)
     s.root.style.setProperty('--sweep', `${Math.max(1000, s.tl.ms(1600))}ms`)
-    const text = '★ FINAL BALL ★ この1球で景品が尽きる '.repeat(4)
+    const text = `★ この 1 球で景品がなくなる ★ 景品 残り ${fmt(left)} 個 `.repeat(4)
     const band = (pos: string): HTMLElement =>
       s.add(`fxe-f-band ${pos}`, `<div class="fxe-f-track"><span>${text}</span><span>${text}</span></div>`)
     // 残りが 10 個までなら、景品の箱も並べる
@@ -440,8 +440,8 @@ export async function playFinalBall(host: HTMLElement, o: StageEventBase & { pri
     const bands = [band('top'), band('bottom')]
     const center = s.add(
       'fxe-f-center',
-      `<div class="fxe-f-pre">この1球で</div>
-       <div class="fxe-f-main" data-text="景品が尽きる！"><b>景品が尽きる！</b></div>
+      `<div class="fxe-f-pre">この 1 球で</div>
+       <div class="fxe-f-main" data-text="景品がなくなる！"><b>景品がなくなる！</b></div>
        <div><div class="fxe-f-left">残り <b>${fmt(left)}</b> 個${gifts}</div></div>`,
     )
     const main = center.querySelector<HTMLElement>('.fxe-f-main')!

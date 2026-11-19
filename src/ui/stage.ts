@@ -1,6 +1,6 @@
 import { bgm, engine, sfx, type BgmScene } from '../audio'
 import { LETTERS } from '../core/card'
-import { TIER_WORD } from '../core/show'
+import { TIER_QUIET, TIER_WORD } from '../core/show'
 import type { Player } from '../core/game'
 import type { Clock } from '../demo/clock'
 import { Particles, RAINBOW } from '../fx/particles'
@@ -24,24 +24,24 @@ const STAGE_HTML = `
   <div class="st-stat"><span>参加</span><b data-k="size">0</b><small>人</small></div>
   <div class="st-stat"><span>リーチ</span><b data-k="reach">0</b><small>人</small></div>
   <div class="st-stat"><span>ビンゴ</span><b data-k="bingo">0</b><small>人</small></div>
-  <div class="st-stat"><span>景品 あと</span><b data-k="lower">0</b></div>
-  <div class="st-stat st-upper"><span>上位景品 あと</span><b data-k="upper">0</b></div>
+  <div class="st-stat"><span>景品 残り</span><b data-k="lower">0</b><small>個</small></div>
+  <div class="st-stat st-upper"><span>上位景品 残り</span><b data-k="upper">0</b><small>個</small></div>
   <div class="st-stat st-chal"><span>上位チャレンジ中</span><b data-k="chal">0</b><small>人</small></div>
-  <div class="st-odds">ビンゴが出る番号 あと <b data-k="hits">0</b> / <i data-k="remaining">75</i></div>
+  <div class="st-odds">ビンゴになる番号 残り <b data-k="hits">0</b><small>個</small></div>
 </header>
 <section class="st-result">
   <div class="st-last"><small>今回の番号</small><b>--</b></div>
   <div class="st-chips">
-    <div class="chip"><span>持っていた人</span><b data-r="hits"></b></div>
-    <div class="chip"><span>新しくリーチ</span><b data-r="reach"></b></div>
+    <div class="chip"><span>当たった人</span><b data-r="hits"></b></div>
+    <div class="chip"><span>リーチになった人</span><b data-r="reach"></b></div>
     <div class="chip chip-bingo"><span>ビンゴ</span><b data-r="bingo"></b></div>
   </div>
   <ol class="st-names"></ol>
 </section>
 <section class="st-venue">
-  <span class="st-venue-label">会場ビュー</span>
+  <span class="st-venue-label">会場のようす</span>
   <canvas width="606" height="170"></canvas>
-  <span class="st-venue-legend"><i class="r"></i>リーチ<i class="g"></i>いまの番号を持つ人<i class="v"></i>チャレンジ中<i class="m"></i>あなた</span>
+  <span class="st-venue-legend"><i class="r"></i>リーチ<i class="g"></i>いま当たった人<i class="v"></i>チャレンジ中<i class="m"></i>あなた</span>
 </section>
 <div class="st-board"></div>
 <canvas class="st-fx" width="1920" height="1080"></canvas>
@@ -143,9 +143,9 @@ export class StageView {
           if (li) {
             li.classList.add('chal')
             const small = li.querySelector('small') ?? li.appendChild(document.createElement('small'))
-            small.textContent = '上位チャレンジへ'
+            small.textContent = '上位チャレンジに挑戦！'
           } else {
-            this.addNames([{ ...c, label: '上位チャレンジへ' }], 'chal')
+            this.addNames([{ ...c, label: '上位チャレンジに挑戦！' }], 'chal')
           }
         }
         return
@@ -202,12 +202,12 @@ export class StageView {
       <div class="rcp">
         <h2 class="st-head">受付中</h2>
         <div class="rcp-count"><b>0</b> / ${fmt(m.size)} 人</div>
-        <p class="rcp-join">スマホで「参加する」を押してください</p>
+        <p class="rcp-join">スマホの「参加する」を押してね</p>
         <div class="rcp-guide">
-          <h3>演出の見方</h3>
-          <p>色が熱いほど、その番号でビンゴやリーチが出やすくなります（外れることもあります）</p>
-          <ol class="tier-guide">${tierGuide(TIER_WORD, '静か')}</ol>
-          <p>大画面の色は <b>会場の期待度</b>、スマホの色は <b>あなたのカードの期待度</b> です。虹は、出た画面の持ち主が必ず当たります</p>
+          <h3>色の見方</h3>
+          <p>青 → 緑 → 赤 → 金の順に、ビンゴやリーチが出やすい番号です（はずれることもあります）</p>
+          <ol class="tier-guide">${tierGuide(TIER_WORD, TIER_QUIET)}</ol>
+          <p>大画面の色は <b>会場</b>のぶん、スマホの色は <b>あなたのカード</b>のぶん。虹が出たら、必ず当たり！</p>
         </div>
       </div>`)
   }
@@ -240,7 +240,6 @@ export class StageView {
     set('lower', String(t.lowerLeft))
     set('upper', String(t.upperLeft))
     set('chal', fmt(t.challengers))
-    set('remaining', String(t.remaining))
     set('hits', String(t.hitsLeft))
     // 誰も挑んでいない間は、用語だけが浮くので出さない
     this.$('.st-chal').classList.toggle('off', t.challengers === 0)
@@ -372,7 +371,7 @@ export class StageView {
     })
     const list = this.$('.st-names')
     list.innerHTML = ''
-    this.addNames(m.challengeWins.map((x) => ({ ...x, label: '上位チャレンジ成功' })), 'chal')
+    this.addNames(m.challengeWins.map((x) => ({ ...x, label: '上位チャレンジ成功！' })), 'chal')
     this.addNames(m.names, '')
     if (m.newBingo > m.names.length) list.append(h('li', 'more', `ほか ${fmt(m.newBingo - m.names.length)} 人`))
     this.fitNames()
@@ -425,7 +424,7 @@ export class StageView {
     // 【C】のような記号だけでは伝わらないので、「景品 C」と書く
     const label = (e: PrizeEntry) =>
       e.rarity === null
-        ? 'ガラポンで外れ'
+        ? 'ガラポンではずれ'
         : `${e.kind === 'challenge' ? 'チャレンジ成功 ' : ''}景品 ${e.rarity}${e.rankUp ? '（ランクアップ）' : ''}`
     this.addNames(
       m.entries.slice(0, 12).map((e) => ({ name: e.name, isMe: e.isMe, label: label(e) })),
@@ -455,9 +454,9 @@ export class StageView {
     this.setTotals(m.totals)
     this.showOverlay(`
       <div class="fin">
-        <h2 class="st-head">すべての景品の当選者が決まりました！</h2>
-        <div class="fin-stats"><span>抽選 <b>${m.totals.drawCount}</b> 回</span><span>ビンゴ <b>${fmt(m.totals.winners)}</b> 人</span></div>
-        <p>${m.leftoverUpper ? `残った上位景品 ${m.leftoverUpper} 個は、ダブルチャンスに回ります。` : ''}このあと、ダブルチャンス！</p>
+        <h2 class="st-head">景品が ぜんぶ出ました！</h2>
+        <div class="fin-stats"><span>出た番号 <b>${m.totals.drawCount}</b> 個</span><span>ビンゴ <b>${fmt(m.totals.winners)}</b> 人</span></div>
+        <p>${m.leftoverUpper ? `残った上位景品 ${m.leftoverUpper} 個は、ダブルチャンスへ！ ` : ''}このあとは、ダブルチャンス！</p>
       </div>`)
     sfx.fanfare('big')
     this.fx.rain(500, RAINBOW)
@@ -542,7 +541,7 @@ class Venue {
 
   reset(size: number): void {
     const step = Math.max(1, Math.ceil(size / 1000))
-    this.label.textContent = `会場ビュー（デモ: 仮想 ${fmt(size)} 台${step > 1 ? `・1/${step} を表示` : ''}）`
+    this.label.textContent = `会場のようす（デモ: ${fmt(size)} 人ぶん${step > 1 ? `・${step} 人に 1 人を表示` : ''}）`
     this.mode = 'idle'
     this.flashN = 0
     this.refresh()

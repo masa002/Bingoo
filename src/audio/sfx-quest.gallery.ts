@@ -3,10 +3,10 @@ import { el, type Timeline } from '../fx/runtime'
 import { engine, sfx } from './index'
 
 // 緊急クエスト「モグラ撃退」の効果音のギャラリー（URL に ?gallery を付けると開く）。
-// 1 つずつの音と、本番に近い流れ（警報 → 叩き始め → 10 秒叩く → 残り 3・2・1 → 終わり → 結果）を登録する。
-// 流れのモグラと叩く音は、人が叩くように時刻を揺らす（モグラは 1 秒に 3〜4 匹顔を出し、反応して叩く。ときどき空振り）。
+// 1 つずつの音と、本番に近い流れ（警報 → たたき始め → 10 秒たたく → 残り 3・2・1 → 終わり → 結果）を登録する。
+// 流れのモグラとたたく音は、人がたたくように時刻を揺らす（モグラは 1 秒に 3〜4 匹顔を出し、反応してたたく。ときどき空振り）。
 // デモでは大画面とスマホの音が同じ PC から鳴るので、流れは両方を重ねて鳴らす（「スマホだけ」「大画面だけ」の流れも置く）。
-// 画面には、音の名前と説明、いまの場面、残り秒数・叩いた数・コンボを出す
+// 画面には、音の名前と説明、いまの場面、残り秒数・たたいた数・連続を出す
 
 type Cue = readonly [ms: number, fn: () => void]
 type Tap = readonly [ms: number, kind: 'pop' | 'hit' | 'miss']
@@ -19,7 +19,7 @@ interface View {
 const GROUP = '音: 緊急クエスト'
 const FLOW = '音: 緊急クエスト（流れ）'
 const INTRO = 2600 // 警報の長さ（演出の introMs）
-const PLAY = 10000 // 叩ける時間（演出の playMs）
+const PLAY = 10000 // たたける時間（演出の playMs）
 
 function line(css: string, text = ''): HTMLDivElement {
   const node = el('div')
@@ -28,7 +28,7 @@ function line(css: string, text = ''): HTMLDivElement {
   return node
 }
 
-// 画面の真ん中に、音の名前と説明、いまの場面、叩いている様子（残り秒数・叩いた数・コンボ）を出す
+// 画面の真ん中に、音の名前と説明、いまの場面、たたいている様子（残り秒数・たたいた数・連続）を出す
 function view(host: HTMLElement, title: string, note: string): View {
   const box = line(
     'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;' +
@@ -84,7 +84,7 @@ const sayAnd =
     fn()
   }
 
-// 叩く時間（from ms から len ms）に、モグラが顔を出す時刻と、それを叩く指の時刻。
+// たたく時間（from ms から len ms）に、モグラが顔を出す時刻と、それをたたく指の時刻。
 // モグラは 1 秒に 3〜4 匹。skill（0〜1）が高いほど多く・速く当て、外したモグラのいくつかには空振りする
 function taps(from: number, len: number, skill: number): Tap[] {
   const list: Tap[] = []
@@ -100,13 +100,13 @@ function taps(from: number, len: number, skill: number): Tap[] {
 
 interface Quest {
   stage: boolean // 大画面の音（警報・合図・残り秒数・終わり・結果）を鳴らす
-  phone: boolean // スマホの音（ボス・モグラ・叩く音・自分の結果）を鳴らす
+  phone: boolean // スマホの音（ボス・モグラ・たたく音・自分の結果）を鳴らす
   target: boolean // 自分のリーチが狙われている（ボスモグラが出る）
   skill: number // 0〜1。高いほど多く当てる
   result: 'defend' | 'fail' | 'none' // スマホの結果（none は狙われていない人）
 }
 
-// 警報（2.6 秒）→ 叩き始め → 10 秒叩く（残り 3・2・1）→ 終わり → 自分の結果 → 大画面の結果発表
+// 警報（2.6 秒）→ たたき始め → 10 秒たたく（残り 3・2・1）→ 終わり → 自分の結果 → 大画面の結果発表
 function questFlow(tl: Timeline, v: View, q: Quest): Promise<void> {
   const cues: Cue[] = []
   const at = (ms: number, text: string, fn?: () => void): void => {
@@ -121,12 +121,12 @@ function questFlow(tl: Timeline, v: View, q: Quest): Promise<void> {
   let hits = 0
   let combo = 0
   let left = PLAY / 1000
-  const show = (): void => v.stat(`残り ${left} 秒 ・ 叩いた ${hits} 匹 ・ コンボ ${combo}`)
+  const show = (): void => v.stat(`残り ${left} 秒 ・ たたいた ${hits} 匹 ・ 連続 ${combo}`)
 
   at(0, '緊急クエスト発生！', q.stage ? sfx.questAlarm : undefined)
-  if (q.target) at(1300, 'ボスモグラが、リーチのマスを狙っている！', q.phone ? sfx.bossAppear : undefined)
+  if (q.target) at(1300, 'ボスモグラが、リーチのマスをねらってる！', q.phone ? sfx.bossAppear : undefined)
   const go = INTRO
-  at(go, '叩け！', q.stage ? sfx.questGo : undefined)
+  at(go, 'たたけ！', q.stage ? sfx.questGo : undefined)
   for (let s = PLAY / 1000; s >= 1; s--) {
     cues.push([
       go + PLAY - s * 1000,
@@ -195,14 +195,14 @@ registerGallery(
   ),
   item(
     'go',
-    'questGo 叩き始め',
+    'questGo たたき始め',
     '号砲「パン」と太鼓、ドの長調の金管「ジャーン」、駆け上がりと鐘（警報の短調から、晴れるように切り替わる）',
     once(sfx.questGo, 2000),
   ),
-  item('alarm-go', 'questAlarm → questGo（2.6 秒後）', '本番の間隔（警報の長さ introMs = 2.6 秒）で、警報から叩き始めへ', (tl, v) =>
+  item('alarm-go', 'questAlarm → questGo（2.6 秒後）', '本番の間隔（警報の長さ introMs = 2.6 秒）で、警報からたたき始めへ', (tl, v) =>
     cue(tl, 4800, [
       [0, sayAnd(v, '警報', sfx.questAlarm)],
-      [INTRO, sayAnd(v, '叩け！', sfx.questGo)],
+      [INTRO, sayAnd(v, 'たたけ！', sfx.questGo)],
     ]),
   ),
   item(
@@ -252,33 +252,33 @@ registerGallery(
   ),
   item(
     'whack-combo',
-    'whack コンボ 1 → 14（1 秒に 4 回）',
+    'whack 連続 1 → 14（1 秒に 4 回）',
     '「ポコッ」。続けて当てるほど「ピコッ」が五音音階を上がり（ド → 上のミ。その先はレ・ミを行き来）、明るく「キラッ」と光る',
     (tl, v) =>
       cue(
         tl,
         4300,
-        Array.from({ length: 14 }, (_, i): Cue => [i * 260, sayAnd(v, `コンボ ${i + 1}`, () => sfx.whack(i + 1))]),
+        Array.from({ length: 14 }, (_, i): Cue => [i * 260, sayAnd(v, `連続 ${i + 1}`, () => sfx.whack(i + 1))]),
       ),
   ),
-  item('whack-each', 'whack 1 打ずつ（コンボ 1・4・8・12）', '1 打の中身を聞く（それぞれ 2 打ずつ）', (tl, v) =>
+  item('whack-each', 'whack 1 打ずつ（連続 1・4・8・12）', '1 打の中身を聞く（それぞれ 2 打ずつ）', (tl, v) =>
     cue(
       tl,
       4000,
-      [1, 4, 8, 12].flatMap((c, i) => [0, 1].map((j): Cue => [i * 850 + j * 300, sayAnd(v, `コンボ ${c}`, () => sfx.whack(c))])),
+      [1, 4, 8, 12].flatMap((c, i) => [0, 1].map((j): Cue => [i * 850 + j * 300, sayAnd(v, `連続 ${c}`, () => sfx.whack(c))])),
     ),
   ),
-  item('whack-fast', 'whack 速い連打（1 秒に 10 回）', '速く叩くほど 1 打を小さくするので、続けても全体が大きくならない', (tl, v) =>
+  item('whack-fast', 'whack 速い連打（1 秒に 10 回）', '速くたたくほど 1 打を小さくするので、続けても全体が大きくならない', (tl, v) =>
     cue(
       tl,
       3400,
-      Array.from({ length: 30 }, (_, i): Cue => [Math.round(i * 100 + Math.random() * 20), sayAnd(v, `コンボ ${i + 1}`, () => sfx.whack(i + 1))]),
+      Array.from({ length: 30 }, (_, i): Cue => [Math.round(i * 100 + Math.random() * 20), sayAnd(v, `連続 ${i + 1}`, () => sfx.whack(i + 1))]),
     ),
   ),
   item('miss', 'whackMiss 空振り', 'ごく控えめな「スカッ」（音程なし）', (tl) =>
     cue(tl, 1800, [0, 450, 900].map((ms): Cue => [ms, () => sfx.whackMiss()])),
   ),
-  item('whack-miss', 'whack と whackMiss をまぜる', '当たり 3 回 → 空振り（コンボが切れる）→ 当たり 3 回', (tl, v) => {
+  item('whack-miss', 'whack と whackMiss をまぜる', '当たり 3 回 → 空振り（連続が切れる）→ 当たり 3 回', (tl, v) => {
     let combo = 0
     const seq = ['hit', 'hit', 'hit', 'miss', 'hit', 'hit', 'hit'] as const
     return cue(
@@ -294,7 +294,7 @@ registerGallery(
             return
           }
           combo++
-          v.say(`コンボ ${combo}`)
+          v.say(`連続 ${combo}`)
           sfx.whack(combo)
         },
       ]),
@@ -303,7 +303,7 @@ registerGallery(
   item(
     'boss',
     'bossAppear ボスモグラ',
-    '狙われた人だけ。地鳴り「ゴゴゴ…」→ 0.42 秒で「ドバッ！」とラの短調の金管 → 照準の「ピピッ」→ 低い唸り「グルル…」',
+    'ねらわれた人だけ。地鳴り「ゴゴゴ…」→ 0.42 秒で「ドバッ！」とラの短調の金管 → 照準の「ピピッ」→ 低い唸り「グルル…」',
     once(sfx.bossAppear, 2200),
   ),
   item('defend', 'questDefend 守りきった', '盾がはじく「カキーン！」と、短い金管「パ・パーン」、駆け上がるきらきら', once(sfx.questDefend, 2000)),
@@ -323,36 +323,36 @@ registerGallery(
   // ---- 流れ（本番に近い順番と間隔） -------------------------------------------
   item(
     'flow-defend',
-    '狙われた人: 守りきった',
-    '大画面とスマホを重ねて鳴らす（デモと同じ）。警報 → ボス → 叩き始め → 10 秒叩く → 3・2・1 → 終わり → 守りきった → 結果発表',
+    'ねらわれた人: 守りきった',
+    '大画面とスマホを重ねて鳴らす（デモと同じ）。警報 → ボス → たたき始め → 10 秒たたく → 3・2・1 → 終わり → 守りきった → 結果発表',
     (tl, v) => questFlow(tl, v, { stage: true, phone: true, target: true, skill: 0.85, result: 'defend' }),
     FLOW,
   ),
   item(
     'flow-fail',
-    '狙われた人: ダメだった',
+    'ねらわれた人: ダメだった',
     'あまり当てられない人。終わったあと「頑張ったけどダメだった」→ 穴を埋められる → 結果発表',
     (tl, v) => questFlow(tl, v, { stage: true, phone: true, target: true, skill: 0.25, result: 'fail' }),
     FLOW,
   ),
   item(
     'flow-free',
-    '狙われていない人',
-    'ボスは出ないが、叩いた数は会場の合計と撃退王に入る。自分の結果の音はなし',
+    'ねらわれていない人',
+    'ボスは出ないが、たたいた数は会場の合計と撃退王に入る。自分の結果の音はなし',
     (tl, v) => questFlow(tl, v, { stage: true, phone: true, target: false, skill: 0.6, result: 'none' }),
     FLOW,
   ),
   item(
     'flow-phone',
-    'スマホだけ（狙われた人・守りきった）',
-    '大画面の音を外して、スマホで鳴る音（ボス・モグラ・叩く音・結果）だけを聞く',
+    'スマホだけ（ねらわれた人・守りきった）',
+    '大画面の音を外して、スマホで鳴る音（ボス・モグラ・たたく音・結果）だけを聞く',
     (tl, v) => questFlow(tl, v, { stage: false, phone: true, target: true, skill: 0.7, result: 'defend' }),
     FLOW,
   ),
   item(
     'flow-stage',
     '大画面だけ',
-    'スマホの音を外して、大画面の音（警報・叩き始め・3・2・1・終わり・結果発表）だけを聞く',
+    'スマホの音を外して、大画面の音（警報・たたき始め・3・2・1・終わり・結果発表）だけを聞く',
     (tl, v) => questFlow(tl, v, { stage: true, phone: false, target: false, skill: 0, result: 'none' }),
     FLOW,
   ),

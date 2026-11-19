@@ -154,7 +154,7 @@ const NUDGE_FIRST = 2500 // 叩く時間が始まってから 1 回も押して�
 const NUDGE_GAP = 3200 // そのあとも押さない人に、控えめにくり返す間隔
 
 const ONOMA = ['ポカッ', 'ペチッ', 'ボコッ', 'ポコッ', 'バシッ'] as const
-const COMBO_WORD: Readonly<Record<number, string>> = { 5: 'ナイス！', 10: 'すごい！', 15: '達人！', 20: '神業！', 25: '伝説！', 30: '撃退王級！' }
+const COMBO_WORD: Readonly<Record<number, string>> = { 5: 'ナイス！', 10: 'すごい！', 15: '達人！', 20: 'おみごと！', 25: 'とまらない！', 30: '撃退王クラス！' }
 const SPARK = ['#ffffff', '#fff4cc', '#ffe08a', '#f5c542'] as const
 const SOIL = ['#6e4a2a', '#93693f', '#4a2f19', '#2f1d0e'] as const
 const EMBER = ['#ff8a5a', '#ffd0a0', '#ffffff', '#ffb03a'] as const
@@ -352,10 +352,10 @@ export class MoleQuest {
     this.setMission('intro')
     // まだ始まっていないことを見せる。自動で始まるときは、そこまでの残りを帯で見せる
     if (o.autoMs !== null && o.autoMs > 0) {
-      p.wait.innerHTML = '<b>まもなくスタート</b><small>このあと自動で始まります</small><i class="fxq-wait-bar"><i></i></i>'
+      p.wait.innerHTML = '<b>まもなくスタート！</b><small>もうすぐ始まるよ</small><i class="fxq-wait-bar"><i></i></i>'
       void play(p.wait.querySelector('.fxq-wait-bar i')!, [{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], o.autoMs, tl, { easing: 'linear', fill: 'forwards' })
     } else {
-      p.wait.innerHTML = '<b>まもなくスタート</b><small>司会の合図を待っています<em class="fxq-dots"><i>.</i><i>.</i><i>.</i></em></small>'
+      p.wait.innerHTML = '<b>まもなくスタート！</b><small>司会の合図を待ってね<em class="fxq-dots"><i>.</i><i>.</i><i>.</i></em></small>'
     }
     tl.at(500, () => {
       if (!ok()) return
@@ -490,17 +490,17 @@ export class MoleQuest {
       <i class="fxq-floor"></i>
       <div class="fxq-panel">
         <div class="fxq-row">
-          <div class="fxq-score"><small>撃退</small><b class="fxq-num">0</b><small>匹</small></div>
+          <div class="fxq-score"><small>たたいた数</small><b class="fxq-num">0</b><small>匹</small></div>
           <div class="fxq-combo"></div>
           <div class="fxq-nudge"><i class="fxq-finger">${FINGER_SVG}</i><b>モグラをタップ！</b></div>
         </div>
         <div class="fxq-mission"></div>
         <div class="fxq-howto">
           <div class="fxq-demo"><i class="fxq-demo-pit"></i><div class="fxq-demo-clip"><div class="fxq-demo-mole">${MOLE_SVG}</div></div><i class="fxq-demo-ring"></i><i class="fxq-finger">${FINGER_SVG}</i></div>
-          <div class="fxq-howto-txt"><b>出てきたモグラを<br>指でタップ！</b><small>カードのマスから顔を出します</small></div>
+          <div class="fxq-howto-txt"><b>出てきたモグラを<br>指でタップ！</b><small>カードのマスから出てくるよ</small></div>
         </div>
         <div class="fxq-brief">
-          <div class="fxq-facts"><span class="fxq-fact"><b>${Math.round(this.playMs / 1000)}</b>秒間</span><span class="fxq-fact-txt">たくさん叩いて、<br>${this.target ? 'カードを守ろう' : 'モグラを追い返そう'}</span></div>
+          <div class="fxq-facts"><span class="fxq-fact"><b>${Math.round(this.playMs / 1000)}</b>秒間</span><span class="fxq-fact-txt">たくさんたたいて、<br>${this.target ? 'カードを守ろう' : 'モグラを追い返そう'}</span></div>
           <div class="fxq-wait"></div>
         </div>
       </div>
@@ -804,12 +804,12 @@ export class MoleQuest {
     if (!p) return
     this.setMission('play')
     const sub = p.howto.querySelector('small')
-    if (sub) sub.textContent = '顔を出したら、引っ込む前にタップ'
+    if (sub) sub.textContent = '出てきたら、すぐタップ！'
     this.reveal(p.floor, 0)
     this.reveal(p.panel, 0)
     this.reveal(p.hud, 0)
     if (this.boss && !this.armed) this.arm(200)
-    void this.showBanner(`<div class="fxq-ban is-go"><div class="fxq-ban-pre">${txt('タップで')}</div>${txt('叩け！')}</div>`, 260)
+    void this.showBanner(`<div class="fxq-ban is-go"><div class="fxq-ban-pre">${txt('タップで')}</div>${txt('たたけ！')}</div>`, 260)
   }
 
   // 叩く時間の終わり。叩いた数で play を解決し、タップを下へ通す
@@ -1431,7 +1431,7 @@ export class MoleQuest {
           { easing: 'cubic-bezier(.25,.6,.4,1)', fill: 'forwards' },
         )
       }
-      this.guard()
+      this.guard(r.score < 1 ? '無事' : '守った') // 1 匹もたたいていない人に「守った」とは言わない
       await tl.wait(720)
       if (!alive()) return
     } else {
@@ -1439,7 +1439,7 @@ export class MoleQuest {
       this.washOnce()
     }
     // 1 匹も叩かずに済んだ人には「守りきった」とは言わない
-    const lbl = r.score < 1 ? 'モグラはあきらめて帰っていった' : this.label ? `${escapeHtml(this.label)} を守りきった！` : 'カードを守りきった！'
+    const lbl = r.score < 1 ? 'モグラは あきらめて帰った' : this.label ? `${escapeHtml(this.label)} を守りきった！` : 'カードを守りきった！'
     void this.showBanner(`<div class="fxq-ban is-win"><div class="fxq-ban-main">${txt(r.score < 1 ? 'セーフ！' : '守りきった！')}</div><div class="fxq-ban-note"><i>◆</i>${lbl}</div></div>`, 900)
     await tl.wait(1150)
     if (!alive()) return
@@ -1467,25 +1467,25 @@ export class MoleQuest {
   // 順位は、上位（会場の上から 3 割以内）のときだけ出す（下位の順位は追い打ちになるので出さない）
   private resultHtml(kind: 'lost' | 'win' | 'free', r: MoleQuestResult): string {
     const top = r.rank >= 1 && r.rank <= Math.max(3, r.players * 0.3)
-    const rank = top ? `<span>会場 <b>${fmt(r.rank)}</b> 位 / ${fmt(r.players)} 人</span>` : ''
-    const score = `<span>撃退 <b>${fmt(r.score)}</b> 匹</span>`
-    const combo = this.best >= 5 ? `<span>最大 <b>${this.best}</b> 連続</span>` : ''
+    const rank = top ? `<span>会場で <b>${fmt(r.rank)}</b> 位（${fmt(r.players)} 人中）</span>` : ''
+    const score = `<span>たたいた数 <b>${fmt(r.score)}</b> 匹</span>`
+    const combo = this.best >= 5 ? `<span>最高 <b>${this.best}</b> 連続</span>` : ''
     const king = r.rank >= 1 && r.rank <= 3 ? `<div class="fxq-king">★ 撃退王 第${r.rank}位！</div>` : ''
     const chip = this.label ? `<b class="fxq-chip">${escapeHtml(this.label)}</b>` : 'カード'
     if (kind === 'lost') {
-      const main = r.need >= 1 ? `あと <b>${fmt(r.need)}</b> 匹 叩けば守れた！` : 'あと一歩で守れた！'
+      const main = r.need >= 1 ? `あと <b>${fmt(r.need)}</b> 匹で守れた！` : 'あと一歩で守れた！'
       return `<div class="fxq-res is-lost"><div class="fxq-res-head"><i>▼</i>やられた…</div><div class="fxq-res-main">${main}</div>
         <div class="fxq-res-sub"><span>ナイスファイト！</span>${score}${rank}${combo}</div>
-        <div class="fxq-res-next">まだチャンスはあります。ほかのラインをねらおう</div></div>`
+        <div class="fxq-res-next">まだチャンスあり！ ほかのラインをねらおう</div></div>`
     }
     if (kind === 'win') {
       // 1 匹も叩かずに済んだ人には「守りきった」とは言わない
-      const [head, main] = r.score < 1 ? ['セーフ！', `${chip} は無事だった`] : ['守りきった！', `${chip} を守りきった！`]
+      const [head, main] = r.score < 1 ? ['セーフ！', `${chip} は無事！`] : ['守りきった！', `${chip} を守りきった！`]
       return `<div class="fxq-res is-win"><div class="fxq-res-head"><i>◆</i>${head}</div><div class="fxq-res-main">${main}</div>
         <div class="fxq-res-sub">${score}${rank}${combo}</div>${king}</div>`
     }
-    return `<div class="fxq-res is-free"><div class="fxq-res-head"><i>✦</i>あなたの結果</div><div class="fxq-res-main">撃退 <b class="fxq-count">${this.still ? fmt(r.score) : '0'}</b> 匹</div>
-      <div class="fxq-res-sub">${rank}<span>会場の合計 <b>${fmt(r.total)}</b> 匹</span>${combo}</div>${king}</div>`
+    return `<div class="fxq-res is-free"><div class="fxq-res-head"><i>✦</i>あなたの結果</div><div class="fxq-res-main">たたいた数 <b class="fxq-count">${this.still ? fmt(r.score) : '0'}</b> 匹</div>
+      <div class="fxq-res-sub">${rank}<span>会場みんなで <b>${fmt(r.total)}</b> 匹</span>${combo}</div>${king}</div>`
   }
 
   // 下の点数の代わりに、結果の札を出す
@@ -1536,12 +1536,12 @@ export class MoleQuest {
   }
 
   // 守ったマスに、緑の「◆ 守った」の盾
-  private guard(): void {
+  private guard(word: string): void {
     const p = this.parts
     const b = this.boss
     if (!p || !b) return
     const s = b.box.w * 0.92
-    const g = el('div', 'fxq-guard', '<b>◆</b><small>守った</small>')
+    const g = el('div', 'fxq-guard', `<b>◆</b><small>${word}</small>`)
     g.style.cssText = `left:${b.box.x + b.box.w / 2 - s / 2}px;top:${b.box.y + b.box.h / 2 - s / 2}px;width:${s}px;height:${s}px`
     p.fx.append(g)
     const frames = this.still
@@ -1599,11 +1599,11 @@ export class MoleQuest {
     if (!node) return
     const chip = this.label ? `<b class="fxq-chip">${escapeHtml(this.label)}</b>` : ''
     const dots = '<em class="fxq-dots"><i>.</i><i>.</i><i>.</i></em>'
-    const sub = this.target ? '叩いた数が 会場の下位だと やられる' : '会場みんなで モグラを追い返せ'
+    const sub = this.target ? 'たたいた数が少ないと、やられる！' : 'みんなで モグラを追い返そう'
     let head: string
-    if (kind === 'wait') head = `<i>…</i><span>${this.target ? '判定中' : '集計中'}${dots}`
-    else if (this.target) head = kind === 'intro' ? `<i>▲</i><span>ボスモグラが ${chip || 'あなたのカード'} を狙っている！` : `<i>▲</i><span>${chip || 'カード'} を守れ！`
-    else head = kind === 'intro' ? '<i>✦</i><span>モグラが会場に来た！' : '<i>✦</i><span>どんどん叩け！'
+    if (kind === 'wait') head = `<i>…</i><span>${this.target ? '結果は' : '数えています'}${dots}`
+    else if (this.target) head = kind === 'intro' ? `<i>▲</i><span>ボスモグラが ${chip || 'あなたのカード'} をねらってる！` : `<i>▲</i><span>${chip || 'カード'} を守れ！`
+    else head = kind === 'intro' ? '<i>✦</i><span>モグラが会場に来た！' : '<i>✦</i><span>どんどんたたけ！'
     node.innerHTML = `${head}<small>${sub}</small></span>`
   }
 

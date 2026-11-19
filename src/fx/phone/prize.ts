@@ -318,7 +318,7 @@ function makeCaption(r: Rarity | null, prize: string): HTMLElement {
     'fxp-caption',
     r
       ? `<small><i>${SHAPE[r]}</i> ${r}　${RARITY_NAME[r]}</small>${headline(prize, 'b', r)}`
-      : `<small><i>◎</i> DOUBLE CHANCE</small>${headline(prize || 'ダブルチャンス券', 'b', 'W')}<em>最後のダブルチャンスで使えます</em>`,
+      : `<small><i>◎</i> DOUBLE CHANCE</small>${headline(prize || 'ダブルチャンス券', 'b', 'W')}<em>最後のダブルチャンスで使ってね</em>`,
   )
   cap.dataset.r = r ?? 'W'
   return cap
@@ -495,9 +495,9 @@ async function tearPack(s: Scene, pack: HTMLElement, glow: Glow, autoMs: number)
     el(
       'div',
       'fxp-hint',
-      `<b>スワイプ、またはタップ 3 回で開封</b>
+      `<b>スワイプか、タップ 3 回で開けよう</b>
        <span class="fxp-dots"><i></i><i></i><i></i></span>
-       <small>あと <em>${Math.ceil(autoMs / 1000)}</em> 秒で自動で開きます</small>`,
+       <small>あと <em>${Math.ceil(autoMs / 1000)}</em> 秒で自動で開くよ</small>`,
     ),
   )
   const dots = [...hint.querySelectorAll<HTMLElement>('.fxp-dots i')]
@@ -681,7 +681,7 @@ async function rankUpShow(s: Scene, card: HTMLElement, ru: { from: Rarity; to: R
     el(
       'div',
       'fxp-rankup',
-      `<small>在庫切れで</small><b>1 ランクアップ！</b>
+      `<small>品切れ！ かわりに</small><b>1 ランクアップ！</b>
        <div class="fxp-ru-row">${chip(ru.from)}<i class="fxp-ru-arrow">➜</i>${chip(ru.to)}</div>`,
     ),
   )
@@ -823,7 +823,7 @@ async function reveal(s: Scene, card: HTMLElement, rays: HTMLElement, caption: H
     replay(card, 'is-ascend')
     await s.wait(360)
     setEdge(s, card, 'rainbow', 520)
-    const tag = s.add(el('div', 'fxp-ascend', '<span>✦ 縁が虹に昇格！</span>'))
+    const tag = s.add(el('div', 'fxp-ascend', '<span>✦ 金のふちが虹に！</span>'))
     s.anim(tag, slam(1.5), 320, { easing: 'cubic-bezier(.2,1.2,.4,1)' })
     for (const [dx, dy] of [
       [-104, -150],
@@ -849,7 +849,7 @@ async function reveal(s: Scene, card: HTMLElement, rays: HTMLElement, caption: H
 const RING = 2 * Math.PI * 52 // 残り秒数のリングの周の長さ（prize.css の stroke-dasharray と同じ）
 
 // ビンゴ後の選択。seconds 秒（既定 10）で時間切れなら 'receive'。
-// challenge.allowed が false のとき（終盤など）は受け取るだけ。chance は成功の目安（0〜1、出さなくてもよい）。
+// challenge.allowed が false のとき（終盤など）は受け取るだけ。chance はそろう見こみ（0〜1、出さなくてもよい）。
 // double は倍々（チャレンジ成功のあとの 2 回目）。省略したときは、いまの景品が SR 以上なら倍々として見せる
 export async function askChoice(
   host: HTMLElement,
@@ -870,17 +870,17 @@ export async function askChoice(
       const total = Math.max(1, o.seconds ?? 10) * 1000
       const cur = `<i>${SHAPE[o.rarity]}</i> ${o.rarity}`
       const goal = `<i>${SHAPE[ch.target]}</i> ${ch.target}`
-      const chance = ch.chance === undefined ? '' : `<em>成功の目安 ${ch.chance < 0.01 ? '1% 未満' : `${Math.round(ch.chance * 100)}%`}</em>`
+      const chance = ch.chance === undefined ? '' : `<em>そろう見こみ ${ch.chance < 0.01 ? '1% もない' : `${Math.round(ch.chance * 100)}%`}</em>`
       // 失うものは、選ぶ前に書く。ボタンの中にも、押す指の真下で読める大きさで書く（倍々も同じ言い方）
       const riskBody = ch.allowed
-        ? `<b>上位チャレンジ</b><small>${cur} を手放して ${goal} を狙う</small>${chance}
-           <span class="fxp-warn"><i>▼</i> 失敗すると、いまの景品はなくなります</span>`
-        : `<b>上位チャレンジ</b><small>${escapeHtml(ch.reason ?? 'いまはチャレンジできません')}</small>`
+        ? `<b>上位チャレンジ</b><small>${cur} を手放して ${goal} をねらう</small>${chance}
+           <span class="fxp-warn"><i>▼</i> そろわないと、いまの景品はなくなる</span>`
+        : `<b>上位チャレンジ</b><small>${escapeHtml(ch.reason ?? 'いまはチャレンジできない')}</small>`
       const title = !ch.allowed ? '景品を受け取ろう' : double ? 'まだ行く？' : 'どうする？'
       const rule = ch.allowed
-        ? `<span>${double ? 'もう 1 回、3×3 のカードで勝負。' : '上位チャレンジは 3×3 のカードで勝負。'}</span>
-           <span>1 列そろえば ${goal}、<b>そろわなければ景品なし</b></span>`
-        : '<span>今回は、上位チャレンジはできません</span>'
+        ? `<span>${double ? 'もう 1 回、3×3 のカードで勝負！' : '上位チャレンジは 3×3 のカードで勝負！'}</span>
+           <span>1 列そろえば ${goal}、<b>そろわないと景品なし</b></span>`
+        : '<span>今回は上位チャレンジなし</span>'
       if (double) s.root.classList.add('is-double')
       // 並びは上から、危ないほう（上位チャレンジ）→ 安全なほう（受け取る）。親指がいちばん届く最下段を「受け取る」にする
       const box = s.add(
@@ -902,7 +902,7 @@ export async function askChoice(
              <svg viewBox="0 0 120 120"><circle class="fxp-ring-bg" cx="60" cy="60" r="52"/><circle class="fxp-ring" cx="60" cy="60" r="52"/></svg>
              <b>${Math.ceil(total / 1000)}</b>
            </div>
-           <small class="fxp-ch-note">時間切れは「受け取る」になります</small>
+           <small class="fxp-ch-note">時間切れは「受け取る」になるよ</small>
            <div class="fxp-ch-btns">
              <button type="button" class="fxp-btn fxp-risk" data-target="${ch.target}"${ch.allowed ? '' : ' disabled'}>${riskBody}</button>
              <button type="button" class="fxp-btn fxp-take"><b>受け取る</b><small>${cur}　${escapeHtml(o.prize)}</small></button>
@@ -960,7 +960,7 @@ export async function askChoice(
       const [on, off] = kind === 'receive' ? [take, risk] : [risk, take]
       on.classList.add('is-on')
       off.classList.add('is-gone')
-      if (timeUp) note.textContent = '時間切れ — 受け取ります'
+      if (timeUp) note.textContent = '時間切れ！「受け取る」になったよ'
       if (kind === 'challenge') {
         const p = s.pointOf(risk)
         s.burst(p.x, p.y, { count: 60, colors: SPARK[ch.target], speed: 8, gravity: 0.15, life: 55, size: 5, shape: 'spark' })
@@ -989,7 +989,7 @@ export async function playChallengeStart(host: HTMLElement, o: PrizeFxOptions & 
       const b = band('fxp-band-b')
       const sub = s.add(el('div', 'fxp-st-sub', 'TOP CHALLENGE'))
       const title = s.add(el('div', 'fxp-st-title', headline('上位チャレンジ！')))
-      const target = s.add(el('div', 'fxp-st-target', `${chip(t)}<span>${RARITY_NAME[t]}を狙え！</span>`))
+      const target = s.add(el('div', 'fxp-st-target', `${chip(t)}<span>${RARITY_NAME[t]}をねらえ！</span>`))
       // ルールは、選択の画面と同じ言い方で、もう一度見せる
       const rule = s.add(
         el(
@@ -997,7 +997,7 @@ export async function playChallengeStart(host: HTMLElement, o: PrizeFxOptions & 
           'fxp-st-rule',
           `<small>まだ出ていない数字だけの 3×3 カード</small>
            <b>1 列そろえば <i>${SHAPE[t]}</i> ${t} ${RARITY_NAME[t]}</b>
-           <span><i>▼</i> そろわなければ景品なし</span>`,
+           <span><i>▼</i> そろわないと景品なし</span>`,
         ),
       )
       const slide = (node: HTMLElement, from: number, to: number, x: number, easing: string) =>
@@ -1074,9 +1074,9 @@ async function challengeLose(s: Scene, aimed: Rarity | undefined): Promise<void>
     `<div class="fxp-half fxp-half-${side}"><i class="fxp-frame" data-edge="${edge}"></i><div class="fxp-face-in"><div class="fxp-mark"><b>B</b></div></div></div>`
   const anchor = s.add(el('div', 'fxp-anchor'))
   const broken = s.add(el('div', 'fxp-broken', half('l') + half('r')), anchor)
-  const title = s.add(el('div', 'fxp-lose-title', '<i>▼</i> チャレンジ失敗'))
+  const title = s.add(el('div', 'fxp-lose-title', '<i>▼</i> チャレンジ失敗…'))
   const none = s.add(el('div', 'fxp-lose-none', '今回は景品なし'))
-  const next = s.add(el('div', 'fxp-lose-next', '<small>ナイスチャレンジ！</small><b>このあとダブルチャンスがあります</b>'))
+  const next = s.add(el('div', 'fxp-lose-next', '<small>ナイスチャレンジ！</small><b>このあとダブルチャンスがあるよ！</b>'))
   s.anim(
     broken,
     [

@@ -77,9 +77,9 @@ export async function playReach(host: HTMLElement, o: { lines: number; waiting: 
   const word = o.lines >= 3 ? 'トリプルリーチ！' : double ? 'ダブルリーチ！' : 'リーチ！'
   const wait = o.waiting.length
     ? `<div class="fxo-reach-wait">
-        <small>あなたは あと 1 つ！${o.waiting.length > 1 ? ' どれかが出ればそろう' : ''}</small>
+        <small>あと 1 つ！${o.waiting.length > 1 ? ' どれか出たらそろう！' : ''}</small>
         <div class="fxo-reach-nums">${o.waiting.map((w) => `<b>${escapeHtml(w)}</b>`).join('')}</div>
-        ${o.lines >= 4 ? `<em>${o.lines} ライン同時！</em>` : ''}
+        ${o.lines >= 4 ? `<em>${o.lines} 列でリーチ！</em>` : ''}
       </div>`
     : ''
   const s = shot(
@@ -233,7 +233,7 @@ export async function playWildResult(host: HTMLElement, o: { label: string; newR
     <div class="fxo-wild-orb"><i><b>✦</b></i></div>
     <div class="fxo-wild-text">
       ${txt('全員確定！', 'is-rainbow')}
-      <p>あなたのカードも <b>1 マス</b>開いた！</p>
+      <p>あなたのカードも <b>1 マス</b>あいた！</p>
       <span class="fxo-wild-cell"><b>${escapeHtml(o.label)}</b></span>
     </div>
     ${o.newReach ? `<div class="fxo-wild-reach">${txt('リーチ！')}</div>` : ''}`,

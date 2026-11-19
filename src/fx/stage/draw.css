@@ -1368,7 +1368,7 @@
   display: flex;
   align-items: center;
   gap: 18px;
-  padding: 8px 56px;
+  padding: 18px 64px;
   border-radius: 999px;
   background: linear-gradient(180deg, #fff8dc 0%, #ffe08a 30%, #f5c542 55%, #c8900f 100%);
   color: #1a1240;
@@ -1400,13 +1400,6 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-}
-
-.fxd-push small {
-  font-size: 28px;
-  font-style: normal;
-  letter-spacing: 1px;
-  line-height: 1.2;
 }
 
 .fxd-push b {

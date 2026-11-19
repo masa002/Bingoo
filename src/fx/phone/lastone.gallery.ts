@@ -32,7 +32,7 @@ const flow = (id: string, label: string, wait: number, autoMs: number | null, o:
 
 registerGallery(
   flow('brief', '説明（6 秒。合図を待つ）→ ガラポン（大当たり 金）', 6000, null, { color: 'gold', prize: 'ワイヤレスイヤホン' }),
-  flow('brief-auto', '説明（自動で 8 秒後に開始）→ ガラポン（外れ）', 8000, 8000, { color: 'white' }),
+  flow('brief-auto', '説明（8 秒で自動スタート）→ ガラポン（はずれ）', 8000, 8000, { color: 'white' }),
   {
     id: 'lastone-phone-brief-only',
     group: G,
@@ -47,10 +47,10 @@ registerGallery(
   item('red', '当たり（赤 ◆）', { color: 'red', prize: 'グルメカタログ' }),
   item('gold', '大当たり（金 ★）', { color: 'gold', prize: 'ワイヤレスイヤホン' }),
   item('rainbow', '超大当たり（虹 ✦）', { color: 'rainbow', prize: '特賞 温泉旅館ペア宿泊券' }),
-  item('white', '外れ（白 ○ → ダブルチャンスの玉 3 個）', { color: 'white' }),
+  item('white', 'はずれ（白 ○ → ダブルチャンスの玉 3 個）', { color: 'white' }),
   item('all', '当たり（金）発表の音もすべて鳴らす（sound: all）', { color: 'gold', prize: 'ロボット掃除機', sound: 'all' }),
-  item('many', '外れ（120 人で 6 個。人数が多いとき）', { color: 'white', contestants: 120, prizes: 6 }),
+  item('many', 'はずれ（120 人で 6 個。人数が多いとき）', { color: 'white', contestants: 120, prizes: 6 }),
   item('early', '時間の端: 玉 4 秒・全体 9 秒（当たり 赤）', { color: 'red', prize: 'お菓子詰め合わせ', dropAt: 4000, durationMs: 9000 }),
-  item('tight', '時間の端: 玉 8 秒・全体 9 秒（結果を縮める・外れ）', { color: 'white', dropAt: 8000, durationMs: 9000 }),
+  item('tight', '時間の端: 玉 8 秒・全体 9 秒（結果を縮める・はずれ）', { color: 'white', dropAt: 8000, durationMs: 9000 }),
   item('long', '時間の端: 玉 8 秒・全体 13 秒（当たり 虹）', { color: 'rainbow', prize: '特賞 最新ゲーム機', dropAt: 8000, durationMs: 13000 }),
 )

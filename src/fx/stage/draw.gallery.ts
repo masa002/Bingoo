@@ -3,7 +3,7 @@ import { makePlan, schedule, timing, type Beat, type BeatKind, type MachineStyle
 import { registerGallery, type GalleryItem } from '../gallery'
 import { MACHINE_STYLES } from '../landing'
 import type { Timeline } from '../runtime'
-import { TIER_WORD } from '../theme'
+import { TIER_QUIET, TIER_WORD } from '../theme'
 import { DrawMachine } from './draw'
 
 // 大画面の抽選機の見本（URL に ?gallery を付けて開く）。
@@ -108,12 +108,12 @@ function sample(
   })
 }
 
-const TIER_LABEL = ['青（静か）', `緑（${TIER_WORD[1]}）`, `赤（${TIER_WORD[2]}）`, `金（${TIER_WORD[3]}・司会の合図を待って公開）`] as const
+const TIER_LABEL = [`青（${TIER_QUIET}）`, `緑（${TIER_WORD[1]}）`, `赤（${TIER_WORD[2]}）`, `金（${TIER_WORD[3]}・司会の合図を待って発表）`] as const
 
 registerGallery(
   // ---- 段階ごとの通し（毎回ちがう計画と型） ----
   ...([0, 1, 2, 3] as const).map((tier) =>
-    item(`tier${tier}`, `通し: ${TIER_LABEL[tier]}`, async (host, tl) => {
+    item(`tier${tier}`, `最初から最後まで: ${TIER_LABEL[tier]}`, async (host, tl) => {
       const m = new DrawMachine(host, { speed: tl.speed })
       await drawOnce(tl, m, tier, seedRng(`tier${tier}`))
       await linger(tl, m)
@@ -122,7 +122,7 @@ registerGallery(
 
   // ---- 型ごと（赤の計画で、型を固定） ----
   ...MACHINE_STYLES.map((variant) =>
-    item(`variant-${variant}`, `型: ${VARIANT_NAME[variant]}（赤の計画）`, async (host, tl) => {
+    item(`variant-${variant}`, `型: ${VARIANT_NAME[variant]}（赤の回）`, async (host, tl) => {
       const m = new DrawMachine(host, { speed: tl.speed, variant })
       await drawOnce(tl, m, 2, seedRng(variant))
       await linger(tl, m)
@@ -132,7 +132,7 @@ registerGallery(
   // ---- 要素ごとの見本 ----
   sample(
     'steps',
-    '会場の期待度の目盛り（段階と 1 対 1 の 4 段。色が上がると、下から順に点く）',
+    '会場の期待度の目盛り（4 段。色が上がると、下から順に点く）',
     [
       beat(0, 'appear', 0),
       beat(300, 'spin', 0),
@@ -148,7 +148,7 @@ registerGallery(
   ),
   sample(
     'pseudo',
-    '疑似連 3 回（止まりかけ →「まだ止まらない！」2・3・4 回目）',
+    '止まりかけて、また回る ×3（「まだ止まらない！」2・3・4 回目）',
     [
       beat(0, 'appear', 0),
       beat(300, 'spin', 0),
@@ -164,7 +164,7 @@ registerGallery(
   ),
   sample(
     'pseudo-flap',
-    '疑似連 3 回（パタパタ型）',
+    '止まりかけて、また回る ×3（パタパタ型）',
     [
       beat(0, 'appear', 0),
       beat(300, 'spin', 0),
@@ -193,7 +193,7 @@ registerGallery(
   ),
   sample(
     'group',
-    '群予告（青の群れ → 赤の群れ）',
+    'カードの群れが飛ぶ（青 → 赤）',
     [
       beat(0, 'appear', 0),
       beat(300, 'spin', 0),
@@ -207,13 +207,13 @@ registerGallery(
   ),
   sample(
     'telop',
-    'テロップ 3 種（控えめ → 強め）',
+    'テロップ 3 つ（控えめ → 強め）',
     [
       beat(0, 'appear', 0),
       beat(300, 'spin', 0),
-      beat(450, 'telop', 0, { text: '次の 1 球に注目' }),
+      beat(450, 'telop', 0, { text: '次の番号に注目！' }),
       beat(2700, 'holdChange', 1, { tier: 1 }),
-      beat(2800, 'telop', 1, { text: '会場がざわついている…' }),
+      beat(2800, 'telop', 1, { text: '会場がざわついてきた…' }),
       beat(5300, 'holdChange', 2, { tier: 2 }),
       beat(5400, 'telop', 2, { text: 'これは来るか…!?' }),
       beat(7400, 'decel', 2),
@@ -223,21 +223,21 @@ registerGallery(
   ),
   sample(
     'decel',
-    '減速 → 着地（青）',
+    'ゆっくりになる → 番号が出る（青）',
     [beat(0, 'appear', 0), beat(300, 'spin', 0), beat(2000, 'decel', 0)],
     planOf(0),
     { revealAt: 2600, tier: 0 },
   ),
   sample(
     'riser',
-    'ライザー → 着地（緑）',
+    '音が上がっていく → 番号が出る（緑）',
     [beat(0, 'appear', 0), beat(300, 'spin', 0), beat(380, 'holdChange', 1, { tier: 1 }), beat(2800, 'riser', 1, { dur: 1200 })],
     planOf(1),
     { revealAt: 4000, tier: 1 },
   ),
   sample(
     'heartbeat',
-    '鼓動 → 間（ま）→ 着地（赤）',
+    'ドキドキ → 間（ま）→ 番号が出る（赤）',
     [
       beat(0, 'appear', 0),
       beat(300, 'spin', 0),
@@ -250,7 +250,7 @@ registerGallery(
   ),
   sample(
     'gold',
-    '金の箔 → ライザー → 間 → PUSH 待ち → 着地',
+    '金のカード → 音が上がる → 間（ま）→ 司会の合図待ち → 発表',
     [
       beat(0, 'appear', 0),
       beat(300, 'spin', 0),
@@ -265,7 +265,7 @@ registerGallery(
   ),
   sample(
     'push',
-    'PUSH 待ち（5 秒。1 秒に 1 回の脈動）',
+    '司会の合図待ち「まもなく発表！」（5 秒。1 秒に 1 回、ゆっくり光る）',
     [
       beat(0, 'appear', 0),
       beat(300, 'spin', 0),
@@ -276,7 +276,7 @@ registerGallery(
     planOf(3),
     { revealAt: 2400, tier: 3, push: 5000 },
   ),
-  item('lands', '着地 4 段階（青 → 緑 → 赤 → 金。reset して使い回す）', async (host, tl) => {
+  item('lands', '番号が出る瞬間 4 色（青 → 緑 → 赤 → 金。reset して使い回す）', async (host, tl) => {
     const m = new DrawMachine(host, { speed: tl.speed })
     for (const t of [0, 1, 2, 3] as const) {
       const beats = [beat(0, 'appear', 0), beat(300, 'spin', 0), beat(1100, 'decel', t)]
@@ -287,7 +287,7 @@ registerGallery(
     }
     await linger(tl, m)
   }),
-  item('repeat', '連続 8 回（本番の出方の比率。型・入り方が毎回変わる）', async (host, tl) => {
+  item('repeat', '続けて 8 回（本番と同じ出やすさ。型と入り方が毎回変わる）', async (host, tl) => {
     const m = new DrawMachine(host, { speed: tl.speed })
     const rng = seedRng('repeat')
     for (let i = 0; i < 8; i++) {
@@ -299,7 +299,7 @@ registerGallery(
     }
     await linger(tl, m)
   }),
-  item('speed', '速度の切り替え（×1 → ×3 → ×0.5 → ×1、金の計画）', async (host, tl) => {
+  item('speed', '速さの切り替え（×1 → ×3 → ×0.5 → ×1、金の回）', async (host, tl) => {
     const base = tl.speed
     const m = new DrawMachine(host, { speed: base })
     tl.at(1200, () => m.setSpeed(base * 3))
@@ -308,7 +308,7 @@ registerGallery(
     await drawOnce(tl, m, 3, seedRng('speed'))
     await linger(tl, m)
   }),
-  item('interrupt', '途中で公開（溜めの最中に reveal が来ても崩れない）', async (host, tl) => {
+  item('interrupt', '途中で発表（ためている最中に発表しても崩れない）', async (host, tl) => {
     const m = new DrawMachine(host, { speed: tl.speed })
     const rng = seedRng('interrupt')
     const plan = makePlan(3, rng)
@@ -319,7 +319,7 @@ registerGallery(
     if (!tl.cancelled) await m.reveal(rng.pick(pool), 3)
     await linger(tl, m)
   }),
-  item('reduced', '動きを減らす設定（色と文字だけで伝える。赤の計画）', async (host, tl) => {
+  item('reduced', '動きを減らす設定（色と文字だけ。赤の回）', async (host, tl) => {
     const m = new DrawMachine(host, { speed: tl.speed, reducedMotion: true })
     await drawOnce(tl, m, 2, seedRng('reduced'))
     await linger(tl, m)

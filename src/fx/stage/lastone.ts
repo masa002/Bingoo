@@ -68,7 +68,7 @@ const CRUISE = 0.08 // 大きな絵なので、回転はゆっくり（1 秒に 
 const DC_BALLS = 3 // 外れた人がもらえるダブルチャンスの玉
 // 回している音の文字だけにする（「カラン」など当たりを思わせる言葉は、結果と関係なく出さない）
 const POP_WORDS = ['ガラガラ', 'ガラッ', 'ゴロゴロ', 'ガラガラ…', 'ゴロッ']
-const SPIN_LABELS = ['ガラガラ…', 'ゴロゴロ…', 'ガラッ ガラッ', '回しています']
+const SPIN_LABELS = ['ガラガラ…', 'ゴロゴロ…', 'ガラッ ガラッ', 'ぐるぐる…']
 
 // 音で例外が出ても、演出は止めずに進める（音は鳴らなくても、見た目と時刻はスマホとそろえる）
 const safe = (fn: () => void): void => {
@@ -147,11 +147,11 @@ function layout(cells: number) {
 }
 
 function winnerText(ws: readonly Entrant[]): string {
-  if (!ws.length) return 'ラストワン賞は 該当なし'
+  if (!ws.length) return 'ラストワン賞は 当たりなし'
   const who = (e: Entrant): string => (e.isMe ? 'あなた' : `${escapeHtml(e.name)} さん`)
-  if (ws.length === 1) return `${who(ws[0])}が獲得！`
-  if (ws.length === 2) return `${who(ws[0])}・${who(ws[1])}が獲得！`
-  return ws.some((e) => e.isMe) ? `あなたと ほか ${fmt(ws.length - 1)} 人が獲得！` : `${fmt(ws.length)} 人が獲得！`
+  if (ws.length === 1) return `${who(ws[0])}がゲット！`
+  if (ws.length === 2) return `${who(ws[0])}・${who(ws[1])}がゲット！`
+  return ws.some((e) => e.isMe) ? `あなたと ほか ${fmt(ws.length - 1)} 人がゲット！` : `${fmt(ws.length)} 人がゲット！`
 }
 
 // ---- 本体 ------------------------------------------------------------------------
@@ -219,13 +219,13 @@ class LastOneShow {
       <div class="fxls-rays"></div>
       <div class="fxls-mwrap"></div>
       <div class="fxls-status">
-        <div class="fxls-banner">${PHONE_SVG}<span>全員スマホでガラポン！</span></div>
-        <div class="fxls-hint">玉は <b>いっせいに</b> 出ます</div>
+        <div class="fxls-banner">${PHONE_SVG}<span>みんな スマホでガラポン！</span></div>
+        <div class="fxls-hint">玉は <b>いっせいに</b> 出る！</div>
         <div class="fxls-count"></div>
         <div class="fxls-tally"></div>
       </div>
       <header class="fxls-head">
-        <div class="fxls-kicker">上のランクまで 景品が尽きた！</div>
+        <div class="fxls-kicker">景品が足りない！</div>
         <div class="fxls-title fxls-ol" data-text="ラストワン争奪！"><b>ラストワン争奪！</b></div>
         <div class="fxls-line">
           <div class="fxls-sub">残り<b>${fmt(o.prizes)}</b>個を<b>${fmt(this.all.length)}</b>人で</div>
@@ -235,7 +235,7 @@ class LastOneShow {
       <div class="fxls-grid"></div>
       <div class="fxls-foot">
         <div class="fxls-rule">${balls}<span class="fxls-rule-t">赤・金・虹の玉が出たら当たり！</span><span class="fxls-rule-w">${ballHtml('white')}白は はずれ</span></div>
-        <div class="fxls-dc">はずれた人には<b>ダブルチャンスの玉 ${DC_BALLS} 個</b>${tokens}</div>
+        <div class="fxls-dc">はずれた人には<b>ダブルチャンスの玉 ${DC_BALLS} 個</b>プレゼント！${tokens}</div>
       </div>
       <div class="fxls-pops"></div>`,
     )
@@ -262,7 +262,7 @@ class LastOneShow {
       return node
     }
     this.shown.forEach((e, i) => {
-      const label = e.isMe ? 'スマホを回して！' : SPIN_LABELS[i % SPIN_LABELS.length]
+      const label = e.isMe ? 'スマホをタップ！' : SPIN_LABELS[i % SPIN_LABELS.length]
       this.cards.push(
         card(
           i,
@@ -281,7 +281,7 @@ class LastOneShow {
         ' fxls-more',
         `<div class="fxls-in">
           <div class="fxls-slot"><span class="fxls-q"><i>…</i></span><span class="fxls-res"></span></div>
-          <div class="fxls-txt"><b>ほか ${fmt(this.hidden.length)} 人</b><small>回しています</small></div>
+          <div class="fxls-txt"><b>ほか ${fmt(this.hidden.length)} 人</b><small>みんな回してる</small></div>
         </div>`,
       )
       this.centers.pop()
@@ -559,7 +559,7 @@ class LastOneShow {
       more.querySelector('.fxls-res')!.innerHTML = w ? crown() : ballHtml('white')
       more.classList.add('done', w ? 'some' : 'lose')
       const label = more.querySelector('small')
-      if (label) label.textContent = w ? `うち ${fmt(w)} 人が当たり` : 'みんな はずれ'
+      if (label) label.textContent = w ? `${fmt(w)} 人が当たり！` : 'みんな はずれ'
     }
 
     // 見出しの下に「○○ さんが獲得！」、抽選器の下に人数
@@ -646,26 +646,26 @@ export function openLastOneBrief(host: HTMLElement, o: LastOneStageBrief): { clo
     <div class="fxls-mwrap"></div>
     <div class="fxls-status fxls-bf-in">
       <div class="fxls-bf-soon"><i></i><i></i><i></i><span>まもなくスタート</span></div>
-      <div class="fxls-bf-when">${auto ? '' : '司会の合図で 始まります'}</div>
+      <div class="fxls-bf-when">${auto ? '' : '司会の合図でスタート！'}</div>
       ${auto && !rm ? '<div class="fxls-bf-bar"><b></b></div>' : ''}
     </div>
     <header class="fxls-head">
-      <div class="fxls-kicker">上のランクまで 景品が尽きた！</div>
+      <div class="fxls-kicker">景品が足りない！</div>
       <div class="fxls-title fxls-ol" data-text="ラストワン争奪！"><b>ラストワン争奪！</b></div>
       <div class="fxls-line">
-        <div class="fxls-sub">景品は残り<b>${fmt(o.prizes)}</b>個。同時にビンゴした<b>${fmt(all.length)}</b>人で、ガラポン勝負！</div>
+        <div class="fxls-sub">残り<b>${fmt(o.prizes)}</b>個を、同時にビンゴした<b>${fmt(all.length)}</b>人でガラポン勝負！</div>
       </div>
     </header>
     <div class="fxls-bf-main">
       <section class="fxls-bf-names fxls-bf-in">
-        <h3>争奪する人<b>${fmt(all.length)}</b>人</h3>
+        <h3>ガラポンを回す人<b>${fmt(all.length)}</b>人</h3>
         <ul>${chips}</ul>
       </section>
       <ol class="fxls-bf-steps">
-        <li class="fxls-bf-in"><i>1</i><div><b>名前のある人は、<em>スマホ</em>を見てください</b></div></li>
-        <li class="fxls-bf-in"><i>2</i><div><b>合図のあと、画面を<em>タップ</em>して ガラポンを回します</b></div></li>
+        <li class="fxls-bf-in"><i>1</i><div><b>名前のある人は、<em>スマホ</em>を見て！</b></div></li>
+        <li class="fxls-bf-in"><i>2</i><div><b>合図が出たら、画面を<em>タップ</em>！ ガラポンを回そう</b></div></li>
         <li class="fxls-bf-in"><i>3</i><div><b>${balls}<span>赤・金・虹の玉が出たら <em>当たり！</em></span></b>
-          <small>外れた人には、ダブルチャンスの玉 ${DC_BALLS} 個${tokens}</small></div></li>
+          <small>はずれても、ダブルチャンスの玉を ${DC_BALLS} 個もらえる！${tokens}</small></div></li>
       </ol>
     </div>`,
   )
@@ -710,7 +710,7 @@ export function openLastOneBrief(host: HTMLElement, o: LastOneStageBrief): { clo
     const render = (): void => {
       if (closed) return
       const left = Math.ceil((auto - (performance.now() - t0) * tl.speed) / 1000)
-      const html = left > 0 ? `あと<b>${left}</b>秒で 始まります` : 'まもなく 始まります'
+      const html = left > 0 ? `あと<b>${left}</b>秒で スタート！` : 'いよいよ！'
       if (when.innerHTML !== html) when.innerHTML = html
     }
     render()

@@ -97,13 +97,13 @@ const NORMAL: Omit<Case, 'id' | 'label'> = {
 }
 
 const CASES: readonly Case[] = [
-  { id: 'brief', label: '説明の画面 → 司会のスタート（7 秒後）→ 3・2・1 → 結果まで', ...NORMAL, brief: { autoMs: null, waitMs: 7000 } },
-  { id: 'brief-auto', label: '説明の画面（自動進行。8 秒でバーがいっぱいになって始まる）', ...NORMAL, brief: { autoMs: 8000, waitMs: 8000 } },
-  { id: 'brief-hold', label: '説明の画面のまま置く（スタートを押さない）', ...NORMAL, brief: { autoMs: null, waitMs: null } },
+  { id: 'brief', label: '説明 → 司会がスタート（7 秒後）→ 3・2・1 → 結果まで', ...NORMAL, brief: { autoMs: null, waitMs: 7000 } },
+  { id: 'brief-auto', label: '説明（自動。8 秒でバーがいっぱいになってスタート）', ...NORMAL, brief: { autoMs: 8000, waitMs: 8000 } },
+  { id: 'brief-hold', label: '説明のまま置く（スタートを押さない）', ...NORMAL, brief: { autoMs: null, waitMs: null } },
   { id: 'brief-early', label: '警報の途中でスタート（1.5 秒後）', ...NORMAL, brief: { autoMs: null, waitMs: 1500 } },
   {
     id: 'no-target',
-    label: '狙われたリーチが 0 人（説明の画面 → 結果まで。撃退数と撃退王が主役）',
+    label: 'リーチの人が 0 人（説明 → 結果まで。撃退数と撃退王が主役）',
     players: 1000,
     targets: 0,
     total: 15420,
@@ -113,12 +113,12 @@ const CASES: readonly Case[] = [
     top: [p('きつね208', 171), p('ねこ123', 164, true), p('ぱんだ579', 150)],
     brief: { autoMs: null, waitMs: 5000 },
   },
-  { id: 'reach-differs', label: '結果: リーチが消えた人数が、やられた人数と違う', ...NORMAL, lost: 108, lostReach: 97 },
-  { id: 'reach-same', label: '結果: リーチが消えた人数が同じ（下の行を出さない）', ...NORMAL, lost: 108, lostReach: 108 },
-  { id: 'normal', label: 'ふつう（1,000 人・狙われた 312 人）', ...NORMAL },
+  { id: 'reach-differs', label: '結果: リーチが消えた人が、やられた人より少ない', ...NORMAL, lost: 108, lostReach: 97 },
+  { id: 'reach-same', label: '結果: リーチが消えた人が、やられた人と同じ（下の行なし）', ...NORMAL, lost: 108, lostReach: 108 },
+  { id: 'normal', label: 'ふつう（1,000 人・リーチの 312 人がピンチ）', ...NORMAL },
   {
     id: 'almost',
-    label: 'ほぼ全員守った',
+    label: 'ほぼ全員 守りきった',
     players: 1000,
     targets: 286,
     total: 27650,
@@ -129,7 +129,7 @@ const CASES: readonly Case[] = [
   },
   {
     id: 'perfect',
-    label: '完全防衛（やられた人 0）',
+    label: '全員 守りきった（やられた人 0）',
     players: 1000,
     targets: 240,
     total: 31020,
@@ -140,7 +140,7 @@ const CASES: readonly Case[] = [
   },
   {
     id: 'many-lost',
-    label: 'やられた人が多い（モグラの逆襲）',
+    label: 'やられた人が多い（モグラにやられた…！）',
     players: 1000,
     targets: 342,
     total: 9410,
@@ -151,7 +151,7 @@ const CASES: readonly Case[] = [
   },
   {
     id: 'me-king',
-    label: '自分が撃退王',
+    label: 'あなたが撃退王',
     players: 1000,
     targets: 298,
     total: 20480,
@@ -162,13 +162,13 @@ const CASES: readonly Case[] = [
   },
   {
     id: 'me-3rd',
-    label: '自分が 3 位',
+    label: 'あなたが 3 位',
     ...NORMAL,
     top: [p('きつね208', 168), p('しろくま042', 159), p('ねこ123', 151, true)],
   },
   {
     id: 'small',
-    label: '少人数（30 人・狙われた 7 人）',
+    label: '少人数（30 人・リーチの 7 人がピンチ）',
     players: 30,
     targets: 7,
     total: 1480,
@@ -201,7 +201,7 @@ const CASES: readonly Case[] = [
   },
   {
     id: 'none',
-    label: '誰も叩かなかった（撃退王なし）',
+    label: '誰もたたかなかった（撃退王なし）',
     players: 40,
     targets: 9,
     total: 0,
@@ -210,8 +210,8 @@ const CASES: readonly Case[] = [
     lostReach: 9,
     top: [],
   },
-  { id: 'speed', label: '叩く途中で速度を変える（×3 → ×0.5 → ×1）', ...NORMAL, speeds: [[1500, 3], [4000, 0.5], [7000, 1]] },
-  { id: 'early', label: '叩く途中で結果が来る（その場で終了にする）', ...NORMAL, resultAt: INTRO + 5000 },
+  { id: 'speed', label: 'たたく途中で速度を変える（×3 → ×0.5 → ×1）', ...NORMAL, speeds: [[1500, 3], [4000, 0.5], [7000, 1]] },
+  { id: 'early', label: 'たたく途中で結果が来る（その場で「そこまで！」にする）', ...NORMAL, resultAt: INTRO + 5000 },
 ]
 
 registerGallery(

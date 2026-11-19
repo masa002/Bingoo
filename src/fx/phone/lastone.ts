@@ -210,7 +210,7 @@ class LastOnePlay {
       <header class="fxlp-head">${headHtml(o.prizes, o.contestants, this.fromBrief)}</header>
       <div class="fxlp-crowd fxlp-in">
         <div class="fxlp-dots">${crowdHtml(Math.max(1, Math.round(num(o.contestants, 1))))}</div>
-        <div class="fxlp-crowd-text">全員の玉が <b>いっせいに</b> 出る！</div>
+        <div class="fxlp-crowd-text">みんなの玉が <b>いっせいに</b> 出る！</div>
       </div>
       <div class="fxlp-count"></div>
       <div class="fxlp-stage"><div class="fxlp-aura"></div></div>
@@ -451,7 +451,7 @@ class LastOnePlay {
     else if (m.rps >= 2) this.setSub('すごい勢い！')
     else if (m.rps >= 1.2) this.setSub('いい回転！')
     else if (this.taps > 0 && m.rps >= 0.4) this.setSub('その調子！')
-    else if (this.idle > IDLE_MS) this.setSub(this.taps ? 'もっと回せ！' : 'タップすると、もっと速く回ります')
+    else if (this.idle > IDLE_MS) this.setSub(this.taps ? 'もっと回せ！' : 'タップで、もっと速く回る！')
   }
 
   // 排出口が D ちょうどに真下（胴の角度が 360 の倍数）へ来るように、回転を寄せ始める。
@@ -545,7 +545,7 @@ class LastOnePlay {
           ? `<div class="fxlp-plate" data-color="${this.color}"><small>★ ラストワン賞</small><b>${escapeHtml(this.o.prize || '景品')}</b></div>`
           : `<div class="fxlp-dc"><div class="fxlp-dc-head">でも、ダブルチャンスの玉を<b>${DC_BALLS}</b>個 プレゼント！</div><div class="fxlp-dc-balls">${tokens}</div></div>`
       }
-      <div class="fxlp-rv-msg">${win ? 'このあと、景品パックを開けます' : `最後のガラポンで、${DC_BALLS} 回 回せます`}</div>`
+      <div class="fxlp-rv-msg">${win ? 'このあと、景品パックをあけよう！' : `最後のガラポンで、${DC_BALLS} 回 回せる！`}</div>`
     const big = rv.querySelector<HTMLElement>('.fxlp-rv-ballwrap > .fxg-ball')!
     const halo = rv.querySelector<HTMLElement>('.fxlp-rv-halo')!
     halo.style.setProperty('--halo', win ? `${info.color}5a` : 'rgba(140, 170, 255, 0.2)')
@@ -681,10 +681,10 @@ export function openLastOneBrief(host: HTMLElement, o: LastOneBrief): { close():
     </div>
     <div class="fxlp-stage"></div>
     <footer class="fxlp-bf-foot fxlp-in">
-      <div class="fxlp-bf-wait"><i></i><i></i><i></i><span>合図を待っています</span></div>
+      <div class="fxlp-bf-wait"><i></i><i></i><i></i><span>合図を待ってね</span></div>
       <div class="fxlp-bf-sub"></div>
       ${auto && !reduced ? '<div class="fxlp-bf-bar"><b></b></div>' : ''}
-      <div class="fxlp-bf-dc">外れても、ダブルチャンスの玉が<b>${DC_BALLS}</b>個もらえます<span>${tokens}</span></div>
+      <div class="fxlp-bf-dc">はずれても、ダブルチャンスの玉を<b>${DC_BALLS}</b>個もらえる！<span>${tokens}</span></div>
     </footer>`,
   )
   root.style.setProperty('--fxlp-k', String(tl.ms(1)))
@@ -698,7 +698,7 @@ export function openLastOneBrief(host: HTMLElement, o: LastOneBrief): { close():
   let closed = false
   let hintUntil = 0
   const idle = (): string => {
-    if (!auto) return 'スタートまで、そのままお待ちください'
+    if (!auto) return 'スタートまで、そのまま待ってね'
     const left = Math.ceil((auto - (performance.now() - t0) * tl.speed) / 1000)
     return left > 0 ? `あと<b>${left}</b>秒で スタート` : 'まもなくスタート'
   }
@@ -725,7 +725,7 @@ export function openLastOneBrief(host: HTMLElement, o: LastOneBrief): { close():
     if (closed || now - lastNudge < 400) return // 1 秒に 3 回までに間引く
     lastNudge = now
     hintUntil = now + tl.ms(1600)
-    sub.textContent = 'まだ回りません。合図のあとにタップ！'
+    sub.textContent = 'まだ回らないよ。合図のあとにタップ！'
     tl.at(1650, renderSub)
     if (reduced) return
     wait.classList.remove('nudge')

@@ -51,14 +51,14 @@ registerGallery(
   {
     id: 'stage-event-final',
     group: G,
-    label: 'この1球で景品が尽きる！（残り 3 個）',
+    label: 'この 1 球で景品がなくなる！（残り 3 個）',
     screen: 'stage',
     play: (host, tl) => playFinalBall(backdrop(host), { speed: tl.speed, prizesLeft: 3 }),
   },
   {
     id: 'stage-event-final-many',
     group: G,
-    label: 'この1球で景品が尽きる！（残り 14 個）',
+    label: 'この 1 球で景品がなくなる！（残り 14 個）',
     screen: 'stage',
     play: (host, tl) => playFinalBall(backdrop(host), { speed: tl.speed, prizesLeft: 14 }),
   },

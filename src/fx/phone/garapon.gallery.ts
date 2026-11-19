@@ -55,7 +55,7 @@ registerGallery(
   {
     id: 'garapon-entry',
     group: PHONE,
-    label: 'エントリー（30 秒。押すと完了）',
+    label: '参加の受付（30 秒。タップで参加）',
     screen: 'phone',
     play: async (host, tl) => {
       await askEntry(host, { speed: tl.speed, seconds: 30 })
@@ -64,7 +64,7 @@ registerGallery(
   {
     id: 'garapon-entry-timeout',
     group: PHONE,
-    label: 'エントリー（6 秒で時間切れ）',
+    label: '参加の受付（6 秒でしめきり）',
     screen: 'phone',
     play: async (host, tl) => {
       await askEntry(host, { speed: tl.speed, seconds: 6 })
@@ -84,7 +84,7 @@ registerGallery(
   {
     id: 'garapon-outro',
     group: PHONE,
-    label: 'ガラポン: 大画面の締めを待つ（outro。玉の結果のあと 6 秒待って、あなたの結果へ）',
+    label: 'ガラポン: 大画面の発表が終わるまで待つ（outro。玉の結果のあと 6 秒）',
     screen: 'phone',
     play: (host, tl) => {
       // 本番では、大画面の締め（おつかれさまでした）で解決する
@@ -92,13 +92,13 @@ registerGallery(
       return playGarapon(host, { speed: tl.speed, balls: [{ color: 'gold', prize: 'ロボット掃除機' }], stats: { hits: 10, maxReach: 2, nearMiss: 2 }, outro })
     },
   },
-  final('garapon-final-prize', 'あなたの結果（エントリーなし）: 景品あり', { hits: 15, maxReach: 2, nearMiss: 0, won: 'スマートウォッチ', rank: 4 }),
-  final('garapon-final-rank', 'あなたの結果（エントリーなし）: 景品なし・ビンゴ 第 12 位', { hits: 14, maxReach: 3, nearMiss: 1, rank: 12 }),
-  final('garapon-final-none', 'あなたの結果（エントリーなし）: 景品なし（またの機会に！）', { hits: 9, maxReach: 2, nearMiss: 3 }),
+  final('garapon-final-prize', 'あなたの結果（参加しなかった人）: 景品あり', { hits: 15, maxReach: 2, nearMiss: 0, won: 'スマートウォッチ', rank: 4 }),
+  final('garapon-final-rank', 'あなたの結果（参加しなかった人）: 景品なし・ビンゴ 第 12 位', { hits: 14, maxReach: 3, nearMiss: 1, rank: 12 }),
+  final('garapon-final-none', 'あなたの結果（参加しなかった人）: 景品なし（また次の機会に！）', { hits: 9, maxReach: 2, nearMiss: 3 }),
   {
     id: 'garapon-flow',
     group: PHONE,
-    label: '流れ: エントリー → ガラポン（金）',
+    label: '流れ: 参加 → ガラポン（金）',
     screen: 'phone',
     play: async (host, tl) => {
       const ok = await askEntry(host, { speed: tl.speed, seconds: 15 })
@@ -111,7 +111,7 @@ registerGallery(
   {
     id: 'doublechance-flow',
     group: STAGE,
-    label: '流れ: エントリー → 回す → 当選者（並んだあと 5 秒 読み上げる）→ おつかれさま',
+    label: '流れ: 参加の受付 → 回す → 当たった人（並んだあと 5 秒 読み上げる）→ おつかれさま',
     screen: 'stage',
     play: async (host, tl) => {
       const s = new DoubleChanceStage(host, { speed: tl.speed })
@@ -133,7 +133,7 @@ registerGallery(
   {
     id: 'doublechance-entry',
     group: STAGE,
-    label: 'エントリー受付（30 秒）',
+    label: '参加の受付（30 秒）',
     screen: 'stage',
     play: async (host, tl) => {
       const s = new DoubleChanceStage(host, { speed: tl.speed })
@@ -145,7 +145,7 @@ registerGallery(
   {
     id: 'doublechance-many',
     group: STAGE,
-    label: '当選者が多いとき（20 人。古い行から畳む。特賞は最後に大きく）',
+    label: '当たった人が多いとき（20 人。古い行から畳む。特賞は最後に大きく）',
     screen: 'stage',
     play: async (host, tl) => {
       const s = new DoubleChanceStage(host, { speed: tl.speed })

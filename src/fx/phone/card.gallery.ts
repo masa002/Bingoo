@@ -13,7 +13,7 @@ const DIAG4 = bits(0, 6, 12, 18) // 斜めがあと 1 つ（O65）
 
 const G_CARD = 'スマホ: カード'
 const G_SHOT = 'スマホ: 単発の演出'
-const G_FLOW = 'スマホ: 通し（組み込みの見本）'
+const G_FLOW = 'スマホ: 通し（つなげた流れの見本）'
 
 // ギャラリーで別の演出に切り替えたら（host が外れたら）止める
 function watch(host: HTMLElement, tl: Timeline, ...parts: { destroy(): void }[]): void {
@@ -70,7 +70,7 @@ function cardItem(id: string, label: string, run: (card: CardView, tl: Timeline,
 
 registerGallery(
   cardItem('deal5', '5×5: 配る（1 マスずつめくれる）', (card) => card.deal()),
-  cardItem('stamp', '5×5: スタンプ（インクで穴が開いて弾む）', async (card, tl) => {
+  cardItem('stamp', '5×5: スタンプ（マスがあいて弾む）', async (card, tl) => {
     let mask = bits(12)
     for (const c of [6, 18, 0]) {
       if (!(await hold(tl, 300))) return
@@ -80,10 +80,10 @@ registerGallery(
     }
     card.setMarks(mask, { waiting: [24] })
   }),
-  cardItem('wait', '5×5: リーチ（あと 1 つが金の照準で脈動）', (card) => {
+  cardItem('wait', '5×5: リーチ（あと 1 つのマスを金の枠で囲む）', (card) => {
     card.setMarks(DIAG4 | bits(10, 11, 13), { waiting: [24, 14] })
   }),
-  cardItem('line', '5×5: ラインがそろう（光が走る）', async (card, tl) => {
+  cardItem('line', '5×5: 1 列そろう（光が走る）', async (card, tl) => {
     card.setMarks(DIAG4, { waiting: [24] })
     if (!(await hold(tl, 600))) return
     await card.stamp(24)
@@ -91,7 +91,7 @@ registerGallery(
     card.setMarks(DIAG4 | bits(24), { line })
     await card.celebrateLine(line)
   }),
-  cardItem('line2', '5×5: 2 本同時にそろう', async (card, tl) => {
+  cardItem('line2', '5×5: 2 列いっぺんにそろう', async (card, tl) => {
     card.setMarks(DIAG4 | bits(10, 11, 13, 14), { waiting: [24] })
     if (!(await hold(tl, 600))) return
     await card.stamp(24)
@@ -99,25 +99,25 @@ registerGallery(
     card.setMarks(DIAG4 | bits(10, 11, 13, 14, 24), { line: cells })
     await card.celebrateLine(cells)
   }),
-  cardItem('wild', '5×5: 虹玉で開く（虹の光が落ちてくる）', async (card, tl) => {
+  cardItem('wild', '5×5: 虹玉でマスがあく（虹の光が落ちてくる）', async (card, tl) => {
     card.setMarks(bits(0, 6, 12))
     if (!(await hold(tl, 500))) return
     await card.wildOpen(18)
     card.setMarks(DIAG4, { wild: [18], waiting: [24] })
   }),
-  cardItem('mole', '5×5: モグラが穴を埋める', async (card, tl) => {
+  cardItem('mole', '5×5: モグラにマスを埋められる', async (card, tl) => {
     card.setMarks(DIAG4, { waiting: [24] })
     if (!(await hold(tl, 600))) return
     await card.moleFill(18)
     card.setMarks(bits(0, 6, 12), { filled: [18] })
   }),
-  cardItem('states', '5×5: 状態の見本（開いた・あと 1 つ・ライン・埋められた・虹）', (card) => {
+  cardItem('states', '5×5: マスの見本（あいた・あと 1 つ・そろった列・埋められた・虹玉であいた）', (card) => {
     card.setMarks(bits(0, 2, 7, 12, 20, 21, 22, 23, 24), { line: [20, 21, 22, 23, 24], filled: [8], wild: [7], waiting: [17] })
   }),
   cardItem('deal3', '3×3 チャレンジ: 配る（金のカード）', (card) => card.deal(), 3),
   cardItem(
     'ch-line',
-    '3×3 チャレンジ: スタンプ → ライン',
+    '3×3 チャレンジ: スタンプ → 1 列そろう',
     async (card, tl) => {
       card.setMarks(bits(3, 4), { waiting: [5] })
       if (!(await hold(tl, 600))) return
@@ -160,13 +160,13 @@ function shotItem(id: string, label: string, run: (host: HTMLElement, speed: num
 registerGallery(
   shotItem('reach', 'リーチ！', (host, speed) => playReach(host, { lines: 1, waiting: ['O65'], speed })),
   shotItem('double', 'ダブルリーチ！', (host, speed) => playReach(host, { lines: 2, waiting: ['O65', 'O62'], speed })),
-  shotItem('triple', 'トリプルリーチ！（3 本）', (host, speed) => playReach(host, { lines: 3, waiting: ['O65', 'O62', 'N41'], speed })),
-  shotItem('quad', 'トリプルリーチ！（4 本。本数の札と、番号が 2 段になるとき）', (host, speed) =>
+  shotItem('triple', 'トリプルリーチ！（3 列）', (host, speed) => playReach(host, { lines: 3, waiting: ['O65', 'O62', 'N41'], speed })),
+  shotItem('quad', 'トリプルリーチ！（4 列。列の数の札と、番号が 2 段になるとき）', (host, speed) =>
     playReach(host, { lines: 4, waiting: ['O65', 'O62', 'N41', 'B12'], speed }),
   ),
   shotItem('bingo', 'ビンゴ（第 3 位）', (host, speed) => playBingo(host, { rank: 3, speed })),
-  shotItem('wild', '全員確定（虹玉）: あなたのカードも 1 マス開いた', (host, speed) => playWildResult(host, { label: 'N44', newReach: false, speed })),
-  shotItem('wild-reach', '全員確定（虹玉）: 開いてリーチ', (host, speed) => playWildResult(host, { label: 'N44', newReach: true, speed })),
+  shotItem('wild', '全員確定（虹玉）: あなたのカードも 1 マスあいた', (host, speed) => playWildResult(host, { label: 'N44', newReach: false, speed })),
+  shotItem('wild-reach', '全員確定（虹玉）: 1 マスあいてリーチ', (host, speed) => playWildResult(host, { label: 'N44', newReach: true, speed })),
 )
 
 // ---- 通し（組み込み側の呼び方の見本） ------------------------------------------
@@ -175,7 +175,7 @@ registerGallery(
   {
     id: 'phone-flow-wild',
     group: G_FLOW,
-    label: '全員確定（虹玉）: マスが開く → リーチ',
+    label: '全員確定（虹玉）: マスがあく → リーチ',
     screen: 'phone',
     async play(host, tl) {
       const card = mockPhone(host, tl)

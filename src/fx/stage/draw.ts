@@ -4,7 +4,7 @@ import { pickStyle, type Beat, type Plan } from '../../core/show'
 import { FLIP_EASING, MACHINE, flapMs, flipPlan, maStopMs, pseudoPlan, reelRun, slotOf, stopMs, type ReelRun } from '../landing'
 import { Particles } from '../particles'
 import { Timeline, el, escapeHtml, prefersReducedMotion, replay } from '../runtime'
-import { GOLD, HEAT_LABEL, TIER_COLOR, TIER_SHAPE, TIER_WORD, type MachineStyle, type Tier } from '../theme'
+import { GOLD, HEAT_LABEL, TIER_COLOR, TIER_QUIET, TIER_SHAPE, TIER_WORD, type MachineStyle, type Tier } from '../theme'
 
 // 大画面の抽選機（1920×1080 の大画面に重ねて使う）。
 // 通常の抽選は 青・緑・赤・金 の 4 段階（会場全体の熱）。虹（全員確定）は events.ts の別イベント。
@@ -46,8 +46,8 @@ const ROW = 200 // リールの 1 コマの高さ
 const STEP_PITCH = 118 // 期待度の目盛りの札の間隔
 const STEP_X = 277 // 期待度の目盛りの札の中心 x
 const stepY = (i: number): number => 250 + (3 - i) * STEP_PITCH // 青が下、金が上
-// 目盛りの各段の言葉（段階と 1 対 1。青は「静か」）
-const GAUGE_WORD = ['静か', TIER_WORD[1], TIER_WORD[2], TIER_WORD[3]] as const
+// 目盛りの各段の言葉（段階と 1 対 1。青は TIER_QUIET「まだまだ」）
+const GAUGE_WORD = [TIER_QUIET, TIER_WORD[1], TIER_WORD[2], TIER_WORD[3]] as const
 
 export interface RevealOptions {
   onLand?: () => void // 番号が見えた瞬間（着地）に 1 回呼ぶ。脇の欄・盤は、これを待ってから番号を出す
@@ -456,7 +456,7 @@ const HTML = `
 </div>
 <div class="fxd-flock"></div>
 <div class="fxd-telop"><b></b></div>
-<div class="fxd-push"><p><small>このあと番号が開きます</small><b>まもなく公開！</b></p></div>
+<div class="fxd-push"><p><b>まもなく発表！</b></p></div>
 <div class="fxd-cut"><div class="fxd-cut-rot">
   <div class="fxd-cut-band"><i></i><i></i><i></i><div class="fxd-cut-txt"><em></em><span class="fxd-cut-word"><b class="o"></b><b class="f"></b></span><em></em></div></div>
   <div class="fxd-cut-slash"></div>
@@ -975,7 +975,7 @@ export class DrawMachine {
   // （.fxd-flock がその枠で切り取る。座標は枠の中の値）。目盛りの見出しの行にもかからない高さを飛ぶ
   private flock(slot: number): void {
     sfx.flutter()
-    if (this.rm) return this.telop('カードの群れが横切った！')
+    if (this.rm) return this.telop('カードがたくさん飛んできた！')
     const d = clamp(slot + 250, 700, 1150)
     const n = 14 + this.heat * 4
     const dir = -this.dir

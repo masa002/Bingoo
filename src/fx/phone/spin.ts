@@ -3,7 +3,7 @@ import type { Beat, BeatKind } from '../../core/show'
 import { FLIP_EASING, MACHINE, flipPlan, landingOf, maStopMs, motionAt, pseudoPlan, reelRun, slotOf, type ReelRun } from '../landing'
 import { Particles } from '../particles'
 import { Timeline, el, escapeHtml, prefersReducedMotion } from '../runtime'
-import { GOLD, HEAT_LABEL, MY_TIER_WORD, RAINBOW, TIER_SHAPE, TIER_WORD, type MachineStyle, type Tier } from '../theme'
+import { GOLD, HEAT_LABEL, MY_TIER_WORD, RAINBOW, TIER_QUIET, TIER_SHAPE, TIER_WORD, type MachineStyle, type Tier } from '../theme'
 import { txt, type AoriOutcome } from './aori'
 import { boxIn, play, ring, settle, shake, sparkBurst } from './card'
 import './spin.css' // card.css・aori.css より後に読み込む（カードのマスを照らす規則はここにある。縁取り文字 .fxa-txt の色もここで決める）
@@ -19,7 +19,7 @@ import './spin.css' // card.css・aori.css より後に読み込む（カード�
 //     虹は自分のビンゴ確定のときだけ（時が止まる → 窓のガラスにヒビ → 「ビンゴ確定！」）
 //   - オリパのお約束の合図:
 //       昇格: 途中で色が上がる
-//       復活: 青・緑のままだったのにリーチ・ビンゴになった回は、「はずれ…？」→ 一瞬の暗転（プチュン）→ 当たりに覆る
+//       復活: 青・緑のままだったのにリーチ・ビンゴになった回は、「なかった…？」→ 一瞬の暗転（プチュン）→「あった！」に覆る
 //   - 番号は大画面の公開と同時に出す。着地の時刻は fx/landing.ts のモデル（大画面の抽選機と同じ数字）で求める
 //
 //   const spin = new HandSpin(phone, { speed, sound: 'personal' })   // 本番のスマホは sound: 'all'
@@ -72,21 +72,22 @@ const COLORS: Readonly<Record<Tier, readonly string[]>> = {
   3: GOLD,
   4: RAINBOW,
 }
-// 2 段の言葉（青は、会場も自分も「静か」）
-const LAMP_WORD = ['静か', MY_TIER_WORD[1], MY_TIER_WORD[2], MY_TIER_WORD[3], MY_TIER_WORD[4]] as const
-const VENUE_WORD = ['静か', TIER_WORD[1], TIER_WORD[2], TIER_WORD[3], TIER_WORD[4]] as const
+// 2 段の言葉（青は、会場も自分も TIER_QUIET「まだまだ」）
+const LAMP_WORD = [TIER_QUIET, MY_TIER_WORD[1], MY_TIER_WORD[2], MY_TIER_WORD[3], MY_TIER_WORD[4]] as const
+const VENUE_WORD = [TIER_QUIET, TIER_WORD[1], TIER_WORD[2], TIER_WORD[3], TIER_WORD[4]] as const
 // 結果は、何が起きたかをそのまま言う
 const HERO_TEXT: Readonly<Record<Exclude<AoriOutcome, 'none'>, string>> = {
-  hit: 'カードにヒット！',
+  hit: 'あった！',
   reach: 'リーチ！',
   double: 'ダブルリーチ！',
   bingo: 'ビンゴ！',
 }
 const OUT_POWER: Readonly<Record<AoriOutcome, number>> = { none: 0, hit: 0, reach: 1, double: 2, bingo: 3 }
-const FAIL_TEXT = 'はずれ…'
-const UP_TAG = '<em class="fxs-up">昇格！</em>' // オリパのお約束: 途中で色が上がる
+const FAIL_TEXT = 'なかった…' // 出た番号が、自分のカードにない
+const UP_WORD = '期待度アップ！' // 途中で自分の色が上がる（オリパでいう昇格）
+const UP_TAG = `<em class="fxs-up">${UP_WORD}</em>`
 // カットインの頭に付ける札。大画面の「ビンゴが出そう！」（会場の話）と、だれの話かで見分けられるようにする
-const tagsHtml = (up: boolean): string => `<span class="fxs-tags"><em class="fxs-me">あなたに</em>${up ? UP_TAG : ''}</span>`
+const tagsHtml = (up: boolean): string => `<span class="fxs-tags"><em class="fxs-me">あなた</em>${up ? UP_TAG : ''}</span>`
 
 const clamp = (x: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, x))
 const pickOne = <T>(items: readonly T[]): T => items[Math.floor(Math.random() * items.length)]
@@ -105,7 +106,7 @@ function codeHtml(c: Code): string {
 
 // 叩きつける段階の言葉（自分のカードの話）。up は昇格（途中で色が上がった）
 function emblemHtml(t: Tier, up: boolean): string {
-  return `${tagsHtml(up)}${txt(`${TIER_SHAPE[t]}${MY_TIER_WORD[t]}`)}${t === 4 ? '<small>あなたのカードがそろいます</small>' : ''}`
+  return `${tagsHtml(up)}${txt(`${TIER_SHAPE[t]}${MY_TIER_WORD[t]}`)}${t === 4 ? '<small>この番号でそろう！</small>' : ''}`
 }
 
 // 軽い振動（Android）。ユーザーが画面に触れる前は呼ばない（ブラウザが止めて警告を出すため）
@@ -431,7 +432,7 @@ export class HandSpin {
         this.tl,
         { easing: 'cubic-bezier(.2,.8,.3,1)' },
       )
-    this.msg('この番号は、あなたのカードに当たる？')
+    this.msg('カードにあるかな？')
     // 予定を組む: 大画面の拍をなぞる・自分だけで段階を上げる・虹の確定
     const s = this.sched
     this.beats.forEach((b, i) => s.at(b.at, () => this.onBeat(b, slotOf(this.beats, i))))
@@ -454,7 +455,7 @@ export class HandSpin {
     this.el.dataset.phase = 'push'
     this.el.classList.add('is-push')
     this.endRise()
-    this.msg('まもなく番号が開きます')
+    this.msg('まもなく発表！')
     if (this.still) return
     // ゆっくりした鼓動で待つ（自分の段階が赤以上のとき。1 秒に約 1 回より速くしない）
     const tl = this.tl
@@ -790,7 +791,7 @@ export class HandSpin {
 
   // 復活（オリパのお約束）: 青・緑のままだったのに、リーチ・ビンゴになった回。外れに見せてから、
   // 一瞬の暗転（プチュン）をはさんで、当たりに覆す。時刻は音に合わせる:
-  //   「はずれ…？」→ puchun（0）→ 0.30 秒で暗転 → revive（0.85 秒。底を蹴る）→ 1.25 秒で弾けて明るくなる → 1.85 秒から成功の演出
+  //   「なかった…？」→ puchun（0）→ 0.30 秒で暗転 → revive（0.85 秒。底を蹴る）→ 1.25 秒で弾けて明るくなる → 1.85 秒から成功の演出
   // 暗転は 1 回だけ。暗くなるのも戻るのも 120ms 以上かける。このあとの成功では、全面の光を重ねない
   private async revive(tl: Timeline): Promise<void> {
     const p = this.parts
@@ -799,7 +800,7 @@ export class HandSpin {
     this.flashed = true
     this.el.classList.add('is-fail')
     this.fadeAura(tl, 400)
-    const miss = this.missPlate(tl, '<b>はずれ…？</b>')
+    const miss = this.missPlate(tl, '<b>なかった…？</b>')
     await tl.wait(480)
     if (tl.cancelled) return
     // プチュン: 音が切れるところ（0.30 秒）で、画面が落ちきる
@@ -812,7 +813,7 @@ export class HandSpin {
     // 復活: 暗い中で底を蹴り、0.40 秒後に弾けて、明るさがゆっくり戻る
     sfx.revive()
     vibrate(40)
-    const word = el('div', 'fxs-revive', `<div class="fxs-revive-in">${txt('復活！')}</div>`)
+    const word = el('div', 'fxs-revive', `<div class="fxs-revive-in">${txt(HERO_TEXT.hit)}</div>`)
     this.el.append(word)
     const inner = word.firstElementChild as HTMLElement
     const W = this.el.clientWidth || 390
@@ -860,7 +861,7 @@ export class HandSpin {
       if (!this.beating) void this.heartbeat(tl)
     }
     if (to === 3) void this.dust(tl, GOLD, 620)
-    this.msg(`${up ? '<b>昇格！</b> ' : ''}${TIER_SHAPE[to]} ${MY_TIER_WORD[to]}`)
+    this.msg(`${up ? `<b>${UP_WORD}</b> ` : ''}${TIER_SHAPE[to]} ${MY_TIER_WORD[to]}`)
     // 大画面のカットインの帯で同じ段階を知らせた直後なら、ランプが変わるだけにする
     const told = this.now() - this.bandAt < 1100 && this.bandTier >= to
     if (quick || this.still || told) {
@@ -1162,7 +1163,7 @@ export class HandSpin {
     this.endRise()
     this.reel.hold()
     p.cover.classList.add('on')
-    this.msg('番号は大画面と同時に開きます')
+    this.msg('大画面と同時に発表！')
     if (this.still) return
     void play(p.cover, [{ transform: 'rotateX(-100deg)', opacity: 0.4 }, { transform: 'rotateX(0deg)', opacity: 1 }], 560, this.tl, {
       easing: FLIP_EASING,
@@ -1239,7 +1240,7 @@ export class HandSpin {
     this.el.dataset.tier = '4'
     this.light(4)
     this.dimOn(tl, 0.36)
-    this.msg('<b>ビンゴ確定！</b> あなたのカードがそろいます')
+    this.msg(`<b>${MY_TIER_WORD[4]}</b> この番号でそろう！`)
     vibrate(40)
     this.glow(tl)
     if (this.still) {
@@ -1625,7 +1626,7 @@ export class HandSpin {
     return null
   }
 
-  // あおったのに外れた: 光がしぼみ、自分の段の色が抜けて、パネルの中に「はずれ…」が出る
+  // あおったのに外れた: 光がしぼみ、自分の段の色が抜けて、パネルの中に「B9 は なかった…」が出る
   private async fail(tl: Timeline, label: string): Promise<void> {
     const p = this.parts
     if (!p) return
@@ -1653,9 +1654,9 @@ export class HandSpin {
     }
     await tl.wait(still ? 150 : 420)
     if (tl.cancelled) return
-    // 「はずれ…」は、下のパネルの中に、不透明で水平に出す（カードには乗せない。外れは抽選の大半で出るので、
+    // 「B9 は なかった…」は、下のパネルの中に、不透明で水平に出す（カードには乗せない。外れは抽選の大半で出るので、
     // 毎回カードの数字が汚れて見えないように）。次につながる一言を添える
-    this.missPlate(tl, `<b>${FAIL_TEXT}</b><small>${escapeHtml(label)} は、あなたのカードにありません</small><em>次の番号に期待！</em>`)
+    this.missPlate(tl, `<b>${escapeHtml(label)} は ${FAIL_TEXT}</b><em>次に期待！</em>`)
     await tl.wait(still ? 1300 : 1500)
     if (!tl.cancelled) await this.retract(tl)
   }
@@ -1683,7 +1684,7 @@ export class HandSpin {
   // 青（と、あおっていない外れ）: 番号を少し見せてから、静かに引っ込む
   private async quiet(tl: Timeline): Promise<void> {
     const n = this.n
-    if (n !== null) this.msg(`<b>${letterOf(n)} ${n}</b> は、${FAIL_TEXT} 次の番号に期待！`)
+    if (n !== null) this.msg(`<b>${letterOf(n)} ${n}</b> は ${FAIL_TEXT}`)
     this.fadeAura(tl, 300)
     await tl.wait(700)
     if (!tl.cancelled) await this.retract(tl)

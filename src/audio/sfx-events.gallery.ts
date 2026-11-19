@@ -220,7 +220,7 @@ registerGallery(
   item('last-one-lose', CHOICE, 'ラストワン争奪（取れなかった）', () => sfx.lastOne(false)),
 
   // ダブルチャンス（ガラポン）
-  item('entry', DC, 'エントリー', () => sfx.entry()),
+  item('entry', DC, '参加する', () => sfx.entry()),
   item('garapon-taps', DC, 'ガラポン回転（連打 → 手を止める → 止める）', (host, tl) => garaponTaps(host, tl)),
   item('garapon-steps', DC, 'ガラポン回転（速さを段階で変える）', (host, tl) => garaponSteps(host, tl)),
   item('garapon-drop', DC, '玉が出る', () => sfx.garaponDrop()),

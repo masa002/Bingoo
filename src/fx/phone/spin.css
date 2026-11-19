@@ -295,14 +295,14 @@
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
 }
 
-/* 「昇格！」の札（オリパのお約束: 途中で色が上がった） */
+/* 「期待度アップ！」の札（途中で自分の色が上がった） */
 .fxs-up {
-  padding: 3px 16px 4px;
+  padding: 3px 14px 4px;
   border-radius: 999px;
   font-style: normal;
   font-size: 20px;
   font-weight: 900;
-  letter-spacing: 3px;
+  letter-spacing: 1px;
   line-height: 1.2;
   white-space: nowrap;
   color: #1a1400;
@@ -1071,7 +1071,7 @@
 .fxs-revive .fxa-txt {
   --stroke: #2a1a05;
   --fill: linear-gradient(180deg, #fff4cc, #f5c542 55%, #d9a520);
-  font-size: 84px;
+  font-size: 76px; /* 「あった！」の 4 文字が、幅 390px に収まる大きさ */
   letter-spacing: 4px;
 }
 
@@ -1159,17 +1159,10 @@
   letter-spacing: 2px;
 }
 
-.fxs-fail small {
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.3;
-  color: #94a3b8;
-}
-
 /* 次につながる一言 */
 .fxs-fail em {
   font-style: normal;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 900;
   line-height: 1.3;
   color: #e8ecff;

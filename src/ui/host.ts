@@ -17,12 +17,12 @@ const HOST_HTML = `
   <h2>主催コンソール</h2>
   <div class="hc-status">準備中</div>
   <button class="hc-next">次へ ▶</button>
-  <button class="hc-push" disabled>公開する</button>
+  <button class="hc-push" disabled>発表する</button>
   <div class="hc-row">
     <label><input type="checkbox" class="hc-sound" checked /> 音</label>
     <button class="hc-new">新しいゲーム</button>
   </div>
-  <p class="hc-keys">キー操作: Space 次へ ／ P 公開する</p>
+  <p class="hc-keys">キー操作: Space 次へ ／ P 発表する</p>
   <p class="hc-hash"></p>
 </section>
 <details class="dp" open>
@@ -37,12 +37,12 @@ const HOST_HTML = `
   </div>
   <h4>イベント（次の「次へ」で起きる）</h4>
   <div class="dp-ev">
-    <button data-ev="wild">🌈 全員確定（虹玉）</button><button data-ev="mole">モグラ撃退クエスト</button><button data-ev="moleMe">モグラ撃退（自分が本当に狙われる）</button>
+    <button data-ev="wild">🌈 全員確定（虹玉）</button><button data-ev="mole">モグラ撃退クエスト</button><button data-ev="moleMe">モグラ撃退（自分が本当にねらわれる）</button>
   </div>
-  <p class="dp-note">指定しなくても、景品の減り方に合わせて自動で出ます（ビンゴが速すぎればモグラ撃退、静かすぎれば虹玉）。モグラ撃退では、全員のスマホにボスモグラが出ます。実際にマスを埋められるのは、リーチの人のうち叩いた数が会場の下位に入った人だけです</p>
+  <p class="dp-note">指定しなくても、景品の減り方に合わせて自動で出ます（ビンゴが速すぎればモグラ撃退、なかなか出なければ虹玉）。モグラ撃退では、全員のスマホにボスモグラが出ます。本当にマスを埋められるのは、リーチの人のうち、たたいた数が少なかった人だけです</p>
   <h4>次の番号 <label class="dp-spoil-label"><input type="checkbox" class="dp-spoil" /> ネタバレ表示</label></h4>
   <div class="dp-grid"></div>
-  <p class="dp-legend">数字をクリックで次の番号に指定。ネタバレ: <b class="b">B</b>=新規ビンゴ人数 <b class="r">R</b>=新規リーチ人数 ★=あなたがビンゴ ●=あなたがリーチ ・=あなたにヒット</p>
+  <p class="dp-legend">数字をクリックで次の番号に指定。ネタバレ: <b class="b">B</b>=ビンゴになる人数 <b class="r">R</b>=リーチになる人数 ★=あなたがビンゴ ●=あなたがリーチ ・=あなたのカードにある</p>
   <h4>次の演出の段階（大画面）</h4>
   <div class="dp-tiers">
     <button data-tier="auto" class="on">自動</button>${[0, 1, 2, 3].map((t) => `<button data-tier="${t}">${TIER_SHAPE[t as Tier]} ${TIER_NAME[t as Tier]}</button>`).join('')}
@@ -50,22 +50,22 @@ const HOST_HTML = `
   <div class="dp-kind">
     <button data-kind="any" class="on">どちらでも</button><button data-kind="hit">当たり</button><button data-kind="gase">ガセ</button>
   </div>
-  <p class="dp-note">指定すると、その段階を正直に出せる番号をエンジンが選びます。大画面の虹は「全員確定」のイベントだけです</p>
+  <p class="dp-note">選ぶと、その色をうそなく出せる番号が自動で選ばれます。大画面の虹は「全員確定」のときだけです</p>
   <h4>あなたのカード</h4>
   <div class="dp-me">
-    <button data-me="hit">次でヒット</button><button data-me="reach">リーチにする</button><button data-me="bingo">次でビンゴ</button>
+    <button data-me="hit">次で当てる</button><button data-me="reach">リーチにする</button><button data-me="bingo">次でビンゴ</button>
   </div>
-  <p class="dp-note">上位チャレンジ中は「次でビンゴ」でチャレンジ成功の番号を出します</p>
+  <p class="dp-note">上位チャレンジ中は、「次でビンゴ」でチャレンジ成功の番号が出ます</p>
   <h4>進める</h4>
   <div class="dp-ff"><button data-ff="5">5 回進める</button><button data-ff="10">10 回進める</button></div>
-  <p class="dp-note">演出なしで進めます。ビンゴが出る回の手前で止まります</p>
+  <p class="dp-note">演出なしで番号を進めます。ビンゴが出る番号の手前で止まります</p>
   <h4>ゲーム設定</h4>
   <div class="dp-set">
     <label>人数 <select class="dp-size">${options([30, 100, 1000, 10000])}</select></label>
-    <label>下位 <select class="dp-lower">${options([5, 10, 30, 50])}</select></label>
+    <label>下位の景品 <select class="dp-lower">${options([5, 10, 30, 50])}</select></label>
   </div>
   <div class="dp-set">
-    <label>上位 <select class="dp-upper">${options([3, 5, 8, 10])}</select></label>
+    <label>上位の景品 <select class="dp-upper">${options([3, 5, 8, 10])}</select></label>
     <label>ダブルチャンス <select class="dp-dc">${options([3, 5, 10])}</select></label>
   </div>
   <div class="dp-set">
@@ -199,7 +199,7 @@ export class HostView {
         this.status(`ラストワン争奪の説明中 — 景品 ${m.prizes} 個を ${m.entrants.length} 人で。説明が終わったら「スタート」（${m.autoMs ? `自動進行: ${m.autoMs / 1000} 秒で開始` : '押さなくても 60 秒で開始'}）`)
         break
       case 'questStart':
-        this.status(`緊急クエスト「モグラ撃退」— 全員がスマホで叩く。大ピンチのリーチ ${m.targets.toLocaleString('ja-JP')} 人`)
+        this.status(`モグラ撃退の最中 — みんながスマホでたたいています（リーチの ${m.targets.toLocaleString('ja-JP')} 人がピンチ）`)
         break
       case 'questProgress':
         return
@@ -207,7 +207,7 @@ export class HostView {
         this.status(`モグラ撃退の結果 — 守った ${m.defended.toLocaleString('ja-JP')} 人／やられた ${m.lost.toLocaleString('ja-JP')} 人`)
         break
       case 'finalBall':
-        this.status(`この 1 球で景品が尽きる！（残り ${m.prizesLeft} 個）`)
+        this.status(`この 1 球で、景品がなくなります（残り ${m.prizesLeft} 個）`)
         break
       case 'drawScheduled':
         this.$('.dp-msg').textContent = ''
@@ -215,15 +215,15 @@ export class HostView {
         break
       case 'awaitPush':
         this.pushReady = true
-        this.status('「公開する」を押してください（3 秒で自動）')
+        this.status('「発表する」を押してください（3 秒たつと自動で発表）')
         break
       case 'numberRevealed':
         this.pushReady = false
-        this.status(`結果表示中 ${m.label}`)
+        this.status(`${m.label} が出ました（結果を表示中）`)
         break
       case 'prizeTime':
-        if (m.lastOne) this.status('ラストワン争奪 — 同時に上がった人がスマホでガラポン')
-        else this.status(m.entries.some((e) => e.isMe) ? '景品の開封中（あなたのスマホで開けてください）' : '景品の開封中')
+        if (m.lastOne) this.status('ラストワン争奪 — 同時にビンゴした人が、スマホでガラポン中')
+        else this.status(m.entries.some((e) => e.isMe) ? '景品を開けています（あなたのスマホで開けてください）' : '景品を開けています')
         break
       case 'idle':
         this.status(`待機中 — 抽選 ${m.totals.drawCount} 回目まで終了。「次へ」で次の抽選`)
@@ -232,13 +232,13 @@ export class HostView {
         this.status(`待機中 — 抽選 ${m.totals.drawCount} 回目まで進めました。「次へ」で次の抽選`)
         break
       case 'gameOver':
-        this.status('すべての景品の当選者が決まりました。「ダブルチャンスへ」で進む')
+        this.status('景品がぜんぶ出ました。「ダブルチャンスへ」で進む')
         break
       case 'dcEntry':
-        this.status('ダブルチャンスのエントリー受付中（「次へ」で締め切り）')
+        this.status('ダブルチャンスの参加を受付中 —「参加をしめきる」で進む')
         break
       case 'dcSpin':
-        this.status('ガラポン中 — このあと当選者を発表します')
+        this.status('ガラポン中 — このあと当たった人を発表します')
         break
       case 'dcEnd':
         this.status('おつかれさまでした。もう一度遊ぶなら「新しいゲーム」')
@@ -272,10 +272,10 @@ export class HostView {
         : phase === 'over'
           ? 'ダブルチャンスへ ▶'
           : phase === 'dc-entry'
-            ? 'エントリー締め切り ▶'
+            ? '参加をしめきる ▶'
             : '次へ ▶'
     next.disabled = !holding && ((busy && phase !== 'dc-entry') || phase === 'dc-spin' || phase === 'done')
-    if (holding && phase === 'dc-spin') this.status('当選者の発表中 — 読み上げが終わったら「締めくくりへ」')
+    if (holding && phase === 'dc-spin') this.status('当たった人を発表中 — 読み上げが終わったら「締めくくりへ」')
     // 終わったら、次に押すのは「新しいゲーム」
     this.$('.hc-new').classList.toggle('primary', phase === 'done')
     this.$('.hc-hash').textContent = this.hash ? `抽選順と景品の並びのハッシュ ${this.hash.slice(0, 16)}…${auth.isTampered ? '（デモ操作で変更あり）' : ''}` : ''

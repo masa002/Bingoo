@@ -523,14 +523,14 @@
   letter-spacing: 0.06em;
 }
 
-/* 「会場 ○ 人 全員のカードが 1 マス開く！」と結果。
+/* 「会場 ○ 人、全員のカードが 1 マスあく！」と結果。
    HUD の下の見出し（〜y 240）と番号の盤（y 800〜）の間に収める（縁を入れて y 263〜786） */
 .fxe-k-panel {
   position: absolute;
   left: 50%;
   top: 270px;
-  width: 1320px;
-  margin-left: -660px;
+  width: 1360px;
+  margin-left: -680px;
   padding: 24px 44px 30px;
   border-radius: 36px;
   background: linear-gradient(180deg, rgba(22, 32, 74, 0.95), rgba(8, 11, 28, 0.95));
@@ -733,7 +733,7 @@
   }
 }
 
-/* ==== 「この1球で景品が尽きる！」の予告（赤の点滅は使わず、金と白のゆっくりした脈動で） ==== */
+/* ==== 「この 1 球で景品がなくなる！」の予告（赤の点滅は使わず、金と白のゆっくりした脈動で） ==== */
 
 /* 上下の帯（金の地に、文字がゆっくり流れる） */
 .fxe-f-band {

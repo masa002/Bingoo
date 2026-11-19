@@ -32,8 +32,8 @@ export interface BallInfo {
 export const BALL_INFO: Readonly<Record<BallColor, BallInfo>> = {
   white: { name: '白い玉', short: '白', shape: '○', word: 'はずれ', color: '#e9edf5' },
   red: { name: '赤い玉', short: '赤', shape: '◆', word: '当たり！', color: TIER_COLOR[2] },
-  gold: { name: '金色の玉', short: '金', shape: '★', word: '大当たり！', color: TIER_COLOR[3] },
-  rainbow: { name: '虹色の玉', short: '虹', shape: '✦', word: '超大当たり！', color: '#ff5ad2' },
+  gold: { name: '金の玉', short: '金', shape: '★', word: '大当たり！', color: TIER_COLOR[3] },
+  rainbow: { name: '虹の玉', short: '虹', shape: '✦', word: '超大当たり！', color: '#ff5ad2' },
 }
 
 // 玉の要素。大きさは CSS 変数 --d で決める（既定 40px）
@@ -429,7 +429,7 @@ export async function askEntry(
     <div class="fxg-head">
       <div class="fxg-kicker">DOUBLE CHANCE</div>
       <div class="fxg-title"><span class="fxg-ol" data-text="ダブルチャンス"><b>ダブルチャンス</b></span></div>
-      <div class="fxg-en-lead">最後に、ガラポンで景品が当たるかも！<br>参加する人は、ボタンを押してください</div>
+      <div class="fxg-en-lead">最後のチャンス！ ガラポンで景品が当たるかも<br>参加する人は、ボタンをタップ！</div>
     </div>
     <div class="fxg-en-time"></div>
     <div class="fxg-en-wrap">
@@ -438,9 +438,9 @@ export async function askEntry(
         <circle class="fg" cx="132" cy="132" r="124" stroke-dasharray="${RING_C.toFixed(1)}" stroke-dashoffset="0"/>
       </svg>
       <div class="fxg-en-wave"></div>
-      <button class="fxg-en-btn" type="button"><b>エントリー</b><small>タップで参加</small></button>
+      <button class="fxg-en-btn" type="button"><b>参加する</b><small>ここをタップ</small></button>
     </div>
-    <div class="fxg-en-note">ボタンを押した人だけが、ガラポンを回せます</div>`,
+    <div class="fxg-en-note">タップした人だけ、ガラポンを回せる！</div>`,
   )
   setSpeedVar(root, tl)
   host.append(root)
@@ -479,7 +479,7 @@ export async function askEntry(
       const n = Math.ceil(left)
       if (n !== shown && state !== 'closed') {
         shown = n
-        time.innerHTML = state === 'done' ? `締め切りまで あと<b>${n}</b>秒` : `受付 残り<b>${n}</b>秒`
+        time.innerHTML = `しめきりまで あと<b>${n}</b>秒`
         if (n <= 5) ring.style.stroke = state === 'done' ? '' : '#ffa24d'
       }
       ring.setAttribute('stroke-dashoffset', (RING_C * (1 - left / total)).toFixed(1))
@@ -496,8 +496,8 @@ export async function askEntry(
       pressedAt = performance.now()
       root.dataset.state = 'done'
       ring.style.stroke = ''
-      btn.innerHTML = '<b>✓ 完了</b><small>エントリーしました</small>'
-      note.textContent = 'このままお待ちください。まもなくガラポンが始まります'
+      btn.innerHTML = '<b>✓ 参加！</b><small>ガラポンを回せます</small>'
+      note.textContent = 'このまま待ってね。まもなくガラポン！'
       if (sound) {
         engine.unlock()
         sfx.entry()
@@ -532,9 +532,9 @@ export async function askEntry(
       if (state === 'open') {
         state = 'closed'
         root.dataset.state = 'closed'
-        btn.innerHTML = '<b>受付終了</b>'
-        time.textContent = '受付は終了しました'
-        note.textContent = 'またの機会に、ぜひ！'
+        btn.innerHTML = '<b>しめきり</b>'
+        time.textContent = 'しめきりました'
+        note.textContent = 'また次の機会に！'
         await tl.wait(1300)
         await close()
         settle(false)
@@ -543,7 +543,7 @@ export async function askEntry(
         const held = (performance.now() - pressedAt) * tl.speed
         await tl.wait(Math.max(0, 1200 - held))
         if (!root.isConnected) return
-        time.textContent = '締め切りました'
+        time.textContent = 'しめきりました'
         await tl.wait(600)
         await close()
       }
@@ -596,15 +596,15 @@ export async function playGarapon(host: HTMLElement, o: GaraponOptions): Promise
 }
 
 function noshiHtml(color: BallColor, prize: string | undefined): string {
-  return `<div class="fxg-noshi" data-color="${color}"><small>目録</small><b>${escapeHtml(prize || '景品が当たりました')}</b></div>`
+  return `<div class="fxg-noshi" data-color="${color}"><small>あなたの景品</small><b>${escapeHtml(prize || '景品 ゲット！')}</b></div>`
 }
 
 // 景品がなかった人へのひとこと（追い打ちになる数字は出さず、良かったところを拾う）
 function cheerText(s: GaraponStats): string {
-  if (s.nearMiss >= 2) return `あと 1 つが ${s.nearMiss} 回…！<br>本当に惜しかった`
-  if (s.maxReach >= 2) return `${s.maxReach} 本のリーチ、見事でした`
-  if (s.maxReach === 1) return 'リーチまで行きました。あと一歩！'
-  return '今日は、運をためておく日でした'
+  if (s.nearMiss >= 2) return `あと 1 つが ${s.nearMiss} 回…！<br>ほんとに惜しかった！`
+  if (s.maxReach >= 2) return `リーチ ${s.maxReach} 本！ おみごと`
+  if (s.maxReach === 1) return 'リーチまで行った！ あと一歩'
+  return '運は、次にとっておこう'
 }
 
 // ---- あなたの結果（ガラポンのあとと、エントリーしなかった人の、共通の締めの画面） ----------------
@@ -632,18 +632,18 @@ function resultHtml(s: GaraponStats, balls: readonly GaraponBall[]): string {
   for (const b of balls) if (b.color !== 'white' && b.prize) prizes.set(b.prize, b.color)
   const rank = s.rank && s.rank > 0 ? Math.round(s.rank) : 0
   const main = prizes.size
-    ? `<div class="fxg-rs-lead fxg-in">おめでとうございます！</div>
+    ? `<div class="fxg-rs-lead fxg-in">おめでとう！</div>
       <div class="fxg-rs-prizes fxg-in" data-n="${Math.min(3, prizes.size)}">${[...prizes].slice(0, 3).map(([p, c]) => noshiHtml(c, p)).join('')}</div>`
-    : `<div class="fxg-rs-main fxg-in"><b>${rank ? `ビンゴ 第 ${rank} 位` : 'またの機会に！'}</b><span>${rank ? 'ビンゴ達成、おめでとうございます！' : cheerText(s)}</span></div>`
+    : `<div class="fxg-rs-main fxg-in"><b>${rank ? `ビンゴ 第 ${rank} 位` : 'また次の機会に！'}</b><span>${rank ? 'ビンゴ おめでとう！' : cheerText(s)}</span></div>`
   return `
     <div class="fxg-rs-kicker fxg-in">RESULT</div>
     <div class="fxg-rs-title fxg-in"><span class="fxg-ol" data-text="あなたの結果"><b>あなたの結果</b></span></div>
     ${main}
     ${balls.length ? `<div class="fxg-rs-row fxg-in"><span>ガラポンで出た玉</span>${balls.map((b) => ballHtml(b.color)).join('')}</div>` : ''}
     <ul class="fxg-rs-list fxg-in">
-      <li><span>カードに出た番号</span><span><b data-n="${s.hits}">0</b><small>個</small></span></li>
-      <li><span>いちばん多いリーチ</span><span><b data-n="${s.maxReach}">0</b><small>本</small></span></li>
-      <li><span>あと 1 つで外れた回数</span><span><b data-n="${s.nearMiss}">0</b><small>回</small></span></li>
+      <li><span>カードにあった番号</span><span><b data-n="${s.hits}">0</b><small>個</small></span></li>
+      <li><span>リーチ（最高）</span><span><b data-n="${s.maxReach}">0</b><small>本</small></span></li>
+      <li><span>あと 1 つで なかった</span><span><b data-n="${s.nearMiss}">0</b><small>回</small></span></li>
     </ul>
     <div class="fxg-rs-fin fxg-in"><b>おつかれさまでした</b><small>ご参加ありがとうございました</small></div>`
 }
@@ -744,7 +744,7 @@ class GaraponPlay {
       `<div class="fxg-bg"></div>
       <div class="fxg-head">
         <div class="fxg-kicker">DOUBLE CHANCE</div>
-        <div class="fxg-title"><span class="fxg-ol" data-text="ガラポン抽選"><b>ガラポン抽選</b></span></div>
+        <div class="fxg-title"><span class="fxg-ol" data-text="ガラポン"><b>ガラポン</b></span></div>
         <div class="fxg-left"></div>
         <div class="fxg-slots"></div>
       </div>
@@ -830,7 +830,7 @@ class GaraponPlay {
     const n = this.balls.length
     const left = n - done
     this.$('.fxg-left').innerHTML =
-      n === 1 ? 'チャンスは<b>1</b>回' : left > 0 ? `のこり<b>${left}</b>回` : `<b>${n}</b>回 回しました`
+      n === 1 ? 'チャンスは<b>1</b>回' : left > 0 ? `あと<b>${left}</b>回` : `<b>${n}</b>回 回した！`
     this.$('.fxg-slots').innerHTML = this.balls
       .map((b, i) =>
         i < done
@@ -930,7 +930,7 @@ class GaraponPlay {
     if (m.rps >= 2) this.setSub('すごい勢い！')
     else if (m.rps >= 1.2) this.setSub('いい回転！')
     else if (this.taps > 0 && m.rps >= 0.3) this.setSub('その調子！')
-    else if (m.cruise > 0) this.setSub('タップすると、もっと速く回ります')
+    else if (m.cruise > 0) this.setSub('タップで、もっと速く回る！')
     if (p >= 1) this.release()
   }
 
@@ -982,8 +982,8 @@ class GaraponPlay {
     if (this.gone()) return
     this.phase = 'reveal'
     this.root.dataset.phase = 'reveal'
-    const more = left > 0 ? `まだ <b>あと ${left} 回</b> 回せます` : ''
-    const msg = win ? more : more || 'ざんねん…<br>でも、最後まで遊んでくれてありがとう'
+    const more = left > 0 ? `まだ <b>あと ${left} 回</b> 回せる！` : ''
+    const msg = win ? more : more || 'ざんねん…<br>最後まで遊んでくれて ありがとう！'
     const rv = this.$('.fxg-reveal')
     rv.innerHTML = `
       <div class="fxg-rv-ballwrap"><div class="fxg-rv-halo"></div>${ballHtml(b.color)}${win ? BELL_SVG : ''}</div>
@@ -1094,7 +1094,7 @@ class GaraponPlay {
 
   private waitOutro(): Promise<void> {
     this.phase = 'wait'
-    const wait = el('div', 'fxg-rv-wait', '<i></i><i></i><i></i><span>大画面で 当選者を発表しています</span>')
+    const wait = el('div', 'fxg-rv-wait', '<i></i><i></i><i></i><span>大画面で 当たった人を発表中！</span>')
     this.$('.fxg-reveal').append(wait)
     void wait.offsetWidth
     wait.classList.add('on')
