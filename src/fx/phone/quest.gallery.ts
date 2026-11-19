@@ -259,6 +259,8 @@ function item(spec: Spec): GalleryItem {
         label: cell === null ? '' : label(CARD5[cell]),
       })
       if (spec.skill) void autoWhack(q, tl, spec.skill) // play を呼んだあと（警報が始まってから）見張り始める
+      // 会場でたたいた数の合計（本番は 0.5 秒ごとに届く）。叩く時間の間、ふえていく
+      for (let t = 3600; t <= 13600; t += 500) tl.at(t, () => q.setTotal(Math.round(18000 * ((t - 3600) / 10000) ** 1.4)))
       const score = await playing
       // 権威が結果を決めるまで（約 0.8 秒）
       if (!(await hold(tl, 800))) return

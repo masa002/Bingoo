@@ -1,0 +1,37 @@
+/* 番号の玉（ball.ts）。接頭辞は fxn-。大きさは文字の大きさに合わせて伸び縮みする（em で組む） */
+
+.fxn {
+  --fxn-ball: 1.15; /* 玉の直径（数字の大きさに対する倍率） */
+  display: inline-flex;
+  align-items: center;
+  gap: 0.16em;
+  vertical-align: -0.16em; /* 文の中で、まわりの文字と高さをそろえる */
+  white-space: nowrap;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 列の文字の玉: 白地に濃紺（抽選機の玉と同じ。色は段階だけに使うので、列ごとに色を変えない） */
+.fxn-l {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  font-size: calc(var(--fxn-ball) * 0.6em);
+  width: 1.667em;
+  height: 1.667em;
+  border-radius: 50%;
+  font-style: normal;
+  font-weight: 900;
+  line-height: 1;
+  color: #16204a;
+  text-shadow: none;
+  background: radial-gradient(circle at 34% 28%, #ffffff, #e6eaff 48%, #b4bfe6);
+  box-shadow:
+    inset 0 -0.12em 0.24em rgba(20, 30, 80, 0.32),
+    0 0.08em 0.22em rgba(0, 0, 0, 0.42);
+}
+
+.fxn-n {
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}

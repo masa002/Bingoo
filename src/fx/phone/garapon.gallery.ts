@@ -1,6 +1,7 @@
 import { registerGallery } from '../gallery'
 import type { Timeline } from '../runtime'
 import { DoubleChanceStage, type DoubleChanceWinner } from '../stage/doublechance'
+import type { BallColor } from '../theme'
 import { askEntry, playFinalResult, playGarapon, type GaraponBall, type GaraponStats } from './garapon'
 
 // ダブルチャンス（ガラポン）のギャラリー。スマホと大画面の両方をここで登録する
@@ -84,12 +85,21 @@ registerGallery(
   {
     id: 'garapon-outro',
     group: PHONE,
-    label: 'ガラポン: 大画面の発表が終わるまで待つ（outro。玉の結果のあと 6 秒）',
+    label: 'ガラポン: 大画面の発表が終わるまで待つ（outro。当たった人が大画面と同じ時刻に並ぶ）',
     screen: 'phone',
     play: (host, tl) => {
       // 本番では、大画面の締め（おつかれさまでした）で解決する
       const outro = tl.wait(16000)
-      return playGarapon(host, { speed: tl.speed, balls: [{ color: 'gold', prize: 'ロボット掃除機' }], stats: { hits: 10, maxReach: 2, nearMiss: 2 }, outro })
+      const names = ['いるか460', 'くじら372', 'あなた', 'ひよこ487', 'ぺんぎん032', 'しろくま618']
+      const prizes = ['QUO カード', 'お菓子セット', 'ロボット掃除機', 'ご当地グルメ', 'QUO カード', 'お菓子セット']
+      const winners = names.map((name, i) => ({
+        name,
+        isMe: name === 'あなた',
+        color: (name === 'あなた' ? 'gold' : 'red') as BallColor,
+        prize: prizes[i],
+        at: 5000 + i * 900,
+      }))
+      return playGarapon(host, { speed: tl.speed, balls: [{ color: 'gold', prize: 'ロボット掃除機' }], stats: { hits: 10, maxReach: 2, nearMiss: 2 }, outro, winners })
     },
   },
   final('garapon-final-prize', 'あなたの結果（参加しなかった人）: 景品あり', { hits: 15, maxReach: 2, nearMiss: 0, won: 'スマートウォッチ', rank: 4 }),

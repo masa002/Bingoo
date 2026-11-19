@@ -128,15 +128,16 @@ export function cleanSettings(x: unknown): LiveSettings | null {
 //   after=..                      最後に受け取った通し番号（初めてなら付けない）
 // エラーは { error: string }（人に見せる日本語）と、4xx・5xx の状態コード
 
+// 主催のログインには、どのゲームでも主催キーと認証アプリの 6 桁の両方が要る（2026-11-20 から。
+// 前の会で管理のパスワードが漏れて、大失敗したため。キーだけが漏れても、6 桁が出る端末がなければ入れない）
 export interface CreateReq {
   adminKey: string
   settings: LiveSettings
-  totp: boolean // 主催のログインに、認証アプリの 6 桁の数字も求める
 }
 export interface CreateRes {
   code: string
   hostKey: string // 主催キー（このときだけ表示する。なくしたら作り直し）
-  totpUri: string | null // otpauth://…（認証アプリに登録する。totp が false なら null）
+  totpUri: string // otpauth://…（認証アプリに登録する。このときだけ表示する）
 }
 
 export interface PublicState {
@@ -145,7 +146,7 @@ export interface PublicState {
   players: number
   drawn: number[]
   canJoin: boolean
-  totp: boolean // 主催のログインに、認証アプリの 6 桁も要る
+  totp: boolean // 主催のログインに、認証アプリの 6 桁も要る（いまはいつも true。必須にする前に作ったゲームだけ false）
 }
 
 export interface JoinReq {

@@ -3,8 +3,9 @@ import type { Beat } from '../../core/show'
 import { FLIP_EASING, MACHINE, flipPlan, landingOf, maStopMs, motionAt, pseudoPlan, reelRun, slotOf, type ReelRun } from '../landing'
 import { Particles } from '../particles'
 import { Timeline, el, escapeHtml, prefersReducedMotion } from '../runtime'
-import { GOLD, HEAT_LABEL, MY_TIER_WORD, RAINBOW, TIER_QUIET, TIER_SHAPE, type MachineStyle, type Tier } from '../theme'
+import { GOLD, MY_TIER_WORD, RAINBOW, TIER_QUIET, TIER_SHAPE, type MachineStyle, type Tier } from '../theme'
 import { txt, type AoriOutcome } from './aori'
+import { numHtml, numOf } from './ball'
 import { boxIn, play, ring, settle, shake, sparkBurst } from './card'
 import './spin.css' // card.css・aori.css より後に読み込む（カードのマスを照らす規則はここにある。縁取り文字 .fxa-txt の色もここで決める）
 
@@ -12,8 +13,10 @@ import './spin.css' // card.css・aori.css より後に読み込む（カード�
 // 期待度（青 → 緑 → 赤 → 金 → 虹）を出すのは、このスマホの画面だけ（大画面には出ない）。色も言葉も、全部「自分のカードにとっての段階」。
 // 入力は受けない（タップは下へ通す）。
 //   - 自分の段階で作った拍の列（core/show.ts の personalBeats）を、同じ時刻でそのままなぞる。
-//     パネルの頭に、見出し「あなたの期待度」と目盛り（▲ ◆ ★ ✦）、その下に、いまの段階の札（▲ あるかも？ → ◆ リーチのチャンス！
-//     → ★ ビンゴのチャンス！ → ✦ ビンゴ確定！）を出す。画面のふちの光・リールの枠・カットインも、同じ段階の色
+//     パネルの頭に、いまの段階の札（● まだまだ → ▲ あるかも？ → ◆ リーチのチャンス！ → ★ ビンゴのチャンス！ → ✦ ビンゴ確定！）と、
+//     その右に目盛り（▲ ◆ ★ ✦。いまの段階まで点く）を 1 行で出す。期待度はスマホにしか出ないので見出しは付けない（札の言葉で読める）。
+//     画面のふちの光・リールの枠・カットインも、同じ段階の色
+//   - 番号は、スマホのほかの所と同じ「列の文字の玉 ＋ 数字」（ball.ts）で見せる。リールのコマも「あと O65」も結果の一行も同じ部品
 //   - 虹は自分のビンゴ確定のときだけ。拍は青〜金のどれかの流れで届き、そこまではふつうに上げる。確定そのもの
 //     （時が止まる → 窓のガラスにヒビ → 「ビンゴ確定！」）は、発表の少し前に、ここで入れる（最初から確定とは出さない）
 //   - オリパのお約束の合図:
@@ -29,7 +32,7 @@ import './spin.css' // card.css・aori.css より後に読み込む（カード�
 //   await spin.resolve({ outcome: 'double', label: 'G48' })
 //   await card.stamp(13) …                            // スタンプ・リーチの札・BINGO は組み込み側で
 //
-// 層は host 全体（inset 0、z-index 12、pointer-events: none）。本体（あなたの期待度・リールの窓・「あと O65」）は y 530〜830（--fxs-top）。
+// 層は host 全体（inset 0、z-index 12、pointer-events: none）。本体（段階の札と目盛り・リールの窓・「あと O65」）は y 530〜830（--fxs-top）。
 // 赤以上では画面を暗くし、同じ host の中にある CardView の「あと 1 つ」のマス（.fxc-cell.is-wait）だけを照らして脈動させる。
 // 音: 予告の音（段階が上がる・カットイン・疑似連・ライザー・鼓動・間・確定）と結果の音（復活・成功・失敗）は、この画面だけのものなので
 //     いつも鳴らす。回り出しと着地の音だけは、sound が 'all' のとき（本番のスマホ）に鳴らす
@@ -90,16 +93,13 @@ const tagsHtml = (up: boolean): string => `<span class="fxs-tags"><em class="fxs
 const clamp = (x: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, x))
 const pickOne = <T>(items: readonly T[]): T => items[Math.floor(Math.random() * items.length)]
 const tierOf = (t: number): Tier => clamp(Math.round(t), 0, 4) as Tier
-const colOf = (n: number): number => clamp(Math.floor((n - 1) / 15), 0, 4)
-const letterOf = (n: number): string => 'BINGO'[colOf(n)]
-const numOf = (label: string): number => Number(/\d+/.exec(label)?.[0] ?? NaN)
 
-// リールのコマの中身: 列の文字の玉と番号（「B 12」）
+// リールのコマの中身: 番号の玉（列の文字の玉と数字。スマホのほかの所と同じ部品）
 function codeHtml(c: Code): string {
   if (c === Q) return '<b class="fxs-q">?</b>'
   if (c === DASH) return '<b class="fxs-dash">--</b>'
   if (c <= 0) return ''
-  return `<i class="fxs-l">${letterOf(c)}</i><b class="fxs-n">${c}</b>`
+  return numHtml(c)
 }
 
 // 叩きつける段階の言葉（自分のカードの話）。up は昇格（途中で色が上がった）
@@ -523,7 +523,7 @@ export class HandSpin {
     const nums = waiting.map(numOf)
     const waits = waiting.length
       ? `<div class="fxs-wait" data-count="${Math.min(3, waiting.length)}"><small>あと</small><span>${waiting
-          .map((w, i) => `<b data-n="${nums[i]}">${escapeHtml(w)}</b>`)
+          .map((w, i) => `<b data-n="${nums[i]}">${numHtml(w)}</b>`)
           .join('')}</span></div>`
       : ''
     this.el.className = 'fxs'
@@ -538,10 +538,8 @@ export class HandSpin {
       <div class="fxs-flock"></div>
       <div class="fxs-body${waits ? ' has-wait' : ''}">
         <div class="fxs-head">
-          <div class="fxs-cap"><small>${HEAT_LABEL}</small><span class="fxs-meter">${([1, 2, 3, 4] as const)
-            .map((k) => `<u data-k="${k}">${TIER_SHAPE[k]}</u>`)
-            .join('')}</span></div>
           <div class="fxs-lamp"><i></i><b></b></div>
+          <span class="fxs-meter" aria-hidden="true">${([1, 2, 3, 4] as const).map((k) => `<u data-k="${k}">${TIER_SHAPE[k]}</u>`).join('')}</span>
         </div>
         <div class="fxs-win">
           <div class="fxs-reel">${'<div class="fxs-row"></div>'.repeat(5)}</div>
@@ -1356,7 +1354,7 @@ export class HandSpin {
       { transform: 'scale(1)' },
     ]
     void play(p.lamp, thump, d, tl, { composite: 'add' })
-    for (const b of p.wait?.querySelectorAll('b') ?? []) void play(b, thump, d, tl, { composite: 'add' })
+    for (const b of p.wait?.querySelectorAll(':scope > span > b') ?? []) void play(b, thump, d, tl, { composite: 'add' })
     for (const c of this.lit) {
       void play(c, thump, d, tl, { composite: 'add' })
       void play(
@@ -1415,7 +1413,7 @@ export class HandSpin {
     p.win.classList.add('is-landed')
     this.hush()
     if (this.sound === 'all') sfx.reelLand(t)
-    this.msg(`出た番号は <b>${letterOf(n)} ${n}</b>`)
+    this.msg(`出た番号は ${numHtml(n)}`)
     // 「あと O65」が来た
     const hit = p.wait?.querySelector<HTMLElement>(`b[data-n="${n}"]`)
     hit?.classList.add('is-hit')
@@ -1588,7 +1586,7 @@ export class HandSpin {
     if (tl.cancelled) return
     // 「B9 は なかった…」は、下のパネルの中に、不透明で水平に出す（カードには乗せない。外れは抽選の大半で出るので、
     // 毎回カードの数字が汚れて見えないように）。次につながる一言を添える
-    this.missPlate(tl, `<b>${escapeHtml(label)} は ${FAIL_TEXT}</b><em>次に期待！</em>`)
+    this.missPlate(tl, `<b>${numHtml(label)} は ${FAIL_TEXT}</b><em>次に期待！</em>`)
     await tl.wait(still ? 1300 : 1500)
     if (!tl.cancelled) await this.retract(tl)
   }
@@ -1616,7 +1614,7 @@ export class HandSpin {
   // 青（と、あおっていない外れ）: 番号を少し見せてから、静かに引っ込む
   private async quiet(tl: Timeline): Promise<void> {
     const n = this.n
-    if (n !== null) this.msg(`<b>${letterOf(n)} ${n}</b> は ${FAIL_TEXT}`)
+    if (n !== null) this.msg(`${numHtml(n)} は ${FAIL_TEXT}`)
     this.fadeAura(tl, 300)
     await tl.wait(700)
     if (!tl.cancelled) await this.retract(tl)

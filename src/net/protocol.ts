@@ -163,7 +163,7 @@ export type Msg =
       players: number
       me: { target: boolean; cell: number | null; label: string } // 本人宛て（ボスモグラが狙う自分のマス）
     }
-  | { type: 'questProgress'; total: number } // 会場で叩いた数の合計（叩く時間の間、0.5 秒ごと）
+  | { type: 'questProgress'; total: number } // 会場で叩いた数の合計（叩く時間の間、0.5 秒ごと。大画面とスマホの両方）
   | {
       type: 'questResult'
       kind: 'mole'

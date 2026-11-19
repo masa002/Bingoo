@@ -145,12 +145,13 @@ export class GameDO extends DurableObject<AppEnv> {
   // ---- 入口（Worker と Room から RPC で呼ぶ） -------------------------------
 
   // ゲームを作る。このコードがもう使われていれば null（呼ぶ側が、別のコードで作り直す）
-  async create(code: string, settings: LiveSettings, totp: boolean): Promise<CreateRes | null> {
+  // 認証アプリの 6 桁は、どのゲームでも必須（主催キーが漏れても、それだけでは入れない）
+  async create(code: string, settings: LiveSettings): Promise<CreateRes | null> {
     return this.serial(async () => {
       if (this.load()) return null
       const key = randomHex(32)
       const hostKey = newHostKey()
-      const secret = totp ? newTotpSecret() : null
+      const secret = newTotpSecret()
       const hostHash = await hostKeyHash(key, hostKey)
       const engine = await Engine.create(this.host, LEAD_MS, settings)
       const meta: Meta = { code, key, hostHash, totp: secret, created: Date.now(), seq: 0, lastP: 0, lastC: 0, fails: 0, lockedUntil: 0 }
@@ -172,7 +173,7 @@ export class GameDO extends DurableObject<AppEnv> {
       this.stateText = ''
       this.commit(engine, meta, true)
       await this.arm(meta)
-      return { code, hostKey, totpUri: secret ? totpUri(secret, code) : null }
+      return { code, hostKey, totpUri: totpUri(secret, code) }
     })
   }
 

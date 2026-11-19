@@ -60,7 +60,7 @@ async function createGame(request: Request, env: AppEnv): Promise<Response> {
   // もうあるコードに当たったら、別のコードで作り直す
   for (let tries = 0; tries < 5; tries++) {
     const code = newCode()
-    const res = await gameOf(env, code).create(code, settings, body.totp === true)
+    const res = await gameOf(env, code).create(code, settings)
     if (res) return json(res)
   }
   return fail(500, 'ゲームを作れませんでした。もう一度ためしてください')

@@ -8,6 +8,7 @@
 // 通信の決まりは src/net/wire.ts。TypeScript は読み込めないので、要る分だけここに書き写してある
 // （wire.ts を変えたら、下の「wire.ts と同じ決まり」も合わせる）。
 
+import { createHmac } from 'node:crypto'
 import { writeFile } from 'node:fs/promises'
 import { monitorEventLoopDelay, performance } from 'node:perf_hooks'
 
@@ -19,7 +20,7 @@ const KEEPALIVE = { ping: 'ping', pong: 'pong' }
 // 先に送られないメッセージ（at が「いま」で出る）。遅れの集計には入れない
 const NO_LEAD = new Set(['host', 'notice', 'snapshot'])
 // 参加者には届かないメッセージ（主催だけ・大画面と主催だけ）。通し番号の飛びを数えるときに除く
-const NOT_FOR_PLAYERS = new Set(['host', 'notice', 'questProgress'])
+const NOT_FOR_PLAYERS = new Set(['host', 'notice'])
 // frameText() が作る文字列の頭。全部を JSON.parse しなくても、通し番号・時刻・種類が分かる
 const HEAD = /^\{"s":(\d+),"at":(-?\d+(?:\.\d+)?)/
 const B_TYPE = ',"b":{"type":"'
@@ -44,7 +45,7 @@ const SPEC = {
   players: { d: 100, num: true, help: 'つなぐ仮の参加者の数' },
   code: { d: '', help: 'もうあるゲームに入る（付けなければ、新しく作る）' },
   'host-key': { d: process.env.BINGOO_HOST_KEY ?? '', help: '--code のゲームの主催キー（環境変数 BINGOO_HOST_KEY でもよい）' },
-  totp: { d: '', help: '--code のゲームが認証アプリも使うときの 6 桁' },
+  totp: { d: '', help: '--code のゲームの、認証アプリの 6 桁（新しく作るゲームは、この道具が自分で計算する）' },
   'no-host': { flag: true, help: '進行はしない（参加者だけ入る）。2 台目からの PC で、--code と一緒に使う' },
   expect: { d: 0, num: true, help: 'この人数が参加するまで、始めるのを待つ（既定は --players + --bots）' },
   bots: { d: 0, num: true, help: 'サーバーの中の仮想の参加者を足す（接続はしない人）' },
@@ -957,20 +958,36 @@ function transportOf(i) {
   return Math.floor(i * f) % 2 === 0 ? 'sse' : 'poll'
 }
 
+// 認証アプリと同じ 6 桁（RFC 6238。HMAC-SHA1・30 秒・6 桁）。secret は base32
+function totpNow(secret, now = Date.now()) {
+  const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+  let bits = ''
+  for (const ch of secret.replace(/=+$/, '').toUpperCase()) bits += A.indexOf(ch).toString(2).padStart(5, '0')
+  const key = Buffer.from((bits.match(/.{8}/g) ?? []).map((b) => parseInt(b, 2)))
+  const msg = Buffer.alloc(8)
+  msg.writeBigUInt64BE(BigInt(Math.floor(now / 30000)))
+  const h = createHmac('sha1', key).update(msg).digest()
+  const o = h[h.length - 1] & 15
+  return String((h.readUInt32BE(o) & 0x7fffffff) % 1000000).padStart(6, '0')
+}
+
 async function setup() {
   await syncHttp(8)
   say(`サーバーにつながりました（往復 ${fmtMs(clock.rtt)}）`)
 
   let hostKey = opt['host-key']
+  let totpSecret = null
   if (!code) {
     const total = opt.players + opt.bots
     // 数の範囲は wire.ts の SETTINGS_LIMITS（下位 1〜1000、上位とダブルチャンスは 0〜200。整数）
     const lower = Math.min(1000, opt.lower || Math.max(3, Math.round(total * 0.03)))
     const settings = { lower, upper: Math.min(200, opt.upper || Math.max(1, Math.round(lower / 4))), dc: Math.min(200, opt.dc || Math.max(1, Math.round(lower / 6))) }
-    const r = await http('POST', '/games', { body: { adminKey: opt['admin-key'], settings, totp: false } })
+    const r = await http('POST', '/games', { body: { adminKey: opt['admin-key'], settings } })
     if (typeof r?.code !== 'string' || typeof r?.hostKey !== 'string') throw new Error('POST /api/games の返事に code と hostKey がありません')
     code = r.code
     hostKey = r.hostKey
+    // 主催のログインには、認証アプリの 6 桁も要る。作ったときにもらった秘密の文字列から、この道具が自分で計算する
+    totpSecret = typeof r.totpUri === 'string' ? (/[?&]secret=([^&]+)/.exec(r.totpUri)?.[1] ?? null) : null
     run.settings = settings
     say(`ゲームを作りました: ${code}（景品 下位 ${settings.lower}・上位 ${settings.upper}・ダブルチャンス ${settings.dc}）`)
     say(`大画面: ${base}/?g=${code}&view=stage　主催: ${base}/?g=${code}&view=host（主催キー ${hostKey}）`)
@@ -981,7 +998,8 @@ async function setup() {
   stage = new Client({ role: 'stage', handler: watcher })
   stage.start()
   if (driving) {
-    const login = await http('POST', `/g/${code}/host/login`, { body: opt.totp ? { hostKey, totp: opt.totp } : { hostKey } })
+    const totp = opt.totp || (totpSecret ? totpNow(totpSecret) : '')
+    const login = await http('POST', `/g/${code}/host/login`, { body: totp ? { hostKey, totp } : { hostKey } })
     if (typeof login?.token !== 'string') throw new Error('host/login の返事に token がありません')
     run.hostToken = login.token
     hostClient = new Client({ role: 'host', token: login.token, handler: watcher })

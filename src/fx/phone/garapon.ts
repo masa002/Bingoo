@@ -576,7 +576,9 @@ const DWELL: Readonly<Record<BallColor, number>> = { white: 2600, red: 2900, gol
 // 結果は balls に先に決まっている（1 回なら 1 個、ラストワン争奪で外れた人は複数）。
 // 最後に、その人のゲームの結果（stats）を出して「おつかれさまでした」で終える。
 // その画面は残す（keep: false なら閉じる）。sound: false で音を出さない。
-// outro を渡すと、自分の玉の結果までを見せて「大画面で当選者を発表しています」で待ち、解決してから最後の結果へ進む
+// outro を渡すと、自分の玉の結果までを見せて「当たった人を発表中！」で待ち、解決してから最後の結果へ進む。
+// winners を渡すと、待っている間に、当たった人を大画面と同じ時刻に 1 人ずつ並べる（会場の外から参加している人は、大画面が見えないため）。
+// 自分のガラポンを回している間に発表が始まっても、自分の玉の結果を先に見せてから、それまでの分をまとめて出す
 export interface GaraponOptions {
   speed?: number
   balls: GaraponBall[]
@@ -584,7 +586,19 @@ export interface GaraponOptions {
   sound?: boolean
   keep?: boolean
   outro?: Promise<void> // 大画面の締め（おつかれさまでした）で解決する。締めのタイミングを大画面とそろえる
+  winners?: GaraponWinner[]
 }
+
+// ダブルチャンスで当たった人（at は、ガラポンを始めてから大画面に出るまでの ms）
+export interface GaraponWinner {
+  name: string
+  isMe: boolean
+  color: BallColor
+  prize: string
+  at: number
+}
+
+const WIN_ROWS = 5 // 当たった人を並べる行の数（多いときは「ほか N 人」にまとめる）
 
 export async function playGarapon(host: HTMLElement, o: GaraponOptions): Promise<void> {
   const play = new GaraponPlay(host, o)
@@ -722,6 +736,8 @@ class GaraponPlay {
   private glowUsed = false
   private readonly outro: Promise<void> | null
   private outroDone = false
+  private readonly shownWins: GaraponWinner[] = [] // 大画面に出た、当たった人（出た順）
+  private wins: HTMLElement | null = null
 
   constructor(host: HTMLElement, o: GaraponOptions) {
     this.tl = new Timeline(o.speed ?? 1)
@@ -732,6 +748,13 @@ class GaraponPlay {
       if (this.phase === 'wait') this.release()
     }
     this.outro?.then(done, done)
+    // 当たった人は、大画面と同じ時刻に出す（まだ待つ画面になっていなければ、なってからまとめて出す）
+    for (const w of o.winners ?? []) {
+      this.tl.at(w.at, () => {
+        this.shownWins.push(w)
+        this.renderWins()
+      })
+    }
     this.sound = o.sound ?? true
     this.keep = o.keep ?? true
     this.balls = o.balls
@@ -1094,14 +1117,37 @@ class GaraponPlay {
 
   private waitOutro(): Promise<void> {
     this.phase = 'wait'
-    const wait = el('div', 'fxg-rv-wait', '<i></i><i></i><i></i><span>大画面で 当たった人を発表中！</span>')
+    const wait = el('div', 'fxg-rv-wait', '<i></i><i></i><i></i><span>当たった人を発表中！</span>')
     this.$('.fxg-reveal').append(wait)
     void wait.offsetWidth
     wait.classList.add('on')
+    this.renderWins()
     return new Promise<void>((resolve) => {
       this.wake = resolve
       if (this.gone() || this.outroDone) this.release()
     })
+  }
+
+  // 当たった人の一覧（画面の下に、大画面と同じ並び。あふれた分は「ほか N 人」にまとめる）
+  private renderWins(): void {
+    if (this.phase !== 'wait' || !this.shownWins.length) return
+    if (!this.wins) {
+      this.wins = el('div', 'fxg-wins', '<div class="fxg-wins-h"><b>当たった人</b><span><b>0</b> 人</span></div><ul></ul>')
+      this.$('.fxg-reveal').append(this.wins)
+      void this.wins.offsetWidth
+      this.wins.classList.add('on')
+    }
+    const all = this.shownWins
+    const rows = all.length > WIN_ROWS ? all.slice(0, WIN_ROWS - 1) : all
+    const rest = all.length - rows.length
+    this.wins.querySelector('.fxg-wins-h span b')!.textContent = String(all.length)
+    const list = this.wins.querySelector('ul')!
+    const had = list.querySelectorAll('li:not(.more)').length
+    const row = (w: GaraponWinner, i: number): string =>
+      `<li class="${[w.isMe ? 'me' : '', i >= had ? 'new' : ''].join(' ').trim()}">${ballHtml(w.color)}<b>${
+        w.isMe ? '<em>あなた</em>' : escapeHtml(w.name)
+      }</b><small>${escapeHtml(w.prize)}</small></li>`
+    list.innerHTML = rows.map(row).join('') + (rest > 0 ? `<li class="more">ほか ${rest} 人</li>` : '')
   }
 
   // ---- その人の結果と、締め ----

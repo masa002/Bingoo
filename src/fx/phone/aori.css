@@ -201,8 +201,9 @@
   gap: 10px;
 }
 
-.fxo-reach-nums b {
-  padding: 6px 14px;
+.fxo-reach-nums > b {
+  display: flex;
+  padding: 6px 14px 6px 8px;
   border-radius: 14px;
   font-size: 36px;
   font-weight: 900;
@@ -367,9 +368,15 @@
   background: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
 }
 
-.fxo-wild-cell b {
+/* 札の中は番号の玉（ball.css）。玉は数字より少し小さく */
+.fxo-reach-nums .fxn,
+.fxo-wild-cell .fxn {
+  --fxn-ball: 0.82;
+}
+
+.fxo-wild-cell > b {
   display: block;
-  padding: 4px 18px;
+  padding: 6px 18px 6px 10px;
   border-radius: 13px;
   font-size: 34px;
   font-weight: 900;

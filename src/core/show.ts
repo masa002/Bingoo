@@ -16,8 +16,7 @@ export const TIER_NAME = ['青', '緑', '赤', '金', '虹'] as const
 export const MY_TIER_WORD = ['', 'あるかも？', 'リーチのチャンス！', 'ビンゴのチャンス！', 'ビンゴ確定！'] as const
 // いちばん下の段階（青）の呼び名
 export const TIER_QUIET = 'まだまだ'
-// 期待度の目盛りの見出し（何の目盛りかを必ず添える）
-export const HEAT_LABEL = 'あなたの期待度'
+// （期待度の目盛りの見出し「あなたの期待度」は、会場の期待度があったころの名残なのでやめた。期待度はスマホにしか出ない）
 export const TIER_SHAPE = ['●', '▲', '◆', '★', '✦'] as const
 
 export type PersonalOutcome = 'none' | 'hit' | 'reach' | 'bingo'

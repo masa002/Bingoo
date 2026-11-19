@@ -649,7 +649,9 @@ input {
 }
 
 /* ---- 参加者のスマホ（390×844）: 枠と固定の表示 --------------------------- */
-/* カード・あおり・景品・ガラポンの見た目は fx/phone の各部品が持つ */
+/* カード・あおり・景品・ガラポンの見た目は fx/phone の各部品が持つ。番号の玉は fx/phone/ball.css。
+   縦に積む: ステータス（36px）→ 名前（36px）→ リーチの帯（39px）→ カード → 出た番号 → 知らせ → 景品 → 会場のようす（下にそろえる）。
+   カードの位置（y 約 112〜518）は、演出の部品（手元の抽選・モグラ・リーチの札など）が前提にしているので変えない */
 
 /* 枠は外側の要素で描き、画面の中身はちょうど 390×844 にする（演出の部品はこの大きさを前提にしている） */
 .phone-frame {
@@ -662,6 +664,8 @@ input {
 
 .phone {
   position: relative;
+  display: flex;
+  flex-direction: column;
   width: 390px;
   height: 844px;
   border-radius: 48px;
@@ -671,51 +675,146 @@ input {
   font-size: 15px;
 }
 
+.phone > * {
+  flex: none;
+}
+
 .ph-status {
   display: flex;
+  align-items: flex-end;
   justify-content: space-between;
-  padding: 12px 26px 4px;
+  height: 36px;
+  padding: 0 26px 3px;
   font-size: 13px;
   font-weight: 700;
 }
 
+/* 名前と番号（左）、音・色の見方のボタン（右） */
 .ph-head {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: baseline;
-  margin: 6px 50px 4px 16px; /* 右は「？」のボタンの分をあける */
+  gap: 8px;
+  height: 36px;
+  padding: 0 4px 0 18px;
 }
 
+.ph-who {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* 自分で入れた名前は長いことがある。入りきらない分は「…」にする */
 .ph-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 18px;
+  font-weight: 900;
 }
 
 .ph-no {
-  margin-left: 8px;
-  color: var(--muted);
-}
-
-.ph-count {
+  flex: none;
   color: var(--muted);
   font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
 }
 
+.ph-tools {
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+
+/* 演出の見方を見返すボタン（押せる範囲は 44px、見た目は小さな丸） */
+.ph-help {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.ph-help i {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid #6f7bb5;
+  border-radius: 50%;
+  font-style: normal;
+  font-size: 14px;
+  font-weight: 900;
+  color: #c9d2ff;
+  background: rgba(20, 28, 64, 0.6);
+}
+
+/* ---- リーチの帯（カードの上） ---- */
+
 .ph-chips {
-  min-height: 38px;
-  margin: 0 14px;
+  height: 39px;
+  padding: 1px 14px 0;
 }
 
 .ph-wait {
-  border-radius: 10px;
-  padding: 6px 10px;
-  font-weight: 900;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 12px;
+  overflow: hidden;
+  white-space: nowrap;
   font-size: 15px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.ph-wait > b {
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.ph-wait > small {
+  font-size: 13px;
+  font-weight: 800;
+  opacity: 0.85;
+}
+
+/* 「あと (O)61 (B)5」: 番号の玉を並べる */
+.ph-rest {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ph-rest > small {
+  font-size: 13px;
+  font-weight: 800;
+  opacity: 0.85;
+}
+
+.ph-rest .fxn {
+  font-size: 18px;
+  --fxn-ball: 1.05;
 }
 
 /* リーチは「金の照準」で表しているので、帯も金（段階の赤と紛れないようにする） */
 .ph-wait.on {
   background: linear-gradient(90deg, #f5c542, #ffb84d);
   color: #1a1400;
+  box-shadow:
+    0 4px 14px rgba(245, 197, 66, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 /* 面の虹は横のグラデーション（円すいを横長の帯に当てると、風車のように見える） */
@@ -728,35 +827,26 @@ input {
     0 0 2px #1a1240;
 }
 
+.ph-wait.done > span {
+  font-size: 15px;
+}
+
+/* 上位チャレンジの帯は、金のチャレンジカードと同じ金の系統にする */
+.ph-wait.chal {
+  background: #2f2608;
+  box-shadow: inset 0 0 0 1px #b8901f;
+  color: #ffe9a8;
+}
+
+.ph-wait.chal.on {
+  background: linear-gradient(90deg, #f5c542, #ffb84d);
+  box-shadow: none;
+  color: #1a1400;
+}
+
 .ph-cardhost {
   position: relative;
-  margin-top: 6px;
-}
-
-.ph-latest {
-  position: relative;
-  margin-top: 8px;
-  text-align: center;
-}
-
-.ph-latest small {
-  display: block;
-  color: var(--muted);
-}
-
-.ph-latest b {
-  font-size: 40px;
-  font-weight: 900;
-}
-
-.ph-latest.pop b {
-  display: inline-block;
-  animation: pop 0.25s ease-out;
-}
-
-.ph-sub {
-  position: relative;
-  margin-top: 6px;
+  margin-top: 0;
 }
 
 /* 上位チャレンジ中は、上がった本カードの代わりに 3×3 のカードを同じ場所へ大きく置く */
@@ -768,22 +858,9 @@ input {
   --fxc-w: 300px;
 }
 
-/* 上位チャレンジの帯は、金のチャレンジカードと同じ金の系統にする */
-.ph-wait.chal {
-  background: #2f2608;
-  border: 1px solid #b8901f;
-  color: #ffe9a8;
-}
-
-.ph-wait.chal.on {
-  background: linear-gradient(90deg, #f5c542, #ffb84d);
-  border-color: transparent;
-  color: #1a1400;
-}
-
 /* 上位チャレンジ中は、条件をカードの下に出したままにする */
 .ph-rule {
-  margin: 6px 16px 0;
+  margin: 8px 16px 0;
   font-size: 13px;
   font-weight: 700;
   line-height: 1.5;
@@ -795,41 +872,111 @@ input {
   display: none;
 }
 
-/* 演出の見方を見返すボタン（押せる範囲は 44px、見た目は小さな丸） */
-.ph-help {
-  position: absolute;
-  top: 28px;
-  right: 6px;
-  z-index: 9;
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  background: none;
-  cursor: pointer;
+/* ---- 出た番号（いま出た番号を大きく、これまでの番号を小さく並べる） ---- */
+
+.ph-drawn {
+  display: flex;
+  margin: 10px 14px 0;
+  padding: 9px 12px 10px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(27, 36, 89, 0.6), rgba(12, 18, 50, 0.6));
+  box-shadow: inset 0 0 0 1px rgba(111, 123, 181, 0.28);
 }
 
-.ph-help i {
-  width: 26px;
-  height: 26px;
-  display: grid;
-  place-items: center;
-  border: 1.5px solid #6f7bb5;
-  border-radius: 50%;
-  font-style: normal;
-  font-size: 14px;
-  font-weight: 900;
-  color: #c9d2ff;
+.ph-drawn small {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 18px;
+  white-space: nowrap;
+  color: var(--muted);
 }
+
+.ph-latest {
+  flex: none;
+  width: 108px;
+}
+
+.ph-latest-n {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  margin-top: 4px;
+  font-size: 36px;
+  font-weight: 900;
+  line-height: 1;
+  color: #fff;
+}
+
+/* まだ出ていないときの「--」は控えめに */
+.ph-latest-n:not(:has(.fxn)) {
+  font-size: 26px;
+  color: #4d5888;
+}
+
+.ph-latest .fxn {
+  --fxn-ball: 0.9;
+  gap: 6px;
+}
+
+.ph-latest.pop .ph-latest-n {
+  animation: pop 0.25s ease-out;
+}
+
+.ph-past {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-left: 12px;
+  border-left: 1px solid rgba(111, 123, 181, 0.25);
+}
+
+.ph-past small b {
+  font-size: 14px;
+  color: var(--text);
+}
+
+/* 2 行まで（あふれた分は出さない。新しい順に並ぶ） */
+.ph-history {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-height: 49px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.ph-history > span {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 7px 0 3px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: #c9d2ff;
+  background: rgba(10, 15, 40, 0.85);
+  box-shadow: inset 0 0 0 1px rgba(111, 123, 181, 0.22);
+}
+
+.ph-history .fxn {
+  --fxn-ball: 1.2;
+}
+
+/* 自分のカードにあった番号は、スタンプと同じ桃色の地 */
+.ph-history > span.mine {
+  color: #fff;
+  background: rgba(255, 79, 139, 0.32);
+  box-shadow: inset 0 0 0 1px rgba(255, 134, 173, 0.6);
+}
+
+/* ---- 知らせ・景品 ---- */
 
 /* 見逃すと困る知らせ（画面に残す） */
 .ph-note {
   display: none;
-  margin: 10px 14px 0;
-  padding: 9px 12px;
+  margin: 8px 14px 0;
+  padding: 8px 12px;
   border-left: 4px solid var(--gold);
-  border-radius: 8px;
+  border-radius: 10px;
   background: #18204a;
   font-size: 13px;
   font-weight: 700;
@@ -843,8 +990,8 @@ input {
 /* 受け取った景品（会場で引き換えるときに見せられるよう、出したままにする） */
 .ph-prize {
   display: none;
-  margin: 10px 14px 0;
-  padding: 10px 14px 12px;
+  margin: 8px 14px 0;
+  padding: 8px 14px 10px;
   border: 1.5px solid #b8901f;
   border-radius: 14px;
   background: linear-gradient(180deg, #2f2608, #1c1705);
@@ -855,10 +1002,17 @@ input {
 }
 
 .ph-prize small {
-  display: block;
+  display: flex;
+  justify-content: space-between;
   font-size: 13px;
   font-weight: 700;
   color: #ffe9a8;
+}
+
+.ph-prize small em {
+  font-style: normal;
+  font-weight: 800;
+  color: #d9c58f;
 }
 
 .ph-prize div {
@@ -877,9 +1031,10 @@ input {
 .ph-prize i {
   flex: none;
   display: grid;
-  justify-items: center;
-  min-width: 46px;
-  padding: 3px 6px;
+  place-items: center;
+  min-width: 44px;
+  height: 34px;
+  padding: 0 6px;
   border-radius: 8px;
   background: #c0c6d6;
   color: #10152e;
@@ -887,13 +1042,6 @@ input {
   font-size: 17px;
   font-weight: 900;
   line-height: 1.1;
-}
-
-.ph-prize i em {
-  font-style: normal;
-  font-size: 9px;
-  font-weight: 800;
-  white-space: nowrap;
 }
 
 .ph-prize i[data-r='R'] {
@@ -908,26 +1056,210 @@ input {
   background: var(--rainbow-face);
 }
 
-.ph-history {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  justify-content: center;
-  padding: 0 14px;
+/* ---- 会場のようす（いちばん下。大画面が見えない人のため。控えめに） ---- */
+/* 色は中立。期待度の色（段階の色）は、自分のカードの話だけに使う */
+
+.ph-venue {
+  margin: auto 14px 14px;
+  padding: 8px 12px 9px;
+  border-radius: 16px;
+  background: rgba(8, 12, 32, 0.62);
+  box-shadow: inset 0 0 0 1px rgba(111, 123, 181, 0.22);
 }
 
-.ph-history span {
+.ph-venue-h {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
   font-size: 13px;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: #18204a;
+  font-weight: 700;
+  line-height: 18px;
   color: var(--muted);
 }
 
-.ph-history span.mine {
-  background: rgba(255, 92, 122, 0.35);
+.ph-venue-h b {
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  color: #c9d2ff;
+}
+
+.ph-stats {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2px;
+}
+
+.ph-stats span {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.ph-stats small {
+  font-size: 13px;
+  font-weight: 700;
+  color: #aab3d9;
+}
+
+.ph-stats b {
+  margin-left: 4px;
+  font-size: 19px;
+  font-weight: 900;
+  line-height: 26px;
+  font-variant-numeric: tabular-nums;
   color: #fff;
 }
+
+/* いちばん新しい出来事（2 行まで） */
+.ph-news {
+  display: none;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(111, 123, 181, 0.22);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 21px;
+  color: #dfe6ff;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.ph-news.on {
+  display: -webkit-box;
+}
+
+.ph-news.pop {
+  animation: ph-news-in 0.45s ease-out;
+}
+
+@keyframes ph-news-in {
+  from {
+    opacity: 0.15;
+    transform: translateY(4px);
+  }
+}
+
+.ph-news > * {
+  margin-right: 6px;
+}
+
+.ph-news > b {
+  font-weight: 900;
+  color: #fff;
+}
+
+.ph-news.big > b {
+  font-size: 16px;
+}
+
+.ph-news > .fxn {
+  font-size: 15px;
+  color: #fff;
+}
+
+.ph-news i {
+  font-style: normal;
+}
+
+/* 人の名前は、途中で折り返さない（「き／つね191」のように割れると読めない） */
+.ph-news :is(.ph-who-n, .ph-me, .ph-nb) {
+  white-space: nowrap;
+}
+
+.ph-news .ok {
+  margin-right: 2px;
+  color: #22c55e;
+}
+
+.ph-news .ng {
+  margin-right: 2px;
+  color: #94a3b8;
+}
+
+.ph-sep {
+  margin: 0 1px;
+  opacity: 0.55;
+}
+
+/* 名前（と景品の札）は途中で折り返さない */
+.ph-who-n,
+.ph-nb {
+  white-space: nowrap;
+}
+
+.ph-names small {
+  margin-left: 6px;
+  font-size: 13px;
+  color: #aab3d9;
+}
+
+/* 「あなた」の印（水色の札） */
+.ph-me {
+  padding: 0 6px;
+  border-radius: 6px;
+  font-style: normal;
+  font-weight: 900;
+  color: var(--you-ink);
+  background: var(--you);
+}
+
+/* 景品のレア度（景品の札と同じ色。C 銀、R 青緑、SR 金、UR 虹） */
+.ph-r {
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: 900;
+  color: #10152e;
+  background: #c0c6d6;
+}
+
+.ph-r:not([data-r]) {
+  color: #aab3d9;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ph-r[data-r='R'] {
+  background: #2dd4bf;
+}
+
+.ph-r[data-r='SR'] {
+  background: #f5c542;
+}
+
+.ph-r[data-r='UR'] {
+  background: var(--rainbow-face);
+}
+
+.ph-news-sub {
+  display: block;
+  font-style: normal;
+}
+
+/* 知らせと景品が両方出ていて、下が足りないとき（ゲームの終わりごろ）: 出た番号の欄を詰め、これまでの番号を 1 行にする。
+   出来事が出ているときは、会場の数字の行を省く（出来事のほうを残す） */
+.phone:has(.ph-note.on):has(.ph-prize.on) .ph-drawn {
+  padding-top: 6px;
+  padding-bottom: 7px;
+}
+
+.phone:has(.ph-note.on):has(.ph-prize.on) .ph-latest-n {
+  height: 36px;
+  margin-top: 2px;
+  font-size: 30px;
+}
+
+.phone:has(.ph-note.on):has(.ph-prize.on) .ph-history {
+  max-height: 22px;
+}
+
+.phone:has(.ph-note.on):has(.ph-prize.on) .ph-venue:has(.ph-news.on) .ph-stats {
+  display: none;
+}
+
+/* ---- その場の知らせ・重ねる画面 ---- */
 
 .ph-toast {
   position: absolute;
@@ -938,7 +1270,10 @@ input {
   padding: 10px 12px;
   border-radius: 12px;
   background: #222b58;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
   font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
   opacity: 0;
   pointer-events: none;
 }
@@ -996,20 +1331,31 @@ input {
   color: transparent;
 }
 
+.ph-join > p {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+}
+
 .ph-join-btn {
   margin: 16px 0;
   width: 100%;
   padding: 18px;
   border: 0;
   border-radius: 16px;
-  background: linear-gradient(135deg, #f5c542, #ff8a3d);
-  color: #1a1400;
+  background: var(--primary);
+  color: var(--primary-ink);
   font-size: 24px;
   font-weight: 900;
   cursor: pointer;
+  box-shadow:
+    0 8px 22px rgba(255, 138, 61, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 .ph-join small {
+  font-size: 13px;
+  line-height: 1.6;
   color: var(--muted);
 }
 
@@ -1445,7 +1791,8 @@ button:disabled {
 /* ---- 本番（サーバーにつないだ画面）だけの違い ------------------------------ */
 /* PhoneView・StageView に live の指定を渡したときだけ付くクラス。デモには当たらない */
 
-/* スマホ: 枠を出さず、画面いっぱいに合わせる。にせもののステータスバーは消すが、場所は残す（演出の部品の位置を変えないため） */
+/* スマホ: 枠を出さず、画面いっぱいに合わせる。にせもののステータスバーは出さず、その場所まで名前の段を広げる
+   （名前と番号を 2 行にして、長い名前でも切れにくくする。カードの位置は変えない） */
 .phone-frame.live {
   width: 390px;
   height: 844px;
@@ -1459,52 +1806,44 @@ button:disabled {
 }
 
 .phone.live .ph-status {
-  visibility: hidden;
+  display: none;
 }
 
-/* 自分で入れた名前は長いことがある。人数とぶつからないよう、入りきらない分は「…」にする */
-.phone.live .ph-head > div:first-child {
-  display: flex;
-  align-items: baseline;
-  min-width: 0;
+.phone.live .ph-head {
+  height: 72px;
+  padding-top: 4px;
+}
+
+.phone.live .ph-who {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
 }
 
 .phone.live .ph-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.phone.live :is(.ph-no, .ph-count) {
-  flex: none;
-  white-space: nowrap;
-}
-
-.phone.live .ph-count {
-  margin-left: 8px;
+  max-width: 100%;
+  font-size: 21px;
+  line-height: 1.2;
 }
 
 /* 音の切りかえ（本番のスマホだけ）。「？」の左に置く。押せる範囲は高さ 44px */
-.phone.live .ph-head {
-  margin-right: 128px;
-}
-
 .ph-sound {
-  position: absolute;
-  top: 28px;
-  right: 50px;
-  z-index: 9;
   height: 44px;
   display: flex;
   align-items: center;
-  gap: 3px;
-  padding: 0 4px;
+  gap: 4px;
+  padding: 0 8px;
   border: 0;
   background: none;
   color: #8f9ac9;
   font-size: 13px;
   font-weight: 900;
+  white-space: nowrap;
   cursor: pointer;
+}
+
+.ph-sound svg {
+  flex: none;
 }
 
 .ph-sound.on {

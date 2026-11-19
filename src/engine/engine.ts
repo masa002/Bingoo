@@ -611,7 +611,8 @@ export class Engine {
       const k = Math.min(1, (s.tick - s.t0 - QUEST.intro) / QUEST.play)
       let total = Math.round(s.quest.botTotal * (0.6 * k + 0.4 * k * k)) // 仮想の参加者の分（後半ほどモグラが多い）
       for (const x of this.questLive.values()) total += x
-      this.send({ type: 'questProgress', total }, undefined, 'crew')
+      // 参加者のスマホにも配る（会場の外から参加する人は、大画面の合計が見えないため）
+      this.send({ type: 'questProgress', total })
       s.tick += 500
     } else {
       const sec = Math.round((s.tick - s.t0) / 1000)

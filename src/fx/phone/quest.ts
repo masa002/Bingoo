@@ -3,6 +3,7 @@ import { Particles } from '../particles'
 import { Timeline, el, escapeHtml, prefersReducedMotion } from '../runtime'
 import { GOLD } from '../theme'
 import { txt } from './aori'
+import { numHtml } from './ball'
 import { MOLE_SVG, boxIn, play, ring, type CardView } from './card'
 import './quest.css' // aori.css より後に読み込む（縁取り文字の色と大きさを上書きするため）
 
@@ -25,6 +26,7 @@ import './quest.css' // aori.css より後に読み込む（縁取り文字の�
 //   const q = new MoleQuest(phone, { speed })        // sound: 'personal'（既定）は自分の音だけ、'all' は警報・合図も鳴らす
 //   q.brief(card, { playMs: 10000, target: true, cell: 12, label: 'N38', autoMs: null })   // 説明の画面で待つ
 //   const score = await q.play(card, { introMs: 3600, playMs: 10000, target: true, cell: 12, label: 'N38' })
+//   q.setTotal(18234)                                  // questProgress（会場でたたいた数の合計。叩く時間の間）
 //   send({ type: 'questScore', score })
 //   await q.result({ score, lost: true, need: 4, total: 18234, rank: 412, players: 1000 })
 //   card.setMarks(mask, { filled: [12], … })         // 埋めたあとの状態は呼び出し側で描き直す
@@ -127,6 +129,7 @@ interface Parts {
   num: HTMLElement
   combo: HTMLElement
   mission: HTMLElement
+  venue: HTMLElement // 会場でたたいた数の合計（叩く時間の間）
   howto: HTMLElement
   nudgeBox: HTMLElement
   wait: HTMLElement
@@ -440,6 +443,15 @@ export class MoleQuest {
     return this.score
   }
 
+  // 会場でたたいた数の合計（大画面と同じ数字。0.5 秒ごとに届く）。会場の外から参加している人にも、
+  // みんなでたたいている様子が分かるように、自分の数の下に小さく出す。叩く時間の間だけ
+  setTotal(total: number): void {
+    const p = this.parts
+    if (!p || !(total > 0) || (this.phase !== 'intro' && this.phase !== 'play' && this.phase !== 'over')) return
+    p.venue.querySelector('b')!.textContent = fmt(total)
+    p.venue.classList.add('on')
+  }
+
   // 途中でも片付ける（待っている play は、その時点の数で解決する）
   cancel(): void {
     this.reset()
@@ -500,6 +512,7 @@ export class MoleQuest {
           <div class="fxq-nudge"><i class="fxq-finger">${FINGER_SVG}</i><b>モグラをタップ！</b></div>
         </div>
         <div class="fxq-mission"></div>
+        <div class="fxq-venue"><i class="fxq-venue-ic">${HAMMER_SVG}</i><span>会場みんなで</span><b>0</b><small>匹</small></div>
         <div class="fxq-howto">
           <div class="fxq-demo"><i class="fxq-demo-pit"></i><div class="fxq-demo-clip"><div class="fxq-demo-mole">${MOLE_SVG}</div></div><i class="fxq-demo-ring"></i><i class="fxq-finger">${FINGER_SVG}</i></div>
           <div class="fxq-howto-txt"><b>出てきたモグラを<br>指でタップ！</b><small>カードのマスから出てくるよ</small></div>
@@ -570,6 +583,7 @@ export class MoleQuest {
       num: $('.fxq-num'),
       combo: $('.fxq-combo'),
       mission: $('.fxq-mission'),
+      venue: $('.fxq-venue'),
       howto: $('.fxq-howto'),
       nudgeBox: $('.fxq-nudge'),
       wait: $('.fxq-wait'),
@@ -741,7 +755,7 @@ export class MoleQuest {
     this.rumble(tl, burst)
     tl.at(burst, () => {
       void this.bossRise(tl, 280)
-      tl.at(160, () => this.bubble(this.label ? `${this.label} は いただく！` : 'このマス、いただく！', Math.max(560, until - burst)))
+      tl.at(160, () => this.bubble(this.label ? `${numHtml(this.label)} は いただく！` : 'このマス、いただく！', Math.max(560, until - burst)))
     })
     tl.at(Math.max(until, burst + 300), () => {
       void this.bossDive(tl, 240).then(() => {
@@ -1315,11 +1329,12 @@ export class MoleQuest {
   }
 
   // ボスのふきだし（頭の上。画面の端からはみ出さないように寄せる）
-  private bubble(text: string, ms: number): void {
+  // html は呼ぶ側で組む（番号は番号の玉にする。言葉はどれも決まった文）
+  private bubble(html: string, ms: number): void {
     const p = this.parts
     const b = this.boss
     if (!p || !b) return
-    const node = el('div', 'fxq-say', escapeHtml(text))
+    const node = el('div', 'fxq-say', html)
     p.fx.append(node)
     const W = this.el.clientWidth || 390
     const w = node.offsetWidth || 140
@@ -1444,7 +1459,7 @@ export class MoleQuest {
       this.washOnce()
     }
     // 1 匹も叩かずに済んだ人には「守りきった」とは言わない
-    const lbl = r.score < 1 ? 'モグラは あきらめて帰った' : this.label ? `${escapeHtml(this.label)} を守りきった！` : 'カードを守りきった！'
+    const lbl = r.score < 1 ? 'モグラは あきらめて帰った' : this.label ? `${numHtml(this.label)} を守りきった！` : 'カードを守りきった！'
     void this.showBanner(`<div class="fxq-ban is-win"><div class="fxq-ban-main">${txt(r.score < 1 ? 'セーフ！' : '守りきった！')}</div><div class="fxq-ban-note"><i>◆</i>${lbl}</div></div>`, 900)
     await tl.wait(1150)
     if (!alive()) return
@@ -1476,7 +1491,7 @@ export class MoleQuest {
     const score = `<span>たたいた数 <b>${fmt(r.score)}</b> 匹</span>`
     const combo = this.best >= 5 ? `<span>最高 <b>${this.best}</b> 連続</span>` : ''
     const king = r.rank >= 1 && r.rank <= 3 ? `<div class="fxq-king">★ 撃退王 第${r.rank}位！</div>` : ''
-    const chip = this.label ? `<b class="fxq-chip">${escapeHtml(this.label)}</b>` : 'カード'
+    const chip = this.label ? `<b class="fxq-chip">${numHtml(this.label)}</b>` : 'カード'
     if (kind === 'lost') {
       const main = r.need >= 1 ? `あと <b>${fmt(r.need)}</b> 匹で守れた！` : 'あと一歩で守れた！'
       return `<div class="fxq-res is-lost"><div class="fxq-res-head"><i>▼</i>やられた…</div><div class="fxq-res-main">${main}</div>
@@ -1602,7 +1617,7 @@ export class MoleQuest {
   private setMission(kind: 'intro' | 'play' | 'wait'): void {
     const node = this.parts?.mission
     if (!node) return
-    const chip = this.label ? `<b class="fxq-chip">${escapeHtml(this.label)}</b>` : ''
+    const chip = this.label ? `<b class="fxq-chip">${numHtml(this.label)}</b>` : ''
     const dots = '<em class="fxq-dots"><i>.</i><i>.</i><i>.</i></em>'
     const sub = this.target ? 'たたいた数が少ないと、やられる！' : 'みんなで モグラを追い返そう'
     let head: string

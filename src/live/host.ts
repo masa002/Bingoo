@@ -203,8 +203,7 @@ export function mountCreate(app: HTMLElement, _params: URLSearchParams): void {
           <p class="lh-note">1 行に 1 個ずつ書いてください。数より少ないときは、上から順にくり返して使います。C → R → SR → UR の順に、いい景品です</p>
           ${NAME_ROWS.map((r) => `<label class="lh-field" data-rank="${r.k}"><span>${r.label}<i></i></span><textarea rows="3" placeholder="1 行に 1 個"></textarea></label>`).join('')}
         </details>
-        <label class="lh-check"><input type="checkbox" name="totp" /> ログインに認証アプリも使う</label>
-        <p class="lh-note">主催コンソールに入るときに、主催キーのほかに、認証アプリに出る 6 けたの数字も入れます</p>
+        <p class="lh-note">主催コンソールに入るときは、主催キーと、認証アプリ（Google Authenticator など）に出る 6 けたの数字の両方が要ります。作ったあとに、司会をする人のスマホで認証アプリに登録します</p>
         <p class="lh-error" role="alert" hidden></p>
         <button class="lh-primary" type="submit">ゲームを作る</button>
       </form>
@@ -244,14 +243,13 @@ export function mountCreate(app: HTMLElement, _params: URLSearchParams): void {
       if (lines.length) prizeNames[r.k] = lines
     }
     const settings: LiveSettings = { ...readCounts(form), ...(Object.keys(prizeNames).length ? { prizeNames } : {}) }
-    const totp = q<HTMLInputElement>(form, '[name="totp"]').checked
     fail('')
     // 2 回押して、ゲームを 2 つ作らないように
     submit.disabled = true
     submit.textContent = '作っています…'
-    api.create({ adminKey, settings, totp }).then(
+    api.create({ adminKey, settings }).then(
       (res) => {
-        showCreated(root, api, res)
+        showCreated(root, res)
       },
       (err: unknown) => {
         submit.disabled = false
@@ -262,10 +260,10 @@ export function mountCreate(app: HTMLElement, _params: URLSearchParams): void {
   })
 }
 
-function showCreated(root: HTMLElement, api: Api, res: CreateRes): void {
+function showCreated(root: HTMLElement, res: CreateRes): void {
   const urls = urlsOf(res.code)
   // 認証アプリに手で入れるための文字列（QR が読めないとき）
-  const secret = res.totpUri ? (/[?&]secret=([^&]+)/.exec(res.totpUri)?.[1] ?? '') : ''
+  const secret = /[?&]secret=([^&]+)/.exec(res.totpUri)?.[1] ?? ''
   root.innerHTML = `
     <main class="lh-card">
       <p class="lh-brand">Bingoo</p>
@@ -276,17 +274,14 @@ function showCreated(root: HTMLElement, api: Api, res: CreateRes): void {
         <div class="lh-secret"><code>${esc(res.hostKey)}</code><button type="button" class="lh-btn" data-copy="${esc(res.hostKey)}">コピー</button></div>
         <p class="lh-warn">主催キーが見られるのは、いまだけです。なくすと、ゲームを作り直すことになります。いま、控えてください</p>
       </section>
-      ${
-        res.totpUri
-          ? `<section class="lh-keybox">
+      <section class="lh-keybox">
         <h2>認証アプリに登録する</h2>
-        <p class="lh-note">認証アプリ（Google Authenticator など）で、この QR を読み取ってください</p>
+        <p class="lh-note">認証アプリ（Google Authenticator など）で、この QR を読み取ってください。主催コンソールに入るときに、アプリに出る 6 けたの数字が要ります</p>
         <div class="lh-totp">${qrSvg(res.totpUri, '認証アプリに登録する QR')}</div>
         ${secret ? `<p class="lh-note">読み取れないときは、この文字を入れてください</p><div class="lh-secret"><code>${esc(secret)}</code><button type="button" class="lh-btn" data-copy="${esc(secret)}">コピー</button></div>` : ''}
-        <p class="lh-warn">この QR が見られるのも、いまだけです。司会をする人のスマホで、いま登録してください</p>
-      </section>`
-          : ''
-      }
+        <p class="lh-warn">この QR が見られるのも、いまだけです。司会をする人のスマホで、いま登録してください。もう 1 人の主催の人も、ここで一緒に登録しておくと安心です</p>
+        <p class="lh-warn">主催キーと 6 けたの数字は、大画面に映したり、声に出したり、チャットに書いたりしないでください</p>
+      </section>
       <h2>3 つの URL</h2>
       ${urlRow('参加用（みんなのスマホ）', urls.join, null)}
       ${urlRow('大画面用（会場のスクリーン）', urls.stage, null)}
@@ -309,17 +304,8 @@ function showCreated(root: HTMLElement, api: Api, res: CreateRes): void {
   })
   open.addEventListener('click', () => {
     open.disabled = true
-    const go = () => location.assign(urls.host)
-    // 認証アプリを使わないなら、ここでログインも済ませる（作ったばかりの主催キーを、すぐ打ち直させない）。
-    // だめでも、主催コンソールのログインの画面で入れる
-    if (res.totpUri) return go()
-    api.login(res.code, { hostKey: res.hostKey }).then(
-      (r) => {
-        save(session, tokenKey(res.code), r)
-        go()
-      },
-      () => go(),
-    )
+    // ログインの画面へ。認証アプリの 6 けたを入れてもらうことで、登録できたかも確かめられる
+    location.assign(urls.host)
   })
 }
 

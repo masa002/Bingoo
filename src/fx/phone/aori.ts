@@ -1,7 +1,8 @@
 import { sfx } from '../../audio'
 import { Particles } from '../particles'
 import { GOLD, RAINBOW } from '../theme'
-import { Timeline, el, escapeHtml, prefersReducedMotion } from '../runtime'
+import { Timeline, el, prefersReducedMotion } from '../runtime'
+import { numHtml } from './ball'
 import { boxIn, play, ring, shake, sparkBurst } from './card'
 import './aori.css'
 
@@ -78,7 +79,7 @@ export async function playReach(host: HTMLElement, o: { lines: number; waiting: 
   const wait = o.waiting.length
     ? `<div class="fxo-reach-wait">
         <small>あと 1 つ！${o.waiting.length > 1 ? ' どれか出たらそろう！' : ''}</small>
-        <div class="fxo-reach-nums">${o.waiting.map((w) => `<b>${escapeHtml(w)}</b>`).join('')}</div>
+        <div class="fxo-reach-nums">${o.waiting.map((w) => `<b>${numHtml(w)}</b>`).join('')}</div>
         ${o.lines >= 4 ? `<em>${o.lines} 列でリーチ！</em>` : ''}
       </div>`
     : ''
@@ -99,7 +100,7 @@ export async function playReach(host: HTMLElement, o: { lines: number; waiting: 
   const band = layer.querySelector<HTMLElement>('.fxo-band')!
   const letters = [...layer.querySelectorAll<HTMLElement>('.fxo-reach-word > .fxa-txt')]
   const panel = layer.querySelector<HTMLElement>('.fxo-reach-wait')
-  const pops = [...layer.querySelectorAll<HTMLElement>('.fxo-reach-nums b, .fxo-reach-wait em')]
+  const pops = [...layer.querySelectorAll<HTMLElement>('.fxo-reach-nums > b, .fxo-reach-wait em')]
   // 帯が左から差し込み、文字が 1 つずつ叩きつけられる
   void play(band, [{ transform: 'translateX(-110%) rotate(-7deg) scaleY(0.3)' }, { transform: 'translateX(0%) rotate(-7deg) scaleY(1)' }], 280, tl, {
     easing: 'cubic-bezier(.2,.8,.3,1)',
@@ -234,7 +235,7 @@ export async function playWildResult(host: HTMLElement, o: { label: string; newR
     <div class="fxo-wild-text">
       ${txt('全員確定！', 'is-rainbow')}
       <p>あなたのカードも <b>1 マス</b>あいた！</p>
-      <span class="fxo-wild-cell"><b>${escapeHtml(o.label)}</b></span>
+      <span class="fxo-wild-cell"><b>${numHtml(o.label)}</b></span>
     </div>
     ${o.newReach ? `<div class="fxo-wild-reach">${txt('リーチ！')}</div>` : ''}`,
   )

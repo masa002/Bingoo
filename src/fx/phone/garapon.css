@@ -619,6 +619,117 @@
   animation-delay: 0.6s;
 }
 
+/* 当たった人の一覧（待っている間、画面の下に。大画面と同じ時刻に 1 人ずつ増える）。上の結果の位置は動かさない */
+.fxg-wins {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 18px;
+  padding: 8px 12px 10px;
+  border-radius: 16px;
+  text-align: left;
+  background: rgba(9, 13, 34, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(201, 207, 230, 0.22);
+  opacity: 0;
+  transition: opacity calc(400ms * var(--fxg-k)) ease-out;
+}
+
+.fxg-wins.on {
+  opacity: 1;
+}
+
+.fxg-wins-h {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 2px 6px;
+  border-bottom: 1px solid rgba(245, 197, 66, 0.35);
+  font-size: 13px;
+  font-weight: 800;
+  color: #c9d2ff;
+}
+
+.fxg-wins-h > b {
+  font-size: 15px;
+  color: #fff;
+}
+
+.fxg-wins-h span b {
+  font-size: 17px;
+  color: #fff;
+}
+
+.fxg-wins ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fxg-wins li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.fxg-wins li:last-child {
+  border-bottom: 0;
+}
+
+.fxg-wins li .fxg-ball {
+  --d: 22px;
+}
+
+.fxg-wins li > b {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 900;
+  color: #fff;
+}
+
+.fxg-wins li > small {
+  flex: none;
+  max-width: 48%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 800;
+  color: #ffd9a0;
+}
+
+/* 「あなた」の印（水色の札） */
+.fxg-wins li em {
+  padding: 1px 8px;
+  border-radius: 6px;
+  font-style: normal;
+  color: #06223a;
+  background: #5ad2ff;
+}
+
+.fxg-wins li.more {
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: #c9d2ff;
+}
+
+.fxg-wins li.new {
+  animation: fxg-win-in calc(420ms * var(--fxg-k)) cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+@keyframes fxg-win-in {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+}
+
 @keyframes fxg-wait-dot {
   0%,
   60%,

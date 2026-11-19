@@ -663,13 +663,60 @@
   color: #ff8a5a;
 }
 
+/* ねらわれたマスの番号（中は番号の玉。ball.css） */
 .fxq .fxq-chip {
   display: inline-block;
-  padding: 0 7px;
-  border-radius: 7px;
+  padding: 2px 7px 2px 3px;
+  border-radius: 8px;
   font-weight: 900;
+  line-height: 1;
   color: #2b1100;
   background: linear-gradient(180deg, #ffd34d, #ff9a3d);
+}
+
+.fxq .fxq-chip .fxn {
+  --fxn-ball: 1;
+  vertical-align: 0;
+}
+
+/* 会場でたたいた数の合計（叩く時間の間だけ。自分の数より控えめに） */
+.fxq .fxq-venue {
+  display: none;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #c9d1f5;
+}
+
+.fxq[data-phase='play'] .fxq-venue.on,
+.fxq[data-phase='over'] .fxq-venue.on {
+  display: flex;
+}
+
+.fxq .fxq-venue b {
+  font-size: 20px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
+.fxq .fxq-venue small {
+  font-size: 13px;
+}
+
+.fxq .fxq-venue-ic {
+  align-self: center;
+  width: 26px;
+  height: 17px;
+}
+
+.fxq .fxq-venue-ic svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 /* 判定中の「…」（1 秒に 1 回より遅く） */
@@ -1054,7 +1101,7 @@
   font-weight: 900;
 }
 
-.fxq .fxq-res-head i {
+.fxq .fxq-res-head > i {
   font-style: normal;
 }
 
@@ -1257,6 +1304,13 @@
   box-shadow: 0 4px 0 rgba(0, 0, 0, 0.35);
 }
 
+/* 白い吹き出しの中の番号の玉は、縁を付けて地から浮かせる */
+.fxq .fxq-say .fxn-l {
+  box-shadow:
+    inset 0 0 0 0.09em #8e9bd0,
+    inset 0 -0.12em 0.24em rgba(20, 30, 80, 0.32);
+}
+
 .fxq .fxq-say::after {
   content: '';
   position: absolute;
@@ -1431,7 +1485,7 @@
   box-shadow: inset 0 0 0 1.5px rgba(34, 197, 94, 0.85);
 }
 
-.fxq .fxq-ban.is-win .fxq-ban-note i {
+.fxq .fxq-ban.is-win .fxq-ban-note > i {
   margin-right: 6px;
   font-style: normal;
   color: #22c55e;
