@@ -10,6 +10,17 @@
   --gold: #f5c542;
   --violet: #b98cff;
   --rainbow: conic-gradient(from 0deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff, #ff5a5a);
+  /* 虹の描き方は 2 つだけ: 玉は円すい（--rainbow）、面（帯・文字・札）は横のグラデーション（--rainbow-face） */
+  --rainbow-face: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
+  /* 見出しの型: 金のグラデーションに、濃い茶の縁 */
+  --head-fill: linear-gradient(180deg, #fff4cc, #f5c542 55%, #d9a520);
+  --head-edge: #2a1a05;
+  /* 主ボタン（いま押してほしいボタン） */
+  --primary: linear-gradient(135deg, #f5c542, #ff8a3d);
+  --primary-ink: #1a1400;
+  /* 「あなた」の印 */
+  --you: #5ad2ff;
+  --you-ink: #06223a;
   --font: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
 }
 
@@ -108,6 +119,8 @@ input {
 
 .pane-host {
   overflow-y: auto;
+  scrollbar-color: #2f3a70 transparent; /* 既定の白いスクロールバーだけが浮かないように */
+  scrollbar-width: thin;
 }
 
 .pane-label {
@@ -167,30 +180,40 @@ input {
   height: 88px;
   display: flex;
   align-items: center;
-  gap: 34px;
+  gap: 26px;
   padding: 0 40px;
   background: linear-gradient(#0b1230, rgba(11, 18, 48, 0));
+  white-space: nowrap;
 }
 
 .st-logo {
-  font-size: 40px;
+  font-size: 36px;
   font-weight: 900;
-  letter-spacing: 4px;
-  background: var(--rainbow);
+  letter-spacing: 3px;
+  background: var(--rainbow-face);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
+/* 会場の後ろの席からも読めるよう、ラベルも 28px 以上にする */
 .st-stat span {
-  color: var(--muted);
-  font-size: 21px;
+  color: #c9d2ff;
+  font-size: 28px;
+  font-weight: 700;
   margin-right: 8px;
 }
 
 .st-stat b {
-  font-size: 40px;
+  font-size: 42px;
   font-variant-numeric: tabular-nums;
+}
+
+.st-stat small {
+  margin-left: 3px;
+  font-size: 28px;
+  font-weight: 700;
+  color: #c9d2ff;
 }
 
 .st-upper b {
@@ -201,39 +224,35 @@ input {
   color: var(--violet);
 }
 
+.st-chal.off {
+  display: none;
+}
+
 .st-odds {
   margin-left: auto;
-  font-size: 22px;
-  color: var(--muted);
+  font-size: 28px;
+  font-weight: 700;
+  color: #c9d2ff;
 }
 
 .st-odds b {
-  font-size: 38px;
+  font-size: 42px;
   color: var(--gold);
   font-variant-numeric: tabular-nums;
 }
 
-.st-hash {
-  position: absolute;
-  z-index: 20;
-  top: 86px;
-  right: 44px;
-  font-size: 16px;
-  color: #5d668f;
-}
-
-.st-hash.tampered::after {
-  content: '（デモ操作で変更あり）';
-  color: #c98a3a;
+.st-odds i {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
 }
 
 .st-result {
   position: absolute;
   z-index: 20;
   left: 1270px;
-  top: 112px;
+  top: 104px;
   width: 610px;
-  height: 390px;
+  height: 400px;
   opacity: 0.35;
   transition: opacity 0.3s;
 }
@@ -244,8 +263,9 @@ input {
 
 .st-last small {
   display: block;
-  font-size: 22px;
-  color: var(--muted);
+  font-size: 28px;
+  font-weight: 700;
+  color: #c9d2ff;
 }
 
 .st-last b {
@@ -256,8 +276,8 @@ input {
 
 .st-chips {
   display: flex;
-  gap: 12px;
-  margin-top: 10px;
+  gap: 10px;
+  margin-top: 8px;
 }
 
 .chip {
@@ -265,18 +285,37 @@ input {
   background: #0f1738;
   border: 2px solid #26305a;
   border-radius: 14px;
-  padding: 8px 14px;
+  padding: 6px 12px;
+  white-space: nowrap;
 }
 
 .chip span {
   display: block;
-  font-size: 18px;
-  color: var(--muted);
+  font-size: 28px;
+  font-weight: 700;
+  color: #c9d2ff;
 }
 
 .chip b {
-  font-size: 44px;
+  font-size: 46px;
   font-variant-numeric: tabular-nums;
+}
+
+.chip b::after {
+  content: ' 人';
+  font-size: 28px;
+  font-weight: 700;
+  color: #c9d2ff;
+}
+
+/* まだ数が出ていない間は、単位を出さない */
+.chip b:empty::before {
+  content: '–';
+  color: #55608f;
+}
+
+.chip b:empty::after {
+  content: none;
 }
 
 .chip-bingo.hot {
@@ -284,6 +323,7 @@ input {
   background: color-mix(in srgb, var(--gold) 22%, #0f1738);
 }
 
+/* 当選者の名前は、会場がいちばん沸く情報なので大きく出す。3 人までは 1 列で特大、それより多ければ 2 列 */
 .st-names {
   list-style: none;
   margin: 12px 0 0;
@@ -291,30 +331,66 @@ input {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px 12px;
-  font-size: 23px;
-  font-weight: 800;
+  font-weight: 900;
 }
 
 .st-names li {
-  border-left: 5px solid var(--gold);
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  border-left: 6px solid var(--gold);
   background: linear-gradient(90deg, rgba(245, 197, 66, 0.25), transparent);
-  padding: 3px 10px;
+  padding: 2px 10px;
   animation: namein 0.35s ease-out both;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+.st-names li span {
+  flex: none;
+  font-size: 36px;
 }
 
 .st-names li small {
-  margin-left: 8px;
-  font-size: 16px;
-  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 28px;
+  font-weight: 800;
   color: var(--gold);
 }
 
+.st-names.few {
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.st-names.few li {
+  flex-direction: column;
+  gap: 0;
+  padding: 6px 16px;
+}
+
+.st-names.few li span {
+  font-size: 64px;
+  line-height: 1.15;
+}
+
+.st-names.few li small {
+  font-size: 34px;
+}
+
+/* 「あなた」の印は、どの画面でも水色の札 */
 .st-names li.me {
-  border-color: #fff;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.32), transparent);
+  border-color: var(--you);
+  background: linear-gradient(90deg, rgba(90, 210, 255, 0.4), transparent);
+}
+
+.st-names li.me span {
+  padding: 0 12px;
+  border-radius: 10px;
+  background: var(--you);
+  color: var(--you-ink);
 }
 
 .st-names li.chal {
@@ -327,9 +403,10 @@ input {
 }
 
 .st-names li.more {
-  border-color: var(--muted);
+  border-color: #c9d2ff;
   background: none;
-  color: var(--muted);
+  color: #c9d2ff;
+  font-size: 30px;
 }
 
 @keyframes namein {
@@ -339,6 +416,15 @@ input {
   }
 }
 
+/* 名前を出している間は、会場ビュー（デモ用）の場所まで欄を広げる */
+.stage.has-names .st-result {
+  height: 680px;
+}
+
+.stage.has-names .st-venue {
+  visibility: hidden;
+}
+
 .st-venue {
   position: absolute;
   z-index: 20;
@@ -346,6 +432,9 @@ input {
   top: 520px;
   width: 610px;
   height: 262px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   border: 2px solid #1d2648;
   border-radius: 14px;
   background: #070b1c;
@@ -354,14 +443,64 @@ input {
 
 .st-venue canvas {
   display: block;
+  margin: 0 auto;
 }
 
 .st-venue-label {
-  position: absolute;
-  left: 12px;
-  bottom: 4px;
-  font-size: 17px;
-  color: var(--muted);
+  padding: 4px 12px 0;
+  font-size: 26px;
+  font-weight: 700;
+  color: #c9d2ff;
+  white-space: nowrap;
+}
+
+/* 点の色の意味 */
+.st-venue-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px 6px;
+  font-size: 22px;
+  color: #c9d2ff;
+  white-space: nowrap;
+}
+
+.st-venue-legend i {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-left: 10px;
+}
+
+.st-venue-legend i:first-child {
+  margin-left: 0;
+}
+
+.st-venue-legend i.r {
+  background: #ff5a3c;
+}
+
+.st-venue-legend i.g {
+  background: var(--gold);
+}
+
+.st-venue-legend i.v {
+  background: var(--violet);
+}
+
+.st-venue-legend i.m {
+  background: #1c2445;
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+/* 全画面のイベントの間は、前の抽選のカード・結果・会場ビューを隠し、HUD と盤を暗くする */
+.stage.is-event :is(.fxd, .st-result, .st-venue) {
+  visibility: hidden;
+}
+
+.stage.is-event :is(.st-hud, .st-board) {
+  opacity: 0.3;
 }
 
 .st-board {
@@ -435,22 +574,12 @@ input {
   filter: brightness(0.8);
 }
 
-.st-watermark {
-  position: absolute;
-  z-index: 20;
-  right: 44px;
-  bottom: 290px;
-  font-size: 18px;
-  color: #3d4670;
-  letter-spacing: 2px;
-}
-
 .st-overlay {
   position: absolute;
   inset: 0;
   z-index: 25;
   display: none;
-  background: rgba(4, 6, 16, 0.88);
+  background: rgba(4, 6, 16, 0.95); /* 後ろの抽選の画面が透けて、見出しと重ならないようにする */
 }
 
 .st-overlay.on {
@@ -462,19 +591,32 @@ input {
   height: 100%;
   display: grid;
   place-content: center;
+  justify-items: center;
   text-align: center;
-  gap: 10px;
+  gap: 8px;
 }
 
-.rcp h2,
-.fin h2 {
+/* 見出しの型（金のグラデーションに濃い茶の縁）。受付・終了・イベントでそろえる */
+.st-head {
   margin: 0;
-  font-size: 96px;
+  font-size: 104px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  background: var(--head-fill);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 4px 0 var(--head-edge)) drop-shadow(0 0 3px var(--head-edge));
+}
+
+.fin .st-head {
+  font-size: 84px;
 }
 
 .rcp-count {
   font-size: 54px;
-  color: var(--muted);
+  font-weight: 700;
+  color: #c9d2ff;
 }
 
 .rcp-count b {
@@ -485,13 +627,28 @@ input {
 
 .rcp p,
 .fin p {
-  margin: 4px 0;
-  font-size: 34px;
+  margin: 0;
+  font-size: 40px;
+  font-weight: 700;
 }
 
-.fin p.muted,
-.rcp p.muted {
-  font-size: 26px;
+.rcp-join.done {
+  visibility: hidden;
+}
+
+.fin-stats {
+  display: flex;
+  gap: 60px;
+  margin: 14px 0 18px;
+  font-size: 48px;
+  font-weight: 800;
+  color: #c9d2ff;
+}
+
+.fin-stats b {
+  font-size: 110px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---- 参加者のスマホ（390×844）: 枠と固定の表示 --------------------------- */
@@ -511,7 +668,8 @@ input {
   width: 390px;
   height: 844px;
   border-radius: 48px;
-  background: #0a0f24;
+  /* 大画面と同じ、放射の青い光の背景 */
+  background: radial-gradient(ellipse at 50% 34%, #16204a 0%, #0a0f24 58%, #05070f 100%);
   overflow: hidden;
   font-size: 15px;
 }
@@ -528,7 +686,7 @@ input {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin: 6px 16px 4px;
+  margin: 6px 50px 4px 16px; /* 右は「？」のボタンの分をあける */
 }
 
 .ph-name {
@@ -557,14 +715,20 @@ input {
   font-size: 15px;
 }
 
+/* リーチは「金の照準」で表しているので、帯も金（段階の赤と紛れないようにする） */
 .ph-wait.on {
-  background: linear-gradient(90deg, #ff7a3d, #ef4444);
-  color: #fff;
+  background: linear-gradient(90deg, #f5c542, #ffb84d);
+  color: #1a1400;
 }
 
+/* 面の虹は横のグラデーション（円すいを横長の帯に当てると、風車のように見える） */
 .ph-wait.done {
-  background: var(--rainbow);
-  color: #1a1400;
+  background: var(--rainbow-face);
+  color: #fff;
+  text-shadow:
+    0 1px 0 #1a1240,
+    0 0 4px #1a1240,
+    0 0 2px #1a1240;
 }
 
 .ph-cardhost {
@@ -607,14 +771,144 @@ input {
   --fxc-w: 300px;
 }
 
+/* 上位チャレンジの帯は、金のチャレンジカードと同じ金の系統にする */
 .ph-wait.chal {
-  background: #2a1f52;
-  color: #e6dcff;
+  background: #2f2608;
+  border: 1px solid #b8901f;
+  color: #ffe9a8;
 }
 
 .ph-wait.chal.on {
-  background: linear-gradient(90deg, #8b5cf6, #c026d3);
-  color: #fff;
+  background: linear-gradient(90deg, #f5c542, #ffb84d);
+  border-color: transparent;
+  color: #1a1400;
+}
+
+/* 上位チャレンジ中は、条件をカードの下に出したままにする */
+.ph-rule {
+  margin: 6px 16px 0;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: #ffe9a8;
+  text-align: center;
+}
+
+.ph-rule:empty {
+  display: none;
+}
+
+/* 演出の見方を見返すボタン（押せる範囲は 44px、見た目は小さな丸） */
+.ph-help {
+  position: absolute;
+  top: 28px;
+  right: 6px;
+  z-index: 9;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.ph-help i {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid #6f7bb5;
+  border-radius: 50%;
+  font-style: normal;
+  font-size: 14px;
+  font-weight: 900;
+  color: #c9d2ff;
+}
+
+/* 見逃すと困る知らせ（画面に残す） */
+.ph-note {
+  display: none;
+  margin: 10px 14px 0;
+  padding: 9px 12px;
+  border-left: 4px solid var(--gold);
+  border-radius: 8px;
+  background: #18204a;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.ph-note.on {
+  display: block;
+}
+
+/* 受け取った景品（会場で引き換えるときに見せられるよう、出したままにする） */
+.ph-prize {
+  display: none;
+  margin: 10px 14px 0;
+  padding: 10px 14px 12px;
+  border: 1.5px solid #b8901f;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #2f2608, #1c1705);
+}
+
+.ph-prize.on {
+  display: block;
+}
+
+.ph-prize small {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffe9a8;
+}
+
+.ph-prize div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.ph-prize b {
+  font-size: 21px;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.ph-prize i {
+  flex: none;
+  display: grid;
+  justify-items: center;
+  min-width: 46px;
+  padding: 3px 6px;
+  border-radius: 8px;
+  background: #c0c6d6;
+  color: #10152e;
+  font-style: normal;
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.ph-prize i em {
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.ph-prize i[data-r='R'] {
+  background: #2dd4bf;
+}
+
+.ph-prize i[data-r='SR'] {
+  background: #f5c542;
+}
+
+.ph-prize i[data-r='UR'] {
+  background: var(--rainbow-face);
 }
 
 .ph-history {
@@ -626,7 +920,7 @@ input {
 }
 
 .ph-history span {
-  font-size: 12px;
+  font-size: 13px;
   padding: 2px 7px;
   border-radius: 999px;
   background: #18204a;
@@ -676,7 +970,8 @@ input {
   inset: 0;
   z-index: 29;
   display: none;
-  background: rgba(5, 8, 20, 0.94);
+  /* 後ろのカードの数字が透けて文字と重ならないよう、不透明にする */
+  background: radial-gradient(ellipse at 50% 30%, #131b40 0%, #070b1c 62%);
   padding: 30px 22px;
 }
 
@@ -684,8 +979,7 @@ input {
   display: block;
 }
 
-.ph-join,
-.ph-result {
+.ph-join {
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -699,7 +993,7 @@ input {
   font-size: 46px;
   font-weight: 900;
   letter-spacing: 3px;
-  background: var(--rainbow);
+  background: var(--rainbow-face);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -722,31 +1016,6 @@ input {
   color: var(--muted);
 }
 
-.ph-result h3 {
-  margin: 0;
-  font-size: 26px;
-}
-
-.ph-result ul {
-  list-style: none;
-  padding: 0;
-  margin: 8px 0;
-  width: 100%;
-}
-
-.ph-result li {
-  display: flex;
-  justify-content: space-between;
-  padding: 10px 4px;
-  border-bottom: 1px solid var(--line);
-}
-
-.ph-result-main {
-  font-size: 22px;
-  font-weight: 900;
-  color: var(--gold);
-}
-
 /* ---- 主催コンソールと操作パネル ------------------------------------------- */
 
 .host {
@@ -754,70 +1023,92 @@ input {
   font-size: 13px;
 }
 
-.hc h2,
-.dp h3 {
+.hc h2 {
   margin: 4px 0 10px;
   font-size: 15px;
 }
 
-.dp h3 small {
-  color: var(--gold);
-  font-weight: 700;
-}
-
+/* いま何をすればいいかは、ここに 1 行で出す。主催コンソールでいちばん読む場所なので、はっきり見せる */
 .hc-status {
   margin-bottom: 8px;
-  padding: 8px 10px;
+  padding: 9px 11px;
   border-radius: 8px;
+  border-left: 4px solid var(--gold);
   background: #121a3e;
-  color: var(--muted);
-  min-height: 2.6em;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.45;
+  min-height: 2.9em;
 }
 
 .hc-next,
 .hc-push {
   width: 100%;
-  border: 0;
   border-radius: 12px;
   font-weight: 900;
   cursor: pointer;
 }
 
+/* 押せるボタンは金（主ボタン）、押せないボタンは灰色の枠だけ。いま押すものが 1 つだけ光る */
 .hc-next {
   padding: 16px;
-  font-size: 22px;
-  background: linear-gradient(135deg, #3b82f6, #6d5cff);
+  font-size: 21px;
+  border: 0;
+  background: var(--primary);
+  color: var(--primary-ink);
 }
 
 .hc-push {
   margin-top: 8px;
   padding: 12px;
-  font-size: 20px;
-  background: #2a2f4a;
-  color: #6b7299;
-}
-
-/* 説明の画面を出している間は、「次へ」が「スタート」になる（押すものが変わったと分かるように色を変える） */
-.hc-next.start {
-  background: linear-gradient(135deg, #f5c542, #ff8a3d);
-  color: #1a1400;
+  font-size: 18px;
+  border: 0;
+  background: var(--primary);
+  color: var(--primary-ink);
 }
 
 .hc-push.ready {
-  background: #fff;
-  color: #d4142e;
   animation: pushpulse 1s ease-in-out infinite;
 }
 
 @keyframes pushpulse {
   50% {
-    transform: scale(1.03);
+    box-shadow: 0 0 0 6px rgba(245, 197, 66, 0.35);
   }
 }
 
-.hc-next:disabled {
-  opacity: 0.45;
+.hc-next:disabled,
+.hc-push:disabled {
+  background: none;
+  border: 2px solid #2a3360;
+  color: #55608f;
   cursor: default;
+  animation: none;
+}
+
+.hc-new {
+  margin-left: auto;
+  padding: 6px 12px;
+  border: 1px solid #3a4680;
+  border-radius: 8px;
+  background: #141c44;
+  color: var(--text);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.hc-new.primary {
+  border: 0;
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+
+.hc-hash {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: #5d668f;
+  word-break: break-all;
 }
 
 .hc-row {
@@ -856,16 +1147,62 @@ button:disabled {
   cursor: default;
 }
 
+/* 操作パネルはデモ専用。本番でも使う主催コンソールと、別の箱・別の色みで分ける */
+.dp {
+  margin-top: 16px;
+  padding: 0 12px 14px;
+  border: 1px solid #5a3f7a;
+  border-radius: 12px;
+  background: #171230;
+}
+
+.dp summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0 -12px 8px;
+  padding: 9px 12px;
+  border-radius: 11px 11px 0 0;
+  background: #2a1d4a;
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.dp summary i {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--gold);
+  color: #1a1400;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+
+.dp summary small {
+  flex-basis: 100%;
+  color: #b9a8e0;
+  font-size: 12px;
+}
+
+.dp-letter {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  font-weight: 900;
+  color: var(--gold);
+}
+
+.dp-letter small {
+  margin-left: 6px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
 .hc-keys {
   margin: 8px 0 0;
   color: var(--muted);
   font-size: 11px;
-}
-
-.dp {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px dashed var(--line);
 }
 
 .dp h4 {
@@ -954,7 +1291,7 @@ button:disabled {
 .dp-note {
   margin: 6px 0 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -1037,43 +1374,57 @@ button:disabled {
 }
 
 .tier-guide li[data-t='4'] {
-  --tc: #c084fc;
+  --tc: #ffffff;
+}
+
+.tier-guide li[data-t='4'] {
+  border: 0.14em solid transparent;
+  background:
+    linear-gradient(#1a2248, #1a2248) padding-box,
+    var(--rainbow-face) border-box;
 }
 
 .rcp-guide {
-  width: 1180px;
-  margin: 26px auto 0;
-  padding: 22px 34px 24px;
+  width: 1760px;
+  margin: 18px auto 0;
+  padding: 18px 30px 22px;
   border: 2px solid #26305a;
   border-radius: 18px;
   background: #0b1230;
-  font-size: 28px;
+  font-size: 36px;
+  font-weight: 800;
 }
 
 .rcp-guide h3 {
-  margin: 0 0 6px;
-  font-size: 34px;
+  margin: 0 0 4px;
+  font-size: 40px;
 }
 
 .rcp .rcp-guide p {
   margin: 6px 0 12px;
-  font-size: 24px;
-  color: var(--muted);
+  font-size: 30px;
+  font-weight: 700;
+  color: #c9d2ff;
+}
+
+.rcp .rcp-guide p b {
+  color: var(--text);
 }
 
 .rcp-guide .tier-guide {
   grid-template-columns: repeat(5, 1fr);
-  gap: 10px;
+  gap: 12px;
 }
 
 .rcp-guide .tier-guide li {
   grid-template-columns: 1.2em 1fr;
   grid-template-rows: auto auto;
+  white-space: nowrap;
 }
 
 .rcp-guide .tier-guide li span {
   grid-column: 1 / -1;
-  font-size: 22px;
+  font-size: 32px;
 }
 
 .ph-guide {
@@ -1086,6 +1437,30 @@ button:disabled {
   font-size: 13px;
 }
 
+.ph-guide p b {
+  color: var(--text);
+}
+
+/* スマホの凡例は、押せるボタンに見えないよう、地の色をやめて印と文字だけにする */
+.ph-guide .tier-guide li,
+.ph-guide .tier-guide li[data-t='4'] {
+  padding: 1px 0;
+  border: 0;
+  background: none;
+  font-size: 14px;
+}
+
+.tier-guide li[data-t='4'] i {
+  background: var(--rainbow-face);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.ph-close {
+  margin-top: 18px;
+}
+
 .ph-guide h4 {
   margin: 0 0 4px;
   font-size: 15px;
@@ -1093,8 +1468,8 @@ button:disabled {
 
 .ph-guide p {
   margin: 4px 0 8px;
-  color: var(--muted);
-  font-size: 12px;
+  color: #c9d2ff;
+  font-size: 13px;
   line-height: 1.5;
 }
 

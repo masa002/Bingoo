@@ -38,7 +38,11 @@ import { STAGE_H, STAGE_W } from '../theme'
 // モグラの畑と数字の回転は requestAnimationFrame で描く（畑は速度 ×2 までに抑え、穴ごとの動きを 1 秒に 3 回以下に保つ）。
 // 説明の画面で待っている間は、毎フレームの処理を回さない（CSS のゆっくりした動きだけ）。
 // 音は警報（brief）・カウントダウンの 3/2/1・叩き始め・残り 3/2/1・終了・結果の数え上げだけを鳴らす（モグラと叩く音はスマホが鳴らす）。
-// 警報の赤は点滅させない（赤は動かない背景とふちにだけ使い、脈打つ光は琥珀色にする）
+// 警報の赤は点滅させない（赤は動かない背景とふちにだけ使い、脈打つ光は琥珀色にする）。
+// 色の決まり（スマホの側とそろえる）: 残り時間は金 #f5c542（残り 3 秒から橙 #ff9f1a）、守りきったは緑 #22c55e と ◆、
+// やられたは灰青 #94a3b8 と ▼、「あなた」は水色の札（地 #5ad2ff・文字 #06223a）、見出しは金のグラデーションに濃い茶 #2a1a05 の縁。
+// 狙われたリーチが 0 人のときは、「大ピンチのリーチ 0 人」とは出さず、「会場みんなで モグラを追い返せ！」にする
+// （結果も、守った人・やられた人を出さずに、撃退数の合計と撃退王を主役にする）
 
 export interface MoleQuestStageStart {
   introMs: number // 「3・2・1」のカウントダウンの長さ（スマホとそろえる）
@@ -857,7 +861,7 @@ class MoleField {
 // ---- 本体 ------------------------------------------------------------------------
 
 type Phase = 'idle' | 'alarm' | 'brief' | 'count' | 'play' | 'end' | 'result' | 'done'
-type Mood = 'perfect' | 'clear' | 'bad'
+type Mood = 'perfect' | 'clear' | 'bad' | 'free'
 
 interface Entry {
   name: string
@@ -870,6 +874,8 @@ const MOOD: Readonly<Record<Mood, { kick: string; head: string; bubble: string; 
   perfect: { kick: 'PERFECT DEFENSE', head: '完全防衛！', bubble: 'ぐぬぬ…完敗モグ…', face: 'cry' },
   clear: { kick: 'QUEST CLEAR', head: '防衛成功！', bubble: 'おぼえてろモグ〜！', face: 'bonk' },
   bad: { kick: 'QUEST RESULT', head: 'モグラの逆襲…！', bubble: 'リーチ いただいたモグ♪', face: 'smug' },
+  // 狙われたリーチがいなかった（誰もやられない）
+  free: { kick: 'QUEST CLEAR', head: '撃退成功！', bubble: 'おぼえてろモグ〜！', face: 'bonk' },
 }
 
 interface Refs {
@@ -880,7 +886,7 @@ interface Refs {
   title: HTMLElement
   raid: HTMLElement
   brief: HTMLElement
-  briefNum: HTMLElement
+  briefNum: HTMLElement | null
   steps: HTMLElement[]
   hold: HTMLElement
   holdBar: HTMLElement
@@ -1250,7 +1256,7 @@ export class MoleQuestStage {
       .map((e) => ({ name: String(e.name ?? '').trim() || '？', score: count(e.score), isMe: e.isMe === true }))
       .sort((a, b) => b.score - a.score)
       .slice(0, 3)
-    const mood: Mood = lost === 0 ? 'perfect' : defended >= lost ? 'clear' : 'bad'
+    const mood: Mood = targets === 0 && lost === 0 ? 'free' : lost === 0 ? 'perfect' : defended >= lost ? 'clear' : 'bad'
     const meRank = top.findIndex((e) => e.isMe) + 1
 
     this.phase = 'result'
@@ -1258,7 +1264,8 @@ export class MoleQuestStage {
     this.el.classList.remove('hurry')
     this.duck(true)
     r.res.dataset.mood = mood
-    r.res.innerHTML = resultHtml(mood, targets, defended, lost, top, meRank)
+    r.res.classList.toggle('free', mood === 'free')
+    r.res.innerHTML = resultHtml(mood, targets, defended, lost, lostReach, top, meRank)
     const $ = (sel: string): HTMLElement | null => r.res.querySelector<HTMLElement>(sel)
     const odo = new Odometer(640, 150)
     $('.fxqs-res-n')?.prepend(odo.el)
@@ -1275,6 +1282,7 @@ export class MoleQuestStage {
     s.at(720, () => on($('.fxqs-res-boss .fxqs-bubble')))
     await s.until(420)
     on($('.fxqs-card.def'))
+    on($('.fxqs-res-note'))
     this.countUp($('.fxqs-card.def .fxqs-card-n b'), defended, 700)
     await s.until(580)
     on($('.fxqs-card.lost'))
@@ -1452,8 +1460,10 @@ export class MoleQuestStage {
     const players = fmt(this.players)
     const targets = fmt(this.targets)
     const secs = Math.max(1, Math.round(this.playMs / 1000))
-    const top = '▲ EMERGENCY QUEST ▲　緊急クエスト「モグラ撃退」　◆ スマホでモグラを叩いて カードを守れ！ ◆　'.repeat(3)
-    const bot = `◆ リーチの人 ${targets} 人が大ピンチ ◆　会場みんなで叩いて守れ！　▲ WARNING ▲　`.repeat(4)
+    // 狙われたリーチが 0 人のときは、「0 人が大ピンチ」とは出さない
+    const some = this.targets > 0
+    const top = `▲ EMERGENCY QUEST ▲　緊急クエスト「モグラ撃退」　◆ スマホでモグラを叩いて ${some ? 'カードを守れ！' : '追い返せ！'} ◆　`.repeat(3)
+    const bot = (some ? `◆ リーチの人 ${targets} 人が大ピンチ ◆　会場みんなで叩いて守れ！　▲ WARNING ▲　` : '◆ 会場みんなで モグラを追い返せ！ ◆　▲ WARNING ▲　').repeat(4)
     // 狙われた人数は桁が多いほど小さく
     const tgtSize = targets.length <= 3 ? 110 : targets.length <= 5 ? 86 : 66
     this.el.innerHTML = `
@@ -1470,16 +1480,28 @@ export class MoleQuestStage {
           <div class="fxqs-title fxqs-ol" data-text="緊急クエスト発生！"><b>緊急クエスト発生！</b></div>
         </div>
         <div class="fxqs-raid"><div class="fxqs-raid-in"><div class="fxqs-ol" data-text="モグラ襲来！"><b>モグラ襲来！</b></div><small>ドドドド…</small></div></div>
-        <div class="fxqs-brief">
+        ${
+          some
+            ? `<div class="fxqs-brief">
           <p class="fxqs-brief-a">スマホでモグラを叩いて</p>
           <div class="fxqs-brief-b fxqs-ol" data-text="カードを守れ！"><b>カードを守れ！</b></div>
-          <div class="fxqs-brief-t">${RETICLE}<span>大ピンチのリーチ</span><b>0</b><small>人</small></div>
+          <div class="fxqs-brief-t"><span>${RETICLE}大ピンチのリーチ</span><b>0</b><small>人</small></div>
           <p class="fxqs-brief-p">参加 ${players} 人</p>
-        </div>
+        </div>`
+            : `<div class="fxqs-brief free">
+          <p class="fxqs-brief-a">会場みんなで</p>
+          <div class="fxqs-brief-b fxqs-ol" data-text="モグラを追い返せ！"><b>モグラを追い返せ！</b></div>
+          <p class="fxqs-brief-p">参加 ${players} 人で挑戦</p>
+        </div>`
+        }
         <ol class="fxqs-steps">
           <li class="fxqs-step"><i>1</i><div><b>スマホを見る</b><span>ボスモグラが あなたのカードを狙っています</span></div></li>
           <li class="fxqs-step"><i>2</i><div><b>出てきたモグラを 指でタップ！<em>${secs} 秒間</em></b><span>何度でも叩けます。たくさん叩こう</span></div></li>
-          <li class="fxqs-step"><i>3</i><div><b>たくさん叩いて カードを守ろう</b><span>叩いた数が少ないと、リーチの人は マスを埋められます</span></div></li>
+          <li class="fxqs-step"><i>3</i><div>${
+            some
+              ? '<b>たくさん叩いて カードを守ろう</b><span>叩いた数が少ないと、リーチの人は マスを埋められます</span>'
+              : '<b>たくさん叩いて 追い返そう</b><span>いちばん多く叩いた人が 撃退王！</span>'
+          }</div></li>
         </ol>
         <div class="fxqs-hold">
           <div class="fxqs-hold-a"><b>まもなくスタート</b><i>・</i><i>・</i><i>・</i></div>
@@ -1494,10 +1516,16 @@ export class MoleQuestStage {
             <div class="fxqs-pace"><span>いまのペース</span><b>―</b><small>匹/秒</small><span class="fxqs-meter">${'<i></i>'.repeat(16)}</span></div>
           </div>
           <div class="fxqs-p fxqs-tgt">
-            <div class="fxqs-tgt-h">${RETICLE}<span>大ピンチのリーチ</span></div>
+            ${
+              some
+                ? `<div class="fxqs-tgt-h">${RETICLE}<span>大ピンチのリーチ</span></div>
             <div class="fxqs-tgt-n" style="--fs:${tgtSize}px"><b>${targets}</b><small>人</small></div>
             <div class="fxqs-tgt-s">叩いて守れ！</div>
-            <p class="fxqs-tgt-p">参加 ${players} 人</p>
+            <p class="fxqs-tgt-p">参加 ${players} 人</p>`
+                : `<div class="fxqs-tgt-h"><span>参加</span></div>
+            <div class="fxqs-tgt-n" style="--fs:${players.length <= 3 ? 110 : players.length <= 5 ? 86 : 66}px"><b>${players}</b><small>人</small></div>
+            <div class="fxqs-tgt-s">みんなで叩け！</div>`
+            }
           </div>
         </div>
         <div class="fxqs-plus"></div>
@@ -1519,7 +1547,7 @@ export class MoleQuestStage {
       title: $('.fxqs-title'),
       raid: $('.fxqs-raid'),
       brief: $('.fxqs-brief'),
-      briefNum: $('.fxqs-brief-t b'),
+      briefNum: this.el.querySelector<HTMLElement>('.fxqs-brief-t b'),
       steps: [...this.el.querySelectorAll<HTMLElement>('.fxqs-step')],
       hold: $('.fxqs-hold'),
       holdBar: $('.fxqs-hold-bar b'),
@@ -1676,7 +1704,7 @@ export class MoleQuestStage {
 }
 
 // 結果の盤（左: 撃退数の合計・守った人・やられた人、右: 撃退王、右上: ボスの反応）
-function resultHtml(mood: Mood, targets: number, defended: number, lost: number, top: readonly Entry[], meRank: number): string {
+function resultHtml(mood: Mood, targets: number, defended: number, lost: number, lostReach: number, top: readonly Entry[], meRank: number): string {
   const m = MOOD[mood]
   const sum = defended + lost
   const defPct = sum > 0 ? (defended / sum) * 100 : 0
@@ -1698,6 +1726,24 @@ function resultHtml(mood: Mood, targets: number, defended: number, lost: number,
   const podium = top.length
     ? `<div class="fxqs-podium">${slot(2)}${slot(1)}${slot(3)}</div>`
     : '<p class="fxqs-king-none">今回の撃退王は いませんでした</p>'
+  // 守りきった（緑 ◆）とやられた（灰青 ▼）。「リーチが消えた」は、やられた人数と違うときだけ出す（同じ数字を 2 回出さない）。
+  // 狙われたリーチがいなかったときは、この欄を出さない
+  const stats =
+    mood === 'free'
+      ? '<p class="fxqs-res-note">会場みんなで モグラを追い返しました！</p>'
+      : `<div class="fxqs-res-cards">
+        <div class="fxqs-card def">
+          <div class="fxqs-card-h"><i>◆</i>守りきった</div>
+          <div class="fxqs-card-n" style="--fs:${fs(defended)}px"><b>0</b><small>人</small></div>
+          <div class="fxqs-card-s">リーチの ${fmt(targets)} 人のうち</div>
+        </div>
+        <div class="fxqs-card lost">
+          <div class="fxqs-card-h"><i>▼</i>やられた</div>
+          <div class="fxqs-card-n" style="--fs:${fs(lost)}px"><b>0</b><small>人</small></div>
+          ${lostReach !== lost ? '<div class="fxqs-card-s"><i>▲</i>リーチが消えた <b>0</b> 人</div>' : ''}
+        </div>
+      </div>
+      <div class="fxqs-ratio" style="--def:${defPct.toFixed(1)}%; --lost:${sum > 0 ? (100 - defPct).toFixed(1) : 0}%"><i class="def"></i><i class="lost"></i></div>`
   const me = meRank === 1 ? 'あなたが撃退王！' : meRank ? `あなたは ${meRank} 位！` : ''
   return `
     <header class="fxqs-res-h">
@@ -1710,19 +1756,7 @@ function resultHtml(mood: Mood, targets: number, defended: number, lost: number,
         <div class="fxqs-res-lb">${HAMMER_ICON}<span>会場の撃退数</span></div>
         <div class="fxqs-res-n"><small>匹</small></div>
       </div>
-      <div class="fxqs-res-cards">
-        <div class="fxqs-card def">
-          <div class="fxqs-card-h"><i>◆</i>守りきった</div>
-          <div class="fxqs-card-n" style="--fs:${fs(defended)}px"><b>0</b><small>人</small></div>
-          <div class="fxqs-card-s">リーチの ${fmt(targets)} 人のうち</div>
-        </div>
-        <div class="fxqs-card lost">
-          <div class="fxqs-card-h"><i>▼</i>やられた</div>
-          <div class="fxqs-card-n" style="--fs:${fs(lost)}px"><b>0</b><small>人</small></div>
-          <div class="fxqs-card-s"><i>▲</i>リーチが消えた <b>0</b> 人</div>
-        </div>
-      </div>
-      <div class="fxqs-ratio" style="--def:${defPct.toFixed(1)}%; --lost:${sum > 0 ? (100 - defPct).toFixed(1) : 0}%"><i class="def"></i><i class="lost"></i></div>
+      ${stats}
     </section>
     <section class="fxqs-res-r">
       <div class="fxqs-king-h"><span>★</span>撃退王<span>★</span></div>

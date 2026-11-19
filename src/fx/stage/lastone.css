@@ -116,21 +116,25 @@
   position: absolute;
   left: 0;
   top: 0;
-  color: #2a1a00;
-  -webkit-text-stroke: 20px #2a1a00;
+  color: #2a1a05;
+  -webkit-text-stroke: 20px #2a1a05;
   filter: drop-shadow(0 8px 0 rgba(0, 0, 0, 0.35));
 }
 
+/* 見出しの型（ほかのイベントと同じ）: 塗りは金のグラデーション、縁は濃い茶 #2a1a05 */
 .fxls-ol > b {
   position: relative;
   font-weight: 900;
+  background: linear-gradient(180deg, #fff4cc, #f5c542 55%, #d9a520);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .fxls-title {
   margin-top: 2px;
   font-size: 100px;
   line-height: 1.12;
-  color: #ffe08a;
   white-space: nowrap;
   opacity: 0;
 }
@@ -187,7 +191,7 @@
   text-overflow: ellipsis;
   color: #ffe08a;
   text-shadow:
-    0 5px 0 #2a1a00,
+    0 5px 0 #2a1a05,
     0 0 24px rgba(245, 197, 66, 0.7);
   opacity: 0;
 }
@@ -393,7 +397,7 @@
   font-weight: 900;
   color: #ffe08a;
   text-shadow:
-    0 5px 0 #2a1a00,
+    0 5px 0 #2a1a05,
     0 0 24px rgba(245, 197, 66, 0.55);
 }
 
@@ -557,11 +561,12 @@
 .fxls-txt small {
   margin-top: 2px;
   overflow: hidden;
-  font-size: calc(var(--fs) * 0.55);
+  font-size: 28px; /* 「はずれ」「★ ラストワン賞」は情報なので、後ろの席からも読める大きさにする */
   font-weight: 800;
+  line-height: 1.25;
   white-space: nowrap;
   text-overflow: ellipsis;
-  color: #8a93b8;
+  color: #aab3d6;
 }
 
 .fxls-card.me .fxls-in {
@@ -572,16 +577,17 @@
   color: #9be3ff;
 }
 
+/* 「あなた」の印: 水色の札（ほかの画面と同じ形） */
 .fxls-me {
   position: absolute;
-  top: -18px;
+  top: -22px;
   right: -10px;
   z-index: 2;
-  padding: 2px 14px;
+  padding: 2px 16px;
   border-radius: 999px;
   background: #5ad2ff;
-  color: #04121f;
-  font-size: 22px;
+  color: #06223a;
+  font-size: 28px;
   font-style: normal;
   font-weight: 900;
   box-shadow: 0 4px 0 rgba(0, 0, 0, 0.3);
@@ -631,7 +637,7 @@
 
 .fxls-card.win .fxls-txt b,
 .fxls-card.some .fxls-txt b {
-  color: #2a1a00;
+  color: #2a1a05;
 }
 
 .fxls-card.win .fxls-txt small,
@@ -716,10 +722,10 @@
 .fxls-token {
   display: grid;
   place-items: center;
-  width: 46px;
-  height: 46px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
-  font-size: 24px;
+  font-size: 28px;
   font-style: normal;
   font-weight: 900;
   color: #26306a;
@@ -942,10 +948,10 @@
   margin-right: 14px;
   padding: 2px 14px;
   border-radius: 999px;
-  font-size: 24px;
+  font-size: 28px;
   font-style: normal;
   font-weight: 900;
-  color: #04121f;
+  color: #06223a;
   background: #5ad2ff;
 }
 
@@ -989,7 +995,7 @@
   font-size: 44px;
   font-style: normal;
   font-weight: 900;
-  color: #2a1a00;
+  color: #2a1a05;
   background: linear-gradient(180deg, #fff4cc, #f5c542);
   box-shadow: 0 5px 0 rgba(0, 0, 0, 0.35);
 }
@@ -1030,9 +1036,9 @@
 }
 
 .fxls-bf-steps .fxls-token {
-  width: 40px;
-  height: 40px;
-  font-size: 22px;
+  width: 44px;
+  height: 44px;
+  font-size: 28px;
 }
 
 .fxls-bf-steps .fxls-token:first-of-type {

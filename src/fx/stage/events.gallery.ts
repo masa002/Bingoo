@@ -42,6 +42,13 @@ registerGallery(
     play: (host, tl) => playAllKakutei(backdrop(host), { speed: tl.speed, total: 30, newReach: 6, newDouble: 1 }),
   },
   {
+    id: 'stage-event-kakutei-max',
+    group: G,
+    label: '全員確定（虹）10,000 人（数字がいちばん長いとき）',
+    screen: 'stage',
+    play: (host, tl) => playAllKakutei(backdrop(host), { speed: tl.speed, total: 10000, newReach: 2140, newDouble: 372 }),
+  },
+  {
     id: 'stage-event-final',
     group: G,
     label: 'この1球で景品が尽きる！（残り 3 個）',

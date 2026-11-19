@@ -12,7 +12,7 @@ export const TIER_NAME = ['青', '緑', '赤', '金', '虹'] as const
 export const TIER_WORD = ['', 'リーチが増えるかも', 'ビンゴが出るかも！', 'ビンゴが出そう！', '全員確定'] as const
 export const MY_TIER_WORD = ['', '当たるかも？', 'リーチかビンゴかも！', 'ビンゴのチャンス！', 'ビンゴ確定！'] as const
 // 期待度の目盛りの見出し（何の目盛りかを必ず添える）
-export const HEAT_LABEL = { venue: 'ビンゴ期待度', mine: 'あなたの期待度' } as const
+export const HEAT_LABEL = { venue: '会場の期待度', mine: 'あなたの期待度' } as const
 export const TIER_SHAPE = ['●', '▲', '◆', '★', '✦'] as const
 
 export type FactClass = 'QUIET' | 'WARM' | 'HOT' | 'BINGO' | 'PREM'
@@ -135,10 +135,12 @@ export interface Plan {
 const BUDGET: readonly (readonly [number, number])[] = [[0, 1], [2, 3], [4, 6], [7, 10], [7, 10]]
 const PSEUDO_COST = [0, 1, 2, 4]
 const CUTIN_COST = [0, 1, 2, 4]
+// テロップは、その回の段階に合った言葉にする（熱い回に弱気な言葉が出ると、降格に見える）
 const TELOPS = [
-  ['次の 1 球に注目', '何かが起きそうな予感…'],
-  ['会場がざわついている…', 'リーチの人、準備はいい？'],
-  ['これは来るか…!?', '全員、画面に注目！'],
+  ['次の 1 球に注目', 'さあ、何が出る？'],
+  ['リーチが増えそう…', '会場がざわついている…'],
+  ['これは来るか…!?', 'リーチの人、準備はいい？'],
+  ['ビンゴが出そう！', '全員、画面に注目！'],
 ]
 
 // 予告ポイント制: 段階ごとの予算の中で、予告の部品をランダムに組み合わせる。
@@ -174,15 +176,14 @@ export function makePlan(tier: Tier, rng: Rng): Plan {
         left -= PSEUDO_COST[plan.pseudo]
       }
     } else if (part === 'cutin') {
-      const options = ([1, 2, 3] as Tier[]).filter((t) => t <= shown && CUTIN_COST[t] <= left)
-      if (options.length) {
-        const t = rng.pick(options)
-        plan.cutin = t
-        left -= CUTIN_COST[t]
+      // カットインは、その回の段階の言葉だけ（金の回に緑の「リーチが増えるかも」が出ると、合図が食い違う）
+      if (shown >= 1 && CUTIN_COST[shown] <= left) {
+        plan.cutin = shown
+        left -= CUTIN_COST[shown]
       }
     } else if (part === 'telop') {
       const cost = Math.min(left, 1 + rng.int(3))
-      plan.telop = rng.pick(TELOPS[cost - 1])
+      plan.telop = rng.pick(TELOPS[shown])
       left -= cost
     } else if (left >= 2) {
       plan.group = true

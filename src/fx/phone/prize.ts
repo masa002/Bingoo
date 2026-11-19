@@ -2,7 +2,7 @@ import './prize.css'
 import { sfx } from '../../audio'
 import { Particles } from '../particles'
 import { Timeline, el, escapeHtml, prefersReducedMotion, replay } from '../runtime'
-import { GOLD, PHONE_H, PHONE_W, RAINBOW, RARITY_NAME, type Glow, type Rarity } from '../theme'
+import { GOLD, PHONE_H, PHONE_W, RAINBOW, RAINBOW_CSS, RAINBOW_FACE_CSS, RARITY_COLOR, RARITY_NAME, type Glow, type Rarity } from '../theme'
 
 // スマホの景品まわり（390×844 のスマホ画面全体に重ねる）。当たった瞬間はスマホで特別に見せる。
 // どれも host 全体（inset 0、z-index 40〜44）に重ね、終わったら片付けて解決する。
@@ -31,16 +31,16 @@ export interface PrizeFxOptions {
 // パックがどう開いたか（onOpen に渡す）
 export type OpenBy = 'swipe' | 'tap' | 'auto'
 
-type Edge = 'silver' | 'blue' | 'gold' | 'rainbow' | 'ticket'
+type Edge = 'silver' | 'teal' | 'gold' | 'rainbow' | 'ticket'
 type Look = Rarity | 'W' // W はダブルチャンス券
 
 // 縁は正直に出す（UR も金。虹になるのは昇格のときだけ）
-const EDGE: Readonly<Record<Rarity, Edge>> = { C: 'silver', R: 'blue', SR: 'gold', UR: 'gold' }
+const EDGE: Readonly<Record<Rarity, Edge>> = { C: 'silver', R: 'teal', SR: 'gold', UR: 'gold' }
 // 色だけに頼らず、形と文字も重ねる
 const SHAPE: Readonly<Record<Rarity, string>> = { C: '●', R: '◆', SR: '★', UR: '✦' }
 const SPARK: Readonly<Record<Rarity, readonly string[]>> = {
-  C: ['#ffffff', '#e6e9f2', '#c0c6d6'],
-  R: ['#ffffff', '#9cc3ff', '#3b82f6'],
+  C: ['#ffffff', '#e6e9f2', RARITY_COLOR.C],
+  R: ['#ffffff', '#99f6e4', RARITY_COLOR.R], // R は青緑（段階の青と紛れないため）
   SR: GOLD,
   UR: RAINBOW,
 }
@@ -90,6 +90,13 @@ class Scene {
     this.root.append(bg, this.stage)
     this.fx = new Particles(canvas, 900)
     this.setSpeed(this.tl.speed)
+    // 色は theme.ts の決まりを CSS に渡す（レア度の色と、虹の面・玉）
+    const st = this.root.style
+    st.setProperty('--fxp-rc-c', RARITY_COLOR.C)
+    st.setProperty('--fxp-rc-r', RARITY_COLOR.R)
+    st.setProperty('--fxp-rc-sr', RARITY_COLOR.SR)
+    st.setProperty('--fxp-rainbow', RAINBOW_FACE_CSS)
+    st.setProperty('--fxp-rainbow-ball', RAINBOW_CSS)
     host.append(this.root)
     const w = this.root.clientWidth
     const h = this.root.clientHeight
@@ -119,7 +126,6 @@ class Scene {
     st.setProperty('--fxp-sheen', `${Math.max(1500, this.ms(3200))}ms`)
     st.setProperty('--fxp-hue', `${Math.max(4000, this.ms(6000))}ms`)
     st.setProperty('--fxp-spin', `${Math.max(10500, this.ms(26000))}ms`)
-    st.setProperty('--fxp-beat', `${Math.max(700, this.ms(860))}ms`)
   }
 
   get cancelled(): boolean {
@@ -269,6 +275,12 @@ const slam = (from: number): Keyframe[] => [
   { opacity: 1, transform: 'scale(1)' },
 ]
 const chip = (r: Rarity): string => `<span class="fxp-chip" data-r="${r}"><i>${SHAPE[r]}</i>${r}</span>`
+// 見出しの型（太さ 900、金の塗り、濃い茶の縁）。縁は同じ文字を下に重ねて描く（塗りを削らないため）。
+// look を渡すと、塗りがそのレア度の色になる（SR は金のまま、UR は虹）
+const headline = (text: string, tag: 'b' | 'h2' = 'b', look?: Look): string => {
+  const t = escapeHtml(text)
+  return `<${tag} class="fxp-h" data-t="${t}"${look ? ` data-r="${look}"` : ''}><span>${t}</span></${tag}>`
+}
 
 // ---- 部品 -------------------------------------------------------------------
 
@@ -305,8 +317,8 @@ function makeCaption(r: Rarity | null, prize: string): HTMLElement {
     'div',
     'fxp-caption',
     r
-      ? `<small><i>${SHAPE[r]}</i> ${r}　${RARITY_NAME[r]}</small><b>${escapeHtml(prize)}</b>`
-      : `<small><i>◎</i> DOUBLE CHANCE</small><b>${escapeHtml(prize || 'ダブルチャンス券')}</b><em>最後のダブルチャンスで使えます</em>`,
+      ? `<small><i>${SHAPE[r]}</i> ${r}　${RARITY_NAME[r]}</small>${headline(prize, 'b', r)}`
+      : `<small><i>◎</i> DOUBLE CHANCE</small>${headline(prize || 'ダブルチャンス券', 'b', 'W')}<em>最後のダブルチャンスで使えます</em>`,
   )
   cap.dataset.r = r ?? 'W'
   return cap
@@ -410,6 +422,7 @@ export async function playPackOpen(
       const card = s.add(makeCard(r, o.prize, first), anchor)
       const pack = s.add(makePack(o.glow), anchor)
       const caption = s.add(makeCaption(r, o.prize))
+      card.style.visibility = 'hidden' // パックが落ちてくる間は隠す（先にカードだけ見えてしまうため）
 
       // 1. パックが落ちてきて、光で先バレする（ガセあり）
       s.anim(label, [{ opacity: 0, transform: 'translateY(-8px)' }, { opacity: 1, transform: 'none' }], 400, { delay: 150 })
@@ -429,6 +442,7 @@ export async function playPackOpen(
       sfx.packAppear(o.glow)
       if (o.glow !== 'white') s.rise(o.glow === 'gold' ? 26 : 34, GLOW_SPARK[o.glow], AX - 120, AX + 120, AY + 150)
       await s.wait(400)
+      card.style.visibility = '' // パックが止まった。カードはパックの後ろに隠れている
 
       // 2. 破る（指に追従。タップ 3 回でも、時間切れでも開く）
       const { by, dir } = await tearPack(s, pack, o.glow, o.autoOpenMs ?? 10000)
@@ -648,7 +662,7 @@ async function drawOut(s: Scene, card: HTMLElement, pack: HTMLElement, halo: HTM
   replay(card, 'is-glint')
   if (edge === 'gold') s.rise(16, GOLD, AX - 90, AX + 90, AY - 110)
   // 金の縁なら、ここで長めに溜める
-  await s.wait({ silver: 260, blue: 420, gold: 760, rainbow: 760, ticket: 260 }[edge])
+  await s.wait({ silver: 260, teal: 420, gold: 760, rainbow: 760, ticket: 260 }[edge])
   move('translateY(-74px)', 'translateY(-250px)', 480, 'cubic-bezier(.45,0,.3,1)')
   s.anim(pack, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(460px) rotate(-10deg)' }], 620, {
     delay: 180,
@@ -685,7 +699,8 @@ async function rankUpShow(s: Scene, card: HTMLElement, ru: { from: Rarity; to: R
   replay(card, 'is-glint')
   s.burst(CX, CY - 150, { count: 40, colors: SPARK[ru.to], speed: 6, gravity: 0.1, life: 50, size: 4, shape: 'spark' })
   await s.wait(1000)
-  s.anim(box, [{ opacity: 1, transform: 'none' }, { opacity: 0.85, transform: 'translateY(-46px) scale(.66)' }], 380, { easing: 'ease-in-out' })
+  // 小さくしても、中の文字が 13px を下回らない大きさにとどめる
+  s.anim(box, [{ opacity: 1, transform: 'none' }, { opacity: 0.9, transform: 'translateY(-30px) scale(.82)' }], 380, { easing: 'ease-in-out' })
   await s.wait(300)
 }
 
@@ -856,23 +871,32 @@ export async function askChoice(
       const cur = `<i>${SHAPE[o.rarity]}</i> ${o.rarity}`
       const goal = `<i>${SHAPE[ch.target]}</i> ${ch.target}`
       const chance = ch.chance === undefined ? '' : `<em>成功の目安 ${ch.chance < 0.01 ? '1% 未満' : `${Math.round(ch.chance * 100)}%`}</em>`
+      // 失うものは、選ぶ前に書く。ボタンの中にも、押す指の真下で読める大きさで書く（倍々も同じ言い方）
       const riskBody = ch.allowed
-        ? `<b>上位チャレンジ</b><small>${goal} ${RARITY_NAME[ch.target]}を狙う</small>${chance}`
+        ? `<b>上位チャレンジ</b><small>${cur} を手放して ${goal} を狙う</small>${chance}
+           <span class="fxp-warn"><i>▼</i> 失敗すると、いまの景品はなくなります</span>`
         : `<b>上位チャレンジ</b><small>${escapeHtml(ch.reason ?? 'いまはチャレンジできません')}</small>`
+      const title = !ch.allowed ? '景品を受け取ろう' : double ? 'まだ行く？' : 'どうする？'
+      const rule = ch.allowed
+        ? `<span>${double ? 'もう 1 回、3×3 のカードで勝負。' : '上位チャレンジは 3×3 のカードで勝負。'}</span>
+           <span>1 列そろえば ${goal}、<b>そろわなければ景品なし</b></span>`
+        : '<span>今回は、上位チャレンジはできません</span>'
       if (double) s.root.classList.add('is-double')
+      // 並びは上から、危ないほう（上位チャレンジ）→ 安全なほう（受け取る）。親指がいちばん届く最下段を「受け取る」にする
       const box = s.add(
         el(
           'div',
           'fxp-ch',
           `<div class="fxp-ch-head">
-             <small>${double ? 'DOUBLE OR NOTHING' : 'BINGO PRIZE'}</small>
-             <h2>${double ? 'まだ行く？' : 'どうする？'}</h2>
-             <p>${double ? `${cur} を手放して ${goal} に挑む？` : '受け取るか、上位を狙うか'}</p>
+             <small>${ch.allowed && double ? '上位チャレンジ 2 回目' : 'ビンゴの景品'}</small>
+             ${headline(title, 'h2')}
+             <p>${rule}</p>
            </div>
            <div class="fxp-ch-prize">
              <div class="fxp-mini" data-r="${o.rarity}"><i class="fxp-frame" data-edge="${EDGE[o.rarity]}"></i>
-               <div class="fxp-mini-in"><i>${SHAPE[o.rarity]}</i><b>${o.rarity}</b><span>${RARITY_NAME[o.rarity]}</span></div></div>
-             <div class="fxp-ch-pname"><small>いまの景品</small><b>${escapeHtml(o.prize)}</b></div>
+               <div class="fxp-mini-in"><i>${SHAPE[o.rarity]}</i><b>${o.rarity}</b></div></div>
+             <div class="fxp-ch-pname"><small>いまの景品</small><b>${escapeHtml(o.prize)}</b>
+               <span class="fxp-ch-rar" data-r="${o.rarity}">${cur}　${RARITY_NAME[o.rarity]}</span></div>
            </div>
            <div class="fxp-ch-timer">
              <svg viewBox="0 0 120 120"><circle class="fxp-ring-bg" cx="60" cy="60" r="52"/><circle class="fxp-ring" cx="60" cy="60" r="52"/></svg>
@@ -880,8 +904,8 @@ export async function askChoice(
            </div>
            <small class="fxp-ch-note">時間切れは「受け取る」になります</small>
            <div class="fxp-ch-btns">
-             <button type="button" class="fxp-btn fxp-take"><b>受け取る</b><small>${cur}　${escapeHtml(o.prize)}</small></button>
              <button type="button" class="fxp-btn fxp-risk" data-target="${ch.target}"${ch.allowed ? '' : ' disabled'}>${riskBody}</button>
+             <button type="button" class="fxp-btn fxp-take"><b>受け取る</b><small>${cur}　${escapeHtml(o.prize)}</small></button>
            </div>`,
         ),
       )
@@ -964,9 +988,18 @@ export async function playChallengeStart(host: HTMLElement, o: PrizeFxOptions & 
       const a = band('fxp-band-a')
       const b = band('fxp-band-b')
       const sub = s.add(el('div', 'fxp-st-sub', 'TOP CHALLENGE'))
-      const title = s.add(el('div', 'fxp-st-title', '上位チャレンジ！'))
+      const title = s.add(el('div', 'fxp-st-title', headline('上位チャレンジ！')))
       const target = s.add(el('div', 'fxp-st-target', `${chip(t)}<span>${RARITY_NAME[t]}を狙え！</span>`))
-      const rule = s.add(el('div', 'fxp-st-rule', 'まだ出ていない数字だけの 3×3 カード。<br>ビンゴすれば獲得、外れたら景品なし'))
+      // ルールは、選択の画面と同じ言い方で、もう一度見せる
+      const rule = s.add(
+        el(
+          'div',
+          'fxp-st-rule',
+          `<small>まだ出ていない数字だけの 3×3 カード</small>
+           <b>1 列そろえば <i>${SHAPE[t]}</i> ${t} ${RARITY_NAME[t]}</b>
+           <span><i>▼</i> そろわなければ景品なし</span>`,
+        ),
+      )
       const slide = (node: HTMLElement, from: number, to: number, x: number, easing: string) =>
         s.anim(node, [{ transform: `translateX(${from}%) rotate(-10deg)` }, { transform: `translateX(${to}%) rotate(-10deg)` }], x, { easing })
 
@@ -980,8 +1013,8 @@ export async function playChallengeStart(host: HTMLElement, o: PrizeFxOptions & 
       if (hot) s.shake(6)
       s.burst(AX, 350, { count: 60, colors: SPARK[t], speed: 9, gravity: 0.14, life: 55, size: 5, shape: 'spark' })
       s.anim(target, slam(0.6), 320, { delay: 150, easing: 'cubic-bezier(.2,1.5,.4,1)' })
-      s.anim(rule, fadeUp, 360, { delay: 450 })
-      await s.wait(1500)
+      s.anim(rule, fadeUp, 360, { delay: 300 })
+      await s.wait(2000) // ルールを読み切れるだけ見せる
 
       // 幕が上がって、カードが配られる
       sfx.challengeDeal()
@@ -1012,7 +1045,8 @@ export async function playChallengeResult(
 }
 
 async function challengeWin(s: Scene, r: Rarity, prize: string, upgrade: boolean): Promise<void> {
-  const head = s.add(el('div', 'fxp-win-title', '<small>CHALLENGE CLEAR</small><b>チャレンジ成功！</b>'))
+  // 見出しは、もらえる景品のレア度の色で祝う（SR は金、UR は虹）
+  const head = s.add(el('div', 'fxp-win-title', `<small>CHALLENGE CLEAR</small>${headline('チャレンジ成功！', 'b', r)}`))
   const anchor = s.add(el('div', 'fxp-anchor'))
   const rays = s.add(el('i', 'fxp-rays'), anchor)
   const card = s.add(makeCard(r, prize, EDGE[r]), anchor)
@@ -1032,16 +1066,17 @@ async function challengeWin(s: Scene, r: Rarity, prize: string, upgrade: boolean
   await holdThenLeave(s, HOLD[r])
 }
 
-// 失敗: カードが落ちてきて、まっぷたつに割れて色が抜ける。重すぎないが、ちゃんと悔しく
+// 失敗: カードが落ちてきて、まっぷたつに割れて色が抜ける。重すぎないが、ちゃんと悔しく。
+// 色は灰青と ▼（失敗の決まり）。「景品なし」は小さく事実だけにして、次につながる一言をいちばん明るく出す
 async function challengeLose(s: Scene, aimed: Rarity | undefined): Promise<void> {
   const edge: Edge = aimed ? EDGE[aimed] : 'gold'
   const half = (side: 'l' | 'r') =>
     `<div class="fxp-half fxp-half-${side}"><i class="fxp-frame" data-edge="${edge}"></i><div class="fxp-face-in"><div class="fxp-mark"><b>B</b></div></div></div>`
   const anchor = s.add(el('div', 'fxp-anchor'))
   const broken = s.add(el('div', 'fxp-broken', half('l') + half('r')), anchor)
-  const title = s.add(el('div', 'fxp-lose-title', 'チャレンジ失敗…'))
-  const none = s.add(el('div', 'fxp-lose-none', '景品なし'))
-  const sub = s.add(el('div', 'fxp-lose-sub', 'あと一歩…！ ナイスチャレンジ'))
+  const title = s.add(el('div', 'fxp-lose-title', '<i>▼</i> チャレンジ失敗'))
+  const none = s.add(el('div', 'fxp-lose-none', '今回は景品なし'))
+  const next = s.add(el('div', 'fxp-lose-next', '<small>ナイスチャレンジ！</small><b>このあとダブルチャンスがあります</b>'))
   s.anim(
     broken,
     [
@@ -1087,7 +1122,7 @@ async function challengeLose(s: Scene, aimed: Rarity | undefined): Promise<void>
     { easing: 'ease-in' },
   )
   s.anim(none, fadeUp, 400, { delay: 700 })
-  s.anim(sub, fadeUp, 400, { delay: 1100 })
+  s.anim(next, fadeUp, 400, { delay: 1100 })
   await s.wait(1500)
-  await holdThenLeave(s, 1700)
+  await holdThenLeave(s, 2600) // 次の一言を読み切れるだけ見せる（タップで早めに閉じられる）
 }

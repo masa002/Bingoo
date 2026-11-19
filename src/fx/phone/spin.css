@@ -42,10 +42,11 @@
   --cd: #9a6a0c;
 }
 
+/* 虹は単色で表さない（縁や面は虹のグラデーションで描く）。色が要るところは白にする */
 .fxs[data-tier='4'] {
-  --c: #c084fc;
+  --c: #e8ecff;
   --cl: #ffffff;
-  --cd: #6b2fb3;
+  --cd: #8a93b8;
 }
 
 /* ---- 画面全体に重ねる層 ---------------------------------------------------- */
@@ -68,6 +69,7 @@
   z-index: 9;
 }
 
+/* 画面のふちの光は、会場（大画面）の色。大画面と同じ瞬間に同じ色になる（外は会場、内は自分） */
 .fxs-edge {
   position: absolute;
   inset: 0;
@@ -76,23 +78,23 @@
   transition: opacity calc(500ms * var(--fxs-k)) ease;
 }
 
-.fxs[data-tier='1'] .fxs-edge {
+.fxs[data-venue='1'] .fxs-edge {
   opacity: 0.9;
   box-shadow: inset 0 0 36px 4px rgba(34, 197, 94, 0.55);
 }
 
-.fxs[data-tier='2'] .fxs-edge {
+.fxs[data-venue='2'] .fxs-edge {
   opacity: 0.9;
   box-shadow: inset 0 0 50px 8px rgba(239, 68, 68, 0.55);
 }
 
-.fxs[data-tier='3'] .fxs-edge {
+.fxs[data-venue='3'] .fxs-edge {
   opacity: 0.9;
   box-shadow: inset 0 0 56px 10px rgba(245, 197, 66, 0.6);
   animation: fxs-edge var(--fxs-edge-ms, 2400ms) ease-in-out infinite;
 }
 
-.fxs[data-tier='4'] .fxs-edge {
+.fxs[data-venue='4'] .fxs-edge {
   opacity: 0.9;
   box-shadow: inset 0 0 50px 8px rgba(255, 255, 255, 0.35);
 }
@@ -271,9 +273,30 @@
   animation: fxs-hue var(--fxs-hue-ms, 12000ms) linear infinite;
 }
 
-/* 「昇格！」の札（オリパのお約束: 途中で色が上がった）。段階の言葉の上に添える */
-.fxs-up {
+/* カットインの頭の札: 「あなたに」（水色＝自分の話）と「昇格！」 */
+.fxs-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-bottom: 6px;
+}
+
+.fxs-me {
+  padding: 3px 12px 4px;
+  border-radius: 8px;
+  font-style: normal;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: #06223a;
+  background: #5ad2ff;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
+}
+
+/* 「昇格！」の札（オリパのお約束: 途中で色が上がった） */
+.fxs-up {
   padding: 3px 16px 4px;
   border-radius: 999px;
   font-style: normal;
@@ -361,8 +384,12 @@
   font-size: 50px;
 }
 
-.fxs-cut-txt .fxs-up {
+.fxs-cut-txt .fxs-tags {
   margin-bottom: 2px;
+}
+
+.fxs-cut-txt .fxs-up,
+.fxs-cut-txt .fxs-me {
   font-size: 17px;
 }
 
@@ -461,170 +488,138 @@
   filter: saturate(0.3) brightness(0.85);
 }
 
-/* 上の段: 主役は「あなたの期待度」（見出し＋ 4 段の目盛り＋言葉のランプ）。大画面の段階は、右上の小さな 1 行 */
+/* 上の段: 同じ形の 2 段を常に出す。「会場 ◆ ビンゴが出るかも！」（会場の色）と「あなた ▲ 当たるかも？」（自分の色）。
+   札（会場＝白、あなた＝水色）→ 形 → 言葉の順で、大画面のカードの帯と同じ形 */
 .fxs-head {
   position: relative;
   flex: none;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  transition: opacity calc(200ms * var(--fxs-k)) ease;
 }
 
-.fxs-cap {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  height: 14px;
-  font-size: 11px;
-  line-height: 14px;
-  white-space: nowrap;
+/* 当たりの言葉が出ている間は、頭の 2 段を消す（言葉を重ねない） */
+.fxs.is-hero .fxs-head {
+  opacity: 0;
 }
 
-.fxs-cap > b {
-  font-weight: 900;
-  letter-spacing: 1px;
-  color: #dfe6ff;
-}
-
-/* 期待度の目盛り（緑・赤・金・虹の 4 段。色だけでなく、点いた数とランプの形・言葉でも伝える） */
-.fxs-meter {
-  display: inline-flex;
-  gap: 3px;
-}
-
-.fxs-meter i {
-  --pc: #22c55e;
-  display: block;
-  width: 15px;
-  height: 8px;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.12);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
-  transition:
-    background calc(300ms * var(--fxs-k)),
-    box-shadow calc(300ms * var(--fxs-k));
-}
-
-.fxs-meter i[data-t='2'] {
-  --pc: #ef4444;
-}
-
-.fxs-meter i[data-t='3'] {
-  --pc: #f5c542;
-}
-
-.fxs-meter i.on {
-  background: var(--pc);
-  box-shadow:
-    0 0 7px var(--pc),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
-}
-
-.fxs-meter i.on[data-t='4'] {
-  background: linear-gradient(90deg, #ff5a5a, #fff15a, #5aff8c, #5ad2ff, #a85aff);
-  box-shadow: 0 0 7px rgba(255, 255, 255, 0.7);
-}
-
-/* 会場（大画面）の段階。小さな 1 行にまとめる（「会場: ◆ ビンゴが出るかも！」） */
-.fxs-venue {
-  --vc: #6ea2ff;
-  min-width: 0;
-  margin-left: auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-weight: 700;
-  color: #9aa5cc;
-}
-
-.fxs-venue i {
-  margin-right: 3px;
-  font-style: normal;
-  color: var(--vc);
-}
-
-.fxs-venue b {
-  font-weight: 800;
-  color: #c9d1f0;
-}
-
-.fxs-venue[data-t='1'] {
-  --vc: #22c55e;
-}
-
-.fxs-venue[data-t='2'] {
-  --vc: #ff6b6b;
-}
-
-.fxs-venue[data-t='3'] {
-  --vc: #f5c542;
-}
-
-.fxs-venue[data-t='4'] {
-  --vc: #ff8ae0;
-}
-
-.fxs-lamp {
+.fxs-who {
   --lc: #3b82f6;
   --ll: #9cc3ff;
   --ld: #1e3f86;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  height: 30px;
-  padding: 0 14px 0 4px;
-  border-radius: 15px;
-  font-size: 16px;
+  gap: 6px;
+  height: 26px;
+  padding: 0 6px 0 3px;
+  border-radius: 13px;
+  font-size: 14px;
   font-weight: 900;
-  letter-spacing: 1px;
+  line-height: 1;
   white-space: nowrap;
   color: #fff;
   background: linear-gradient(180deg, var(--ll) -30%, var(--lc) 45%, var(--ld) 100%);
-  box-shadow:
-    0 0 12px color-mix(in srgb, var(--lc) 55%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
 }
 
-.fxs-lamp i {
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
+/* だれの話かの札: 会場は白、あなたは水色（どの画面でも同じ形） */
+.fxs-who small {
+  flex: none;
+  min-width: 52px;
+  padding: 3px 0 4px;
+  border-radius: 10px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 900;
+  color: #16204a;
+  background: #eef1ff;
+  text-shadow: none;
+}
+
+.fxs-lamp small {
+  color: #06223a;
+  background: #5ad2ff;
+}
+
+.fxs-who i {
+  flex: none;
+  width: 16px;
+  text-align: center;
   font-style: normal;
-  font-size: 12px;
-  background: rgba(0, 0, 0, 0.28);
+  font-size: 14px;
 }
 
-.fxs-lamp[data-t='1'] {
+.fxs-who b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fxs-who[data-t='1'] {
   --lc: #22c55e;
   --ll: #b9f7cf;
   --ld: #15803d;
 }
 
-.fxs-lamp[data-t='2'] {
+.fxs-who[data-t='2'] {
   --lc: #ef4444;
   --ll: #ffc4b8;
   --ld: #b91c1c;
 }
 
-.fxs-lamp[data-t='3'] {
+.fxs-who[data-t='3'] {
   --lc: #f5c542;
   --ll: #fff6d6;
   --ld: #c99212;
-  color: #2a1a00;
+  color: #2a1a05;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
-.fxs-lamp[data-t='3'] i,
-.fxs-lamp[data-t='4'] i {
-  background: rgba(255, 255, 255, 0.45);
-}
-
-.fxs-lamp[data-t='4'] {
+/* 虹（面は横のグラデーション） */
+.fxs-who[data-t='4'] {
   color: #1a1400;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
   background: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
-  box-shadow: 0 0 14px rgba(255, 255, 255, 0.5);
-  animation: fxs-hue var(--fxs-hue-ms, 12000ms) linear infinite;
+}
+
+/* 自分の段の光（内側のパネルは自分の色） */
+.fxs-lamp {
+  box-shadow:
+    0 0 12px color-mix(in srgb, var(--lc) 55%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+/* あなたの期待度のランプ（▲ ◆ ★ ✦。いまの段階まで点く。形をランプの中に入れる） */
+.fxs-meter {
+  flex: none;
+  display: inline-flex;
+  gap: 3px;
+  margin-left: auto;
+}
+
+.fxs-meter u {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 16px;
+  border-radius: 4px;
+  text-decoration: none;
+  font-size: 13px; /* 形の記号 */
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(4, 6, 16, 0.42);
+  text-shadow: none;
+  transition:
+    background calc(300ms * var(--fxs-k)),
+    color calc(300ms * var(--fxs-k));
+}
+
+.fxs-meter u.on {
+  color: #16204a;
+  background: #ffffff;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.7);
 }
 
 /* ---- リールの窓 ------------------------------------------------------------ */
@@ -686,7 +681,7 @@
   will-change: transform, opacity;
 }
 
-/* 列の文字の玉（B I N G O で色が違う。文字も重ねる） */
+/* 列の文字の玉は、中立の色（白地に濃紺）。色は段階だけに使う（大画面の玉も同じ色） */
 .fxs-l {
   display: inline-grid;
   place-items: center;
@@ -698,14 +693,11 @@
   font-size: 26px;
   font-weight: 900;
   line-height: 1;
-  color: #fff;
-  background:
-    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.8) 0 8%, rgba(255, 255, 255, 0) 38%),
-    radial-gradient(circle at 50% 60%, var(--b) 0 55%, color-mix(in srgb, var(--b) 55%, #000) 100%);
+  color: #16204a;
+  background: radial-gradient(circle at 34% 28%, #ffffff, #e6eaff 48%, #b4bfe6);
   box-shadow:
-    inset 0 -3px 6px rgba(0, 0, 0, 0.3),
+    inset 0 -3px 6px rgba(20, 30, 80, 0.3),
     0 3px 8px rgba(0, 0, 0, 0.4);
-  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
 }
 
 .fxs-n {
@@ -762,7 +754,7 @@
 }
 
 .fxs-win.is-landed .fxs-row:not(.is-c) {
-  opacity: 0.22 !important;
+  opacity: 0 !important; /* 止まったら、出た番号だけを残す（大画面と同じ） */
   transition: opacity calc(300ms * var(--fxs-k)) ease;
 }
 
@@ -775,7 +767,7 @@
 .fxs-win.is-landed .fxs-row.is-c .fxs-l {
   box-shadow:
     0 0 0 3px #fff,
-    0 0 16px var(--b);
+    0 0 16px rgba(220, 228, 255, 0.8);
 }
 
 .fxs[data-tier='3'] .fxs-win.is-landed .fxs-row.is-c .fxs-n {
@@ -1007,7 +999,7 @@
 .fxs-wait b {
   padding: 6px 14px 7px;
   border-radius: 14px;
-  font-size: 46px;
+  font-size: 42px;
   font-weight: 900;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -1077,8 +1069,8 @@
 }
 
 .fxs-revive .fxa-txt {
-  --stroke: #3b2600;
-  --fill: linear-gradient(180deg, #fffbe6 0%, #ffe08a 35%, #f5c542 60%, #ff8a3d 100%);
+  --stroke: #2a1a05;
+  --fill: linear-gradient(180deg, #fff4cc, #f5c542 55%, #d9a520);
   font-size: 84px;
   letter-spacing: 4px;
 }
@@ -1097,42 +1089,16 @@
   transform-origin: 50% 100%;
 }
 
+/* 見出しの型: 金のグラデーションに、濃い茶の縁（段階によらず同じ）。虹（ビンゴ確定の回）だけ虹の塗り */
 .fxs-hero .fxa-txt {
-  --stroke: #fff;
-  --fill: linear-gradient(180deg, #fff, #dfe6ff);
-  font-size: 50px;
-}
-
-.fxs-hero[data-t='0'] .fxa-txt {
-  --stroke: #1e3f86;
-  --fill: linear-gradient(180deg, #fff, #bcd3ff);
-  font-size: 42px;
-}
-
-.fxs-hero[data-t='1'] .fxa-txt {
-  --fill: linear-gradient(180deg, #eafff0 10%, #5aff8c 50%, #15803d 100%);
-}
-
-.fxs-hero[data-t='2'] .fxa-txt {
-  --stroke: #fff6d6;
-  --fill: linear-gradient(180deg, #fff2a8 0%, #ffb03a 35%, #ff4d2e 70%, #c4161c 100%);
-  font-size: 54px;
-}
-
-.fxs-hero[data-t='3'] .fxa-txt {
-  --stroke: #3b2600;
-  --fill: linear-gradient(180deg, #fffbe6 0%, #ffe08a 30%, #f5c542 50%, #b8860b 75%, #ffe08a 100%);
-  font-size: 56px;
+  --stroke: #2a1a05;
+  --fill: linear-gradient(180deg, #fff4cc, #f5c542 55%, #d9a520);
+  font-size: 52px;
 }
 
 .fxs-hero[data-t='4'] .fxa-txt {
   --stroke: #fff;
   --fill: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
-  font-size: 58px;
-}
-
-.fxs-hero[data-t='4'] .fxa-txt b {
-  animation: fxs-hue var(--fxs-hue-ms, 12000ms) linear infinite;
 }
 
 /* カードのマスへ飛んでいく番号の玉 */
@@ -1163,47 +1129,50 @@
   font-size: 34px;
 }
 
-/* 失敗: ランプが砕けたあとの、ちょっと情けない文字 */
+/* 外れの札: 下のパネルの中（窓の下の一行と「あと O65」の位置）に、不透明で水平に出す。カードには乗せない */
 .fxs-fail {
   position: absolute;
-  left: 50%;
-  top: var(--fxs-center, 318px);
-  min-width: 220px;
-  padding: 16px 28px 14px;
-  border-radius: 20px;
+  left: 12px;
+  right: 12px;
+  top: 201px;
+  bottom: 10px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 18px;
   text-align: center;
   white-space: nowrap;
-  background: rgba(10, 14, 30, 0.88);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-  transform: translate(-50%, -50%);
+  background: #0d1230;
+  box-shadow:
+    inset 0 0 0 1.5px rgba(148, 163, 184, 0.55),
+    0 6px 16px rgba(0, 0, 0, 0.45);
 }
 
 .fxs-fail b {
-  display: block;
-  font-size: 42px;
+  font-size: 30px;
   font-weight: 900;
+  line-height: 1.15;
   color: #c7cfe6;
   letter-spacing: 2px;
 }
 
 .fxs-fail small {
-  display: block;
-  margin-top: 4px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
-  color: #8a93b8;
+  line-height: 1.3;
+  color: #94a3b8;
 }
 
-.fxs-sweat {
-  position: absolute;
-  right: 16px;
-  top: 10px;
-  width: 13px;
-  height: 13px;
-  border-radius: 0 50% 50% 50%;
-  background: linear-gradient(135deg, #e6f6ff, #7cc7ff);
-  transform: rotate(45deg);
+/* 次につながる一言 */
+.fxs-fail em {
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.3;
+  color: #e8ecff;
 }
 
 .fxs-onoma {
@@ -1214,12 +1183,6 @@
   white-space: nowrap;
   color: #c7cfe6;
   text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
-}
-
-.fxs-shard {
-  position: absolute !important;
-  margin: 0 !important;
-  will-change: transform;
 }
 
 /* 虹の前ぶれ: 窓のガラスを横切るヒビ */

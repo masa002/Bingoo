@@ -33,7 +33,7 @@ const choice = (id: string, label: string, args: ChoiceArgs): GalleryItem => ({
 
 registerGallery(
   pack('c', 'C（白い光 → 銀の縁 → すぐ）', { rarity: 'C', prize: 'お菓子詰め合わせ', glow: 'white', upgrade: false }),
-  pack('r', 'R（白い光 → 青の縁 → きらり）', { rarity: 'R', prize: 'モバイルバッテリー', glow: 'white', upgrade: false }),
+  pack('r', 'R（白い光 → 青緑の縁 → きらり）', { rarity: 'R', prize: 'モバイルバッテリー', glow: 'white', upgrade: false }),
   pack('sr', 'SR（金の光 → 金の縁 → 金の爆発）', { rarity: 'SR', prize: 'ワイヤレスイヤホン', glow: 'gold', upgrade: false }),
   pack('ur', 'UR（虹の光 → フリーズ → 虹のヒビ）', { rarity: 'UR', prize: '特賞 最新ゲーム機', glow: 'rainbow', upgrade: false }),
   pack('ur-up', 'UR の昇格（白い光のガセ → 縁が金から虹に）', { rarity: 'UR', prize: '特賞 温泉旅館ペア宿泊券', glow: 'white', upgrade: true }),

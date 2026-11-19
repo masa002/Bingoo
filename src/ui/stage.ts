@@ -21,29 +21,31 @@ export type VenueSource = () => readonly Player[]
 const STAGE_HTML = `
 <header class="st-hud">
   <div class="st-logo">BINGOO</div>
-  <div class="st-stat"><span>参加</span><b data-k="size">0</b></div>
-  <div class="st-stat"><span>リーチ</span><b data-k="reach">0</b></div>
-  <div class="st-stat"><span>ビンゴ</span><b data-k="bingo">0</b></div>
-  <div class="st-stat"><span>景品 残り</span><b data-k="lower">0</b></div>
-  <div class="st-stat st-upper"><span>上位</span><b data-k="upper">0</b></div>
-  <div class="st-stat st-chal"><span>チャレンジ中</span><b data-k="chal">0</b></div>
-  <div class="st-odds">残り <b data-k="remaining">75</b> 個中　当たり番号 <b data-k="hits">0</b> 個</div>
+  <div class="st-stat"><span>参加</span><b data-k="size">0</b><small>人</small></div>
+  <div class="st-stat"><span>リーチ</span><b data-k="reach">0</b><small>人</small></div>
+  <div class="st-stat"><span>ビンゴ</span><b data-k="bingo">0</b><small>人</small></div>
+  <div class="st-stat"><span>景品 あと</span><b data-k="lower">0</b></div>
+  <div class="st-stat st-upper"><span>上位景品 あと</span><b data-k="upper">0</b></div>
+  <div class="st-stat st-chal"><span>上位チャレンジ中</span><b data-k="chal">0</b><small>人</small></div>
+  <div class="st-odds">ビンゴが出る番号 あと <b data-k="hits">0</b> / <i data-k="remaining">75</i></div>
 </header>
-<div class="st-hash"></div>
 <section class="st-result">
   <div class="st-last"><small>今回の番号</small><b>--</b></div>
   <div class="st-chips">
-    <div class="chip"><span>ヒット</span><b data-r="hits">-</b></div>
-    <div class="chip"><span>新規リーチ</span><b data-r="reach">-</b></div>
-    <div class="chip chip-bingo"><span>新規ビンゴ</span><b data-r="bingo">-</b></div>
+    <div class="chip"><span>持っていた人</span><b data-r="hits"></b></div>
+    <div class="chip"><span>新しくリーチ</span><b data-r="reach"></b></div>
+    <div class="chip chip-bingo"><span>ビンゴ</span><b data-r="bingo"></b></div>
   </div>
   <ol class="st-names"></ol>
 </section>
-<section class="st-venue"><canvas width="610" height="236"></canvas><span class="st-venue-label">会場ビュー</span></section>
+<section class="st-venue">
+  <span class="st-venue-label">会場ビュー</span>
+  <canvas width="606" height="170"></canvas>
+  <span class="st-venue-legend"><i class="r"></i>リーチ<i class="g"></i>いまの番号を持つ人<i class="v"></i>チャレンジ中<i class="m"></i>あなた</span>
+</section>
 <div class="st-board"></div>
 <canvas class="st-fx" width="1920" height="1080"></canvas>
 <div class="st-overlay"></div>
-<div class="st-watermark">DEMO・仮想参加者</div>
 `
 
 export class StageView {
@@ -61,6 +63,7 @@ export class StageView {
   private last = 0
   private scene: BgmScene = 'reception'
   private firstBingo = false
+  private resultTimer = 0
 
   constructor(
     host: HTMLElement,
@@ -89,6 +92,8 @@ export class StageView {
       case 'joined': {
         const count = this.root.querySelector('.rcp-count b')
         if (count) count.textContent = fmt(m.count)
+        // デモの案内（スマホ枠の「参加する」）は、参加したら消す
+        this.root.querySelector('.rcp-join')?.classList.toggle('done', m.meJoined)
         return
       }
       case 'eventPlay':
@@ -96,6 +101,7 @@ export class StageView {
       case 'finalBall':
         this.hideOverlay()
         this.setScene('final')
+        this.eventOn(m.durationMs)
         void playFinalBall(this.root, { speed: this.clock.speed, prizesLeft: m.prizesLeft })
         return
       case 'drawScheduled':
@@ -110,6 +116,7 @@ export class StageView {
       case 'questStart':
         return this.onQuestStart(m)
       case 'lastOneBrief':
+        this.eventOn()
         this.lastOneBrief?.close()
         this.lastOneBrief = openLastOneBrief(this.root, { speed: this.clock.speed, prizes: m.prizes, entrants: m.entrants, autoMs: m.autoMs })
         return
@@ -130,7 +137,17 @@ export class StageView {
         return this.onPrizeTime(m)
       case 'choices':
         this.setTotals(m.totals)
-        if (m.challengers.length) this.addNames(m.challengers.map((c) => ({ ...c, label: '上位チャレンジへ' })), 'chal')
+        // 同じ人を 2 行に出さない。景品の行を「上位チャレンジへ」に書き換える
+        for (const c of m.challengers) {
+          const li = [...this.root.querySelectorAll<HTMLElement>('.st-names li')].find((x) => x.dataset.name === c.name)
+          if (li) {
+            li.classList.add('chal')
+            const small = li.querySelector('small') ?? li.appendChild(document.createElement('small'))
+            small.textContent = '上位チャレンジへ'
+          } else {
+            this.addNames([{ ...c, label: '上位チャレンジへ' }], 'chal')
+          }
+        }
         return
       case 'idle':
         this.setTotals(m.totals)
@@ -170,28 +187,27 @@ export class StageView {
     this.lastOne = null
     this.lastOneBrief?.close()
     this.lastOneBrief = null
+    this.eventOff()
     this.machine.setSpeed(this.clock.speed)
     this.machine.reset()
     this.drawn = new Set(m.drawn)
     this.last = 0
     this.renderBoard()
     this.setTotals(m.totals)
-    this.$('.st-hash').textContent = `抽選順と景品の並びのハッシュ ${m.deckHash.slice(0, 16)}…`
     this.clearResult()
     this.venue.reset(m.size)
     this.scene = 'reception'
     bgm.play('reception')
     this.showOverlay(`
       <div class="rcp">
-        <h2>受付中</h2>
+        <h2 class="st-head">受付中</h2>
         <div class="rcp-count"><b>0</b> / ${fmt(m.size)} 人</div>
-        <p>右のスマホ枠の「参加する」を押してください</p>
-        <p class="muted">主催の「次へ」で受付を締め切り、抽選を始めます</p>
+        <p class="rcp-join">スマホで「参加する」を押してください</p>
         <div class="rcp-guide">
           <h3>演出の見方</h3>
-          <p>色が熱いほど、その番号でビンゴやリーチが出やすくなります（外れることもあります）。大画面は会場の誰かの話、スマホはあなたのカードの話です。</p>
+          <p>色が熱いほど、その番号でビンゴやリーチが出やすくなります（外れることもあります）</p>
           <ol class="tier-guide">${tierGuide(TIER_WORD, '静か')}</ol>
-          <p>虹は、出た画面の持ち主が必ず当たります。</p>
+          <p>大画面の色は <b>会場の期待度</b>、スマホの色は <b>あなたのカードの期待度</b> です。虹は、出た画面の持ち主が必ず当たります</p>
         </div>
       </div>`)
   }
@@ -221,12 +237,13 @@ export class StageView {
     set('size', fmt(t.size))
     set('reach', fmt(t.reachHolders))
     set('bingo', fmt(t.winners))
-    set('lower', `${t.lowerLeft}/${t.lowerTotal}`)
-    set('upper', `${t.upperLeft}/${t.upperTotal}`)
+    set('lower', String(t.lowerLeft))
+    set('upper', String(t.upperLeft))
     set('chal', fmt(t.challengers))
     set('remaining', String(t.remaining))
     set('hits', String(t.hitsLeft))
-    this.$('.st-hash').classList.toggle('tampered', t.tampered)
+    // 誰も挑んでいない間は、用語だけが浮くので出さない
+    this.$('.st-chal').classList.toggle('off', t.challengers === 0)
     // BGM は会場の局面で切り替える（序盤 → リーチ期 → ビンゴ期 → オーラス）
     if (t.phase === 'playing') {
       if (t.lowerLeft <= 3 && t.winners > 0) this.setScene('final')
@@ -245,10 +262,22 @@ export class StageView {
 
   // ---- イベント -------------------------------------------------------------
 
+  // 全画面のイベントの間は、前の抽選のカード・結果・会場ビューを隠し、HUD と盤を暗くする
+  // （終わった抽選の色と言葉が、別のイベントの最中に見えると、意味がぶつかる）。ms を渡すと、その時間で戻す
+  private eventOn(ms?: number): void {
+    this.root.classList.add('is-event')
+    if (ms !== undefined) this.later(ms, () => this.eventOff())
+  }
+
+  private eventOff(): void {
+    this.root.classList.remove('is-event')
+  }
+
   private onEvent(m: MsgOf<'eventPlay'>): void {
     this.hideOverlay()
     this.cancelAll()
     this.clearResult()
+    this.eventOn(m.durationMs)
     void playAllKakutei(this.root, { speed: this.clock.speed, total: m.total, newReach: m.newReach, newDouble: m.newDouble })
     this.later(m.resultAt - 2500, () => this.venue.rainbow())
     this.later(m.resultAt, () => {
@@ -262,6 +291,7 @@ export class StageView {
     this.hideOverlay()
     this.cancelAll()
     this.clearResult()
+    this.eventOn()
     this.quest?.destroy()
     this.quest = new MoleQuestStage(this.root, { speed: this.clock.speed })
     this.quest.brief({ playMs: m.playMs, targets: m.targets, players: m.players, autoMs: m.autoMs })
@@ -270,6 +300,7 @@ export class StageView {
   // 「3・2・1」のあと、会場全員がスマホで叩いている様子と合計、結果を見せる
   private onQuestStart(m: MsgOf<'questStart'>): void {
     this.hideOverlay()
+    this.eventOn()
     this.quest ??= new MoleQuestStage(this.root, { speed: this.clock.speed })
     this.quest.setSpeed(this.clock.speed)
     this.quest.start({ introMs: m.introMs, playMs: m.playMs, targets: m.targets, players: m.players })
@@ -285,6 +316,7 @@ export class StageView {
     if (this.quest !== quest) return
     quest.destroy()
     this.quest = null
+    this.eventOff()
   }
 
   // ---- 抽選 -----------------------------------------------------------------
@@ -293,6 +325,7 @@ export class StageView {
     this.hideOverlay()
     this.cancelAll()
     this.clearResult()
+    this.eventOff()
     this.setScene('early')
     this.machine.setSpeed(this.clock.speed)
     this.machine.reset()
@@ -307,7 +340,21 @@ export class StageView {
 
   private onRevealed(m: MsgOf<'numberRevealed'>): void {
     this.cancelBeats()
-    void this.machine.reveal(m.n, m.tier)
+    // 番号は、主役のカードが開いた瞬間（着地）に、右の欄・盤・会場ビューにも出す。先に脇で見せない。
+    // カードの帯は、着地のあと結果の言葉に差し替える（「ビンゴが出そう！」のまま残さない）
+    let shown = false
+    const show = () => {
+      if (shown) return
+      shown = true
+      window.clearTimeout(this.resultTimer)
+      this.showResult(m)
+    }
+    void this.machine.reveal(m.n, m.tier, { onLand: show, result: resultWord(m) })
+    this.resultTimer = window.setTimeout(show, this.clock.scale(1500)) // 着地の合図が来なかったときの保険
+    this.timers.push(this.resultTimer)
+  }
+
+  private showResult(m: MsgOf<'numberRevealed'>): void {
     this.drawn.add(m.n)
     this.last = m.n
     this.venue.reveal(m.n, m.totals.drawCount)
@@ -315,16 +362,20 @@ export class StageView {
     this.setTotals(m.totals)
     this.$('.st-result').classList.add('on')
     this.$('.st-last b').textContent = m.label
+    // 人数の数え上げは、番号を見せたあとに始める
     const dur = this.clock.scale(900)
-    countUp(this.$('[data-r="hits"]'), m.hits, dur)
-    countUp(this.$('[data-r="reach"]'), m.newReach, dur, '+')
-    countUp(this.$('[data-r="bingo"]'), m.newBingo, dur)
-    this.$('.chip-bingo').classList.toggle('hot', m.newBingo > 0)
+    this.later(250, () => {
+      countUp(this.$('[data-r="hits"]'), m.hits, dur)
+      countUp(this.$('[data-r="reach"]'), m.newReach, dur, '+')
+      countUp(this.$('[data-r="bingo"]'), m.newBingo, dur)
+      this.$('.chip-bingo').classList.toggle('hot', m.newBingo > 0)
+    })
     const list = this.$('.st-names')
     list.innerHTML = ''
     this.addNames(m.challengeWins.map((x) => ({ ...x, label: '上位チャレンジ成功' })), 'chal')
     this.addNames(m.names, '')
     if (m.newBingo > m.names.length) list.append(h('li', 'more', `ほか ${fmt(m.newBingo - m.names.length)} 人`))
+    this.fitNames()
     const wins = m.newBingo + m.challengeWins.length
     if (wins > 0) {
       this.later(600, () => {
@@ -342,18 +393,28 @@ export class StageView {
   private addNames(names: { name: string; isMe: boolean; label?: string }[], cls: string): void {
     const list = this.$('.st-names')
     names.forEach((x, i) => {
-      const li = h('li', [cls, x.isMe ? 'me' : ''].join(' ').trim(), `${x.isMe ? 'あなた' : esc(x.name)}${x.label ? `<small>${x.label}</small>` : ''}`)
+      const li = h('li', [cls, x.isMe ? 'me' : ''].join(' ').trim(), `<span>${x.isMe ? 'あなた' : esc(x.name)}</span>${x.label ? `<small>${x.label}</small>` : ''}`)
+      li.dataset.name = x.name
       li.style.animationDelay = `${this.clock.scale(400 + 150 * i)}ms`
       list.append(li)
     })
   }
 
+  // 名前は会場がいちばん沸く情報なので、大きく出す。名前があるときは、会場ビュー（デモ用）の場所まで欄を広げる。
+  // 3 人までは 1 列で特大、それより多ければ 2 列
+  private fitNames(): void {
+    const count = this.$('.st-names').children.length
+    this.root.classList.toggle('has-names', count > 0)
+    this.$('.st-names').classList.toggle('few', count > 0 && count <= 3)
+  }
+
   private clearResult(): void {
     this.$('.st-result').classList.remove('on')
     this.$('.st-last b').textContent = '--'
-    for (const k of ['hits', 'reach', 'bingo']) this.$(`[data-r="${k}"]`).textContent = '-'
+    for (const k of ['hits', 'reach', 'bingo']) this.$(`[data-r="${k}"]`).textContent = ''
     this.$('.chip-bingo').classList.remove('hot')
     this.$('.st-names').innerHTML = ''
+    this.fitNames()
   }
 
   // ---- 景品（当たった瞬間はスマホで見せる。大画面は名前と結果だけ） --------
@@ -361,16 +422,19 @@ export class StageView {
   private onPrizeTime(m: MsgOf<'prizeTime'>): void {
     const list = this.$('.st-names')
     list.innerHTML = ''
+    // 【C】のような記号だけでは伝わらないので、「景品 C」と書く
     const label = (e: PrizeEntry) =>
       e.rarity === null
-        ? 'ラストワン争奪のガラポンで外れ'
-        : `【${e.rarity}】${e.rankUp ? 'ランクアップ' : ''}${e.kind === 'challenge' ? 'チャレンジ成功' : ''}`
+        ? 'ガラポンで外れ'
+        : `${e.kind === 'challenge' ? 'チャレンジ成功 ' : ''}景品 ${e.rarity}${e.rankUp ? '（ランクアップ）' : ''}`
     this.addNames(
       m.entries.slice(0, 12).map((e) => ({ name: e.name, isMe: e.isMe, label: label(e) })),
       '',
     )
     if (m.entries.length > 12) list.append(h('li', 'more', `ほか ${fmt(m.entries.length - 12)} 人`))
+    this.fitNames()
     if (m.lastOne) {
+      this.eventOn(m.lastOne.durationMs)
       const pool = m.entries.filter((e) => e.kind === 'normal')
       this.lastOneBrief?.close()
       this.lastOneBrief = null
@@ -391,9 +455,9 @@ export class StageView {
     this.setTotals(m.totals)
     this.showOverlay(`
       <div class="fin">
-        <h2>景品がなくなりました！</h2>
-        <p>抽選 ${m.totals.drawCount} 回　／　ビンゴ ${fmt(m.totals.winners)} 人</p>
-        <p class="muted">${m.leftoverUpper ? `残った上位 ${m.leftoverUpper} 個は、ダブルチャンスに回ります。` : ''}主催の「次へ」でダブルチャンスへ</p>
+        <h2 class="st-head">すべての景品の当選者が決まりました！</h2>
+        <div class="fin-stats"><span>抽選 <b>${m.totals.drawCount}</b> 回</span><span>ビンゴ <b>${fmt(m.totals.winners)}</b> 人</span></div>
+        <p>${m.leftoverUpper ? `残った上位景品 ${m.leftoverUpper} 個は、ダブルチャンスに回ります。` : ''}このあと、ダブルチャンス！</p>
       </div>`)
     sfx.fanfare('big')
     this.fx.rain(500, RAINBOW)
@@ -404,6 +468,7 @@ export class StageView {
   private onDcEntry(m: MsgOf<'dcEntry'>): void {
     this.hideOverlay()
     this.cancelAll()
+    this.eventOn()
     this.setScene('cooldown')
     this.dc?.destroy()
     // デモでは同じ PC から鳴るので、自分がガラポンを回すときは音をスマホ側に任せる（本番は大画面が鳴らす）
@@ -448,6 +513,14 @@ export class StageView {
   }
 }
 
+// 番号が出たあと、カードの帯に出す結果の言葉（会場で何が起きたか）
+function resultWord(m: MsgOf<'numberRevealed'>): string {
+  if (m.newBingo > 0) return `ビンゴ ${fmt(m.newBingo)} 人！`
+  if (m.challengeWins.length > 0) return `チャレンジ成功 ${fmt(m.challengeWins.length)} 人！`
+  if (m.newReach > 0) return `リーチ +${fmt(m.newReach)} 人`
+  return 'ビンゴなし'
+}
+
 // 会場ビュー: 仮想参加者全員のスマホを点で並べる（デモ専用。一人では見られない「会場が光る」様子を見る窓）
 class Venue {
   private readonly ctx: CanvasRenderingContext2D
@@ -469,7 +542,7 @@ class Venue {
 
   reset(size: number): void {
     const step = Math.max(1, Math.ceil(size / 1000))
-    this.label.textContent = `会場ビュー（仮想 ${fmt(size)} 台${step > 1 ? `・1/${step} を表示` : ''}）`
+    this.label.textContent = `会場ビュー（デモ: 仮想 ${fmt(size)} 台${step > 1 ? `・1/${step} を表示` : ''}）`
     this.mode = 'idle'
     this.flashN = 0
     this.refresh()

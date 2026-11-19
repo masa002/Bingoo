@@ -9,14 +9,16 @@ import { GOLD, HEAT_LABEL, TIER_COLOR, TIER_SHAPE, TIER_WORD, type MachineStyle,
 // 大画面の抽選機（1920×1080 の大画面に重ねて使う）。
 // 通常の抽選は 青・緑・赤・金 の 4 段階（会場全体の熱）。虹（全員確定）は events.ts の別イベント。
 // この画面が答える問いは 1 つ: 「この番号で、会場にビンゴが出そうか」。オリパと同じで、色がそのまま答えの言葉になる
-// （TIER_WORD: リーチが増えるかも → ビンゴが出るかも！ → ビンゴが出そう！）。左の目盛りには「ビンゴ期待度」の見出しを付ける
+// （TIER_WORD: リーチが増えるかも → ビンゴが出るかも！ → ビンゴが出そう！）。
+// 左の目盛り（見出しは HEAT_LABEL.venue）は段階と 1 対 1 の 4 段で、いまの色の段まで必ず点く。
+// カードの帯には「会場」の札を添える（スマホの「あなた」と対にする）。番号が出たら、帯は結果の言葉に替わる
 //
 // 使い方:
 //   const m = new DrawMachine(stageRoot)
 //   m.setPool(まだ出ていない番号)
 //   m.start(beats, plan, style) // core/show.ts の schedule() が作った拍の列どおりに溜める。style は権威が決めた型
 //   m.awaitPush()               // 金のとき、MC の PUSH を待つ表示
-//   await m.reveal(23, tier)    // 番号を見せる（着地・バースト）
+//   await m.reveal(23, tier, { onLand, result: 'ビンゴ 1 人！' })   // 番号を見せる（着地・バースト）。onLand は番号が見えた瞬間
 //   m.reset()                   // 次の抽選の前に戻す（めくった札は捨て札として飛んでいく）
 //
 // 見た目:
@@ -41,8 +43,16 @@ export interface DrawMachineOptions {
 const CX = 810 // カードの中心（大画面の座標）
 const CY = 440
 const ROW = 200 // リールの 1 コマの高さ
-const STEP_X = 189 // 期待度の目盛りの札の中心 x
-const stepY = (i: number): number => 236 + (4 - i) * 102 // ★ 1 つが下、★ 5 つが上
+const STEP_PITCH = 118 // 期待度の目盛りの札の間隔
+const STEP_X = 277 // 期待度の目盛りの札の中心 x
+const stepY = (i: number): number => 250 + (3 - i) * STEP_PITCH // 青が下、金が上
+// 目盛りの各段の言葉（段階と 1 対 1。青は「静か」）
+const GAUGE_WORD = ['静か', TIER_WORD[1], TIER_WORD[2], TIER_WORD[3]] as const
+
+export interface RevealOptions {
+  onLand?: () => void // 番号が見えた瞬間（着地）に 1 回呼ぶ。脇の欄・盤は、これを待ってから番号を出す
+  result?: string // 着地のあと、カードの帯をこの言葉に替える（「ビンゴ 1 人！」「リーチ +28 人」「ビンゴなし」など）
+}
 
 // リールのコマ: 1〜75 = 番号、0 = 空白、-1 = ？、-2 = 回る前の「--」
 type Code = number
@@ -411,8 +421,8 @@ class FlapView implements SpinView {
 const HTML = `
 <div class="fxd-aura"></div>
 <div class="fxd-rays"></div>
-<div class="fxd-steps"><div class="fxd-steps-title">${HEAT_LABEL.venue}</div><div class="fxd-gauge"></div>${[0, 1, 2, 3, 4]
-  .map((i) => `<div class="fxd-step" style="top:${(4 - i) * 102}px;width:${[196, 204, 212, 222, 236][i]}px"><b>${'★'.repeat(i + 1)}</b><em></em></div>`)
+<div class="fxd-steps"><div class="fxd-steps-title">${HEAT_LABEL.venue}</div>${([0, 1, 2, 3] as const)
+  .map((i) => `<div class="fxd-step" data-t="${i}" style="top:${(3 - i) * STEP_PITCH}px;--c:${TIER_COLOR[i]}"><em>${TIER_SHAPE[i]}</em><b>${GAUGE_WORD[i]}</b></div>`)
   .join('')}</div>
 <div class="fxd-dim"></div>
 <div class="fxd-stage">
@@ -501,6 +511,8 @@ export class DrawMachine {
   private readonly cutSlash: HTMLElement
 
   private heat: Tier = 0
+  private lit = -1 // 目盛りの、点いているいちばん上の段（-1 は、どれも点いていない）
+  private litAt = -1e9 // 最後に段が点いた時刻（実時間）
   private isBack = true // カードが裏（待機中・金の箔）を向いている
   private angle = 180 // カードの Y 回転（裏返すたびに 180 足す）
   private appeared = false
@@ -607,7 +619,22 @@ export class DrawMachine {
   }
 
   // 番号の着地。止まり方は今の状態（回っている・「？」で止まっている・金の箔で裏）で変わる
-  async reveal(n: number, tier: Tier): Promise<void> {
+  async reveal(n: number, tier: Tier, o: RevealOptions = {}): Promise<void> {
+    // onLand は必ず 1 回だけ呼ぶ（公開が途中で打ち切られたときも。脇の欄が番号を出しそこねないように）
+    let landed = false
+    const land = (): void => {
+      if (landed) return
+      landed = true
+      o.onLand?.()
+    }
+    try {
+      await this.land(n, tier, o.result, land)
+    } finally {
+      land()
+    }
+  }
+
+  private async land(n: number, tier: Tier, result: string | undefined, onLand: () => void): Promise<void> {
     if (this.dead) return
     const t = tierOf(tier)
     this.tl.cancel()
@@ -622,8 +649,8 @@ export class DrawMachine {
     for (const node of [this.telopEl, this.ecg, this.dim]) node.classList.remove('on')
     this.el.classList.remove('is-rise', 'is-ma')
     this.back.classList.remove('has-q')
-    this.setHeat(t, true)
     this.appeared = true
+    this.setHeat(t, true)
     // 着地までの時間は fx/landing.ts の数字で決める（スマホの手元の演出も、同じ数字で同じ時刻に着地する）
     if (this.isBack || this.rm) {
       // 裏（金の箔・待機中）からは、めくって見せる。金は一瞬ためてから
@@ -651,6 +678,9 @@ export class DrawMachine {
     }
     if (tl.cancelled) return
     this.impact(t)
+    onLand()
+    // 番号が出たら、結果が主役: カードの帯を「何が起きたか」の言葉に替える
+    if (result) tl.at(280, () => this.showResult(result))
     await tl.wait([360, 480, 640, 820][t])
     if (tl.cancelled) return
     if (this.ducked) {
@@ -729,6 +759,7 @@ export class DrawMachine {
   // 登場: 待機中の裏の札をめくって表にする。入り方は 3 通りから選ぶ
   private appear(): void {
     this.appeared = true
+    this.lightTo(this.heat)
     this.strip.jumpTo(DASH)
     this.view.sync(this.strip)
     const d = this.dir
@@ -765,7 +796,7 @@ export class DrawMachine {
   // 保留変化: 枠の色が上がり、札の帯が弾む
   private holdChange(t: Tier): void {
     sfx.holdChange(t)
-    this.anim(this.badge, [{ transform: 'translateX(-50%) scale(1.7)' }, { transform: 'translateX(-50%) scale(1)' }], 360, {
+    this.anim(this.badge, [{ transform: 'scale(1.35)' }, { transform: 'scale(1)' }], 360, {
       easing: 'cubic-bezier(.2,1.5,.4,1)',
     })
     this.punch(0.04)
@@ -773,20 +804,43 @@ export class DrawMachine {
     this.burst(CX, CY + 222, 30, t, 6)
   }
 
-  // ステップアップ: 下から 1 段ずつ点く。段が上がるほど、札の跳ね・火花・カードの揺れを大きくする
+  // ステップ: 期待が高まる合図。色（段階）が上がる拍なら、目盛りが下から順に点く（setHeat が点ける）。
+  // 上がらない拍では、いまの段が小さく弾むだけにする（段数そのものは見せない。目盛りは段階と 1 対 1）
   private step(i: number, t: Tier): void {
     const k = clamp(i, 0, 4)
-    const plate = this.plates[k]
     sfx.step(k, t)
-    plate.style.setProperty('--c', TIER_COLOR[t])
+    this.punch(0.02 + k * 0.012)
+    if (k >= 2) this.glare()
+    if (performance.now() - this.litAt < 80) return // この拍で段が点いた
+    const plate = this.plates[this.heat]
+    if (!plate) return
+    this.anim(plate, [{ transform: 'skewX(-10deg) scale(1)' }, { transform: 'skewX(-10deg) scale(1.06)', offset: 0.35 }, { transform: 'skewX(-10deg) scale(1)' }], 260, {
+      easing: 'ease-out',
+    })
+    this.burst(STEP_X + 190, stepY(this.heat), 10 + k * 4, this.heat, 4 + k)
+  }
+
+  // 目盛りを、段階 to の段まで下から順に点ける
+  private lightTo(to: Tier): void {
+    const top = Math.min(3, to)
+    for (let k = this.lit + 1, n = 0; k <= top; k++, n++) {
+      if (n === 0) this.lightPlate(k)
+      else this.tl.at(n * 150, () => this.lightPlate(k))
+    }
+    this.lit = Math.max(this.lit, top)
+  }
+
+  // 1 段が点く: 札が跳ねて、光の帯が横切り、火花が出る。上の段ほど大きく
+  private lightPlate(k: number): void {
+    const plate = this.plates[k]
+    if (!plate || plate.classList.contains('on')) return
+    this.litAt = performance.now()
     plate.style.setProperty('--sd', `${Math.round(this.tl.ms(560))}ms`)
     plate.classList.add('on')
-    plate.classList.toggle('hot', t >= 3)
-    const em = plate.querySelector('em')
-    if (em) em.textContent = TIER_SHAPE[t]
+    plate.classList.toggle('hot', k >= 3)
     replay(plate, 'sweep')
-    this.stepsEl.style.setProperty('--fill', String((k + 1) / 5))
-    const s = 1.3 + k * 0.1
+    if (k === 0) return // 青（静か）は、静かに点く
+    const s = 1.2 + k * 0.08
     this.anim(
       plate,
       [
@@ -794,14 +848,14 @@ export class DrawMachine {
         { transform: 'skewX(-10deg) scale(.95) rotateX(0deg)', offset: 0.6 },
         { transform: 'skewX(-10deg) scale(1)' },
       ],
-      300 + k * 30,
+      300 + k * 40,
       { easing: 'cubic-bezier(.2,1.2,.4,1)' },
     )
-    this.burst(STEP_X, stepY(k), 16 + k * 12, t, 5 + k * 1.6)
-    this.punch(0.02 + k * 0.012)
-    if (k >= 2) this.glare()
-    if (k >= 3) this.ring(440 + 60 * (k - 3), 0, 4 + k)
-    if (k >= 4 && !this.rm) this.fx.rise(40, this.colors(t), STEP_X - 110, STEP_X + 110, stepY(k) + 20)
+    this.burst(STEP_X, stepY(k), 18 + k * 14, k as Tier, 5 + k * 2)
+    if (k >= 3) {
+      this.ring(480, 0, 7)
+      if (!this.rm) this.fx.rise(40, this.colors(3), STEP_X - 200, STEP_X + 200, stepY(k) + 20)
+    }
   }
 
   // 疑似連: 減速して「？」で止まりかけ →「まだ止まらない！」→ 回り直す。回数が増えるほど派手に
@@ -821,7 +875,8 @@ export class DrawMachine {
     this.showNext(i, p.show)
     sfx.nextChime()
     this.punch(0.05 + 0.02 * i)
-    this.burst(CX, CY + 150, 24 + 16 * i, this.heat, 7 + i)
+    // 火花は札の外（左右の端の先）に出す。文字には重ねない
+    for (const x of [CX - 400, CX + 400]) this.burst(x, CY + 108, 12 + 8 * i, this.heat, 6 + i)
     if (i >= 1) this.ring(420 + 50 * i, 0, 4)
     await tl.wait(p.rest)
     if (tl.cancelled || this.rm || this.isBack) return
@@ -836,11 +891,13 @@ export class DrawMachine {
     this.solo(
       this.next,
       [
+        // 半透明の時間を短くする（下の「？」が透けて、文字が読みにくくならないように）
         { transform: 'translate(-50%,-50%) scale(.3) rotate(-10deg)', opacity: 0 },
+        { transform: 'translate(-50%,-50%) scale(.8) rotate(-4deg)', opacity: 1, offset: 0.1 },
         { transform: 'translate(-50%,-50%) scale(1.18) rotate(2deg)', opacity: 1, offset: 0.28 },
         { transform: 'translate(-50%,-50%) scale(1)', opacity: 1, offset: 0.42 },
-        { transform: 'translate(-50%,-50%) scale(1)', opacity: 1, offset: 0.8 },
-        { transform: 'translate(-50%,-90%) scale(1.04)', opacity: 0 },
+        { transform: 'translate(-50%,-50%) scale(1)', opacity: 1, offset: 0.9 },
+        { transform: 'translate(-50%,-80%) scale(1.04)', opacity: 0 },
       ],
       d,
       'ease-out',
@@ -849,8 +906,11 @@ export class DrawMachine {
   }
 
   // カットイン: 斜めの帯が走り抜ける（緑「リーチが増えるかも」、赤「ビンゴが出るかも！」、金「ビンゴが出そう！」）
-  private cutin(t: Tier, slot: number): void {
-    const word = TIER_WORD[t] || TIER_WORD[1]
+  private cutin(tier: Tier, slot: number): void {
+    // カットインの色と言葉は、目盛り・帯と必ずそろえる（いまの段階より低い言葉は出さない）
+    const t = Math.max(1, tier, this.heat) as Tier
+    this.setHeat(t)
+    const word = TIER_WORD[t]
     const d = clamp(slot, 560, 980)
     const dir = this.dir
     const ang = pickOne([-9, -7, 7, 9])
@@ -911,7 +971,8 @@ export class DrawMachine {
     tl.at(d, () => this.cut.classList.remove('on'))
   }
 
-  // 群予告: 裏向きのカードの群れが、奥行きをつけて画面を横切る
+  // 群予告: 裏向きのカードの群れが、奥行きをつけて横切る。飛ぶのは抽選機の領域（x 40〜1240、y 90〜790）の中だけ
+  // （.fxd-flock がその枠で切り取る。座標は枠の中の値）。目盛りの見出しの行にもかからない高さを飛ぶ
   private flock(slot: number): void {
     sfx.flutter()
     if (this.rm) return this.telop('カードの群れが横切った！')
@@ -923,17 +984,17 @@ export class DrawMachine {
       const c = el('div', z < 0.8 ? 'fxd-fc far' : 'fxd-fc')
       c.style.zIndex = String(Math.round(z * 10))
       this.flockEl.append(c)
-      const y0 = rand(110, 740)
-      const y1 = y0 + rand(-170, 110)
-      const x0 = dir > 0 ? -220 : 2140
-      const x1 = dir > 0 ? 2140 : -220
+      const y0 = rand(290, 600)
+      const y1 = clamp(y0 + rand(-120, 90), 290, 610)
+      const x0 = dir > 0 ? -130 : 1330
+      const x1 = dir > 0 ? 1330 : -130
       const r0 = rand(-40, 40)
       const r1 = r0 + dir * rand(120, 300)
       const a = this.anim(
         c,
         [
           { transform: `translate3d(${x0}px,${y0}px,0) rotate(${r0}deg) scale(${z})` },
-          { transform: `translate3d(${(x0 + x1) / 2}px,${(y0 + y1) / 2 + rand(-90, 90)}px,0) rotate(${(r0 + r1) / 2}deg) scale(${z})` },
+          { transform: `translate3d(${(x0 + x1) / 2}px,${(y0 + y1) / 2 + rand(-60, 60)}px,0) rotate(${(r0 + r1) / 2}deg) scale(${z})` },
           { transform: `translate3d(${x1}px,${y1}px,0) rotate(${r1}deg) scale(${z})` },
         ],
         (d * rand(0.8, 1.05)) / Math.sqrt(z),
@@ -1209,7 +1270,8 @@ export class DrawMachine {
     while (this.flyers.childElementCount > 6) this.flyers.firstElementChild?.remove()
     const side = (this.flickSide = -this.flickSide)
     const dx = side * rand(420, 600)
-    const dy = -rand(120, 300)
+    // 左へ飛ぶ札は下向き（左上の「会場の期待度」の見出しと HUD を隠さない）。右へ飛ぶ札は上向き
+    const dy = side < 0 ? rand(60, 220) : -rand(120, 300)
     const rot = side * rand(18, 40)
     const a = this.anim(
       f,
@@ -1292,8 +1354,20 @@ export class DrawMachine {
     this.heat = t
     this.el.dataset.heat = String(t)
     this.mark.textContent = TIER_SHAPE[t]
-    this.badge.innerHTML = `<i>${TIER_SHAPE[t]}</i><b>${TIER_WORD[t]}</b>`
+    // カードの帯: 「会場」の札 ＋ 形 → 言葉（スマホの「あなた」の段と同じ形）
+    this.badge.classList.remove('is-result')
+    this.badge.innerHTML = `<small>会場</small><span><i>${TIER_SHAPE[t]}</i><b>${GAUGE_WORD[Math.min(3, t)]}</b></span>`
+    if (this.appeared) this.lightTo(t)
     if (up && this.el.dataset.phase === 'run') this.glare()
+  }
+
+  // 番号が出たあと: 帯を結果の言葉に替える
+  private showResult(text: string): void {
+    this.badge.classList.add('is-result')
+    this.badge.innerHTML = `<small>会場</small><span><b>${escapeHtml(text)}</b></span>`
+    this.anim(this.badge, [{ transform: 'scale(1.3)' }, { transform: 'scale(.97)', offset: 0.6 }, { transform: 'scale(1)' }], 320, {
+      easing: 'cubic-bezier(.2,.9,.3,1)',
+    })
   }
 
   private flipTo(back: boolean, ms: number): void {
@@ -1335,12 +1409,8 @@ export class DrawMachine {
     this.el.classList.remove('is-rise', 'is-ma', 'is-done')
     this.rays.classList.remove('boost')
     this.back.classList.remove('is-gold', 'has-q')
-    for (const plate of this.plates) {
-      plate.classList.remove('on', 'hot', 'sweep')
-      const em = plate.querySelector('em')
-      if (em) em.textContent = ''
-    }
-    this.stepsEl.style.setProperty('--fill', '0')
+    for (const plate of this.plates) plate.classList.remove('on', 'hot', 'sweep')
+    this.lit = -1
     this.angle = 180
     this.isBack = true
     this.card.style.transform = 'rotateY(180deg)'

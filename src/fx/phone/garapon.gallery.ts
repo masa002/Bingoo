@@ -1,7 +1,7 @@
 import { registerGallery } from '../gallery'
 import type { Timeline } from '../runtime'
 import { DoubleChanceStage, type DoubleChanceWinner } from '../stage/doublechance'
-import { askEntry, playGarapon, type GaraponBall, type GaraponStats } from './garapon'
+import { askEntry, playFinalResult, playGarapon, type GaraponBall, type GaraponStats } from './garapon'
 
 // ダブルチャンス（ガラポン）のギャラリー。スマホと大画面の両方をここで登録する
 
@@ -18,14 +18,25 @@ function garapon(id: string, label: string, balls: GaraponBall[], stats: Garapon
   }
 }
 
+function final(id: string, label: string, stats: GaraponStats) {
+  return {
+    id,
+    group: PHONE,
+    label,
+    screen: 'phone' as const,
+    play: (host: HTMLElement, tl: Timeline) => playFinalResult(host, { speed: tl.speed, stats }),
+  }
+}
+
+// 景品の名前は、権威が送る形のまま（頭に賞の名前が付くものもある。大画面の側で外して、賞の名前の札にする）
 const SAMPLE: DoubleChanceWinner[] = [
-  { name: '佐藤 美咲', color: 'red', prize: 'モバイルバッテリー', isMe: false },
-  { name: '鈴木 大輔', color: 'red', prize: 'お菓子詰め合わせ', isMe: false },
+  { name: '佐藤 美咲', color: 'red', prize: 'ダブルチャンス賞 お菓子セット', isMe: false },
+  { name: '鈴木 大輔', color: 'red', prize: 'ダブルチャンス賞 ご当地グルメカタログギフト', isMe: false },
   { name: '高橋 結衣', color: 'gold', prize: 'ワイヤレスイヤホン', isMe: false },
   { name: 'あなた', color: 'red', prize: 'グルメカタログ', isMe: true },
   { name: '田中 翔太', color: 'red', prize: 'ドリップコーヒーセット', isMe: false },
+  { name: '渡辺 健', color: 'gold', prize: 'スマートウォッチ', isMe: false },
   { name: '伊藤 さくら', color: 'rainbow', prize: '特賞 温泉旅館ペア宿泊券', isMe: false },
-  { name: '渡辺 健', color: 'red', prize: 'ハンドクリーム', isMe: false },
 ]
 
 const MORE_NAMES = ['山本 七海', '中村 蓮', '小林 陽菜', '加藤 悠真', '吉田 葵', '山田 湊', '佐々木 結菜', '山口 颯', '松本 芽依', '井上 樹', '木村 凛', '林 大和', '斎藤 澪']
@@ -71,6 +82,20 @@ registerGallery(
   ),
   garapon('garapon-won', 'ガラポン: 本編で景品あり＋はずれ', [{ color: 'white' }], { hits: 15, maxReach: 2, nearMiss: 0, won: 'スマートウォッチ' }),
   {
+    id: 'garapon-outro',
+    group: PHONE,
+    label: 'ガラポン: 大画面の締めを待つ（outro。玉の結果のあと 6 秒待って、あなたの結果へ）',
+    screen: 'phone',
+    play: (host, tl) => {
+      // 本番では、大画面の締め（おつかれさまでした）で解決する
+      const outro = tl.wait(16000)
+      return playGarapon(host, { speed: tl.speed, balls: [{ color: 'gold', prize: 'ロボット掃除機' }], stats: { hits: 10, maxReach: 2, nearMiss: 2 }, outro })
+    },
+  },
+  final('garapon-final-prize', 'あなたの結果（エントリーなし）: 景品あり', { hits: 15, maxReach: 2, nearMiss: 0, won: 'スマートウォッチ', rank: 4 }),
+  final('garapon-final-rank', 'あなたの結果（エントリーなし）: 景品なし・ビンゴ 第 12 位', { hits: 14, maxReach: 3, nearMiss: 1, rank: 12 }),
+  final('garapon-final-none', 'あなたの結果（エントリーなし）: 景品なし（またの機会に！）', { hits: 9, maxReach: 2, nearMiss: 3 }),
+  {
     id: 'garapon-flow',
     group: PHONE,
     label: '流れ: エントリー → ガラポン（金）',
@@ -86,7 +111,7 @@ registerGallery(
   {
     id: 'doublechance-flow',
     group: STAGE,
-    label: '流れ: エントリー → 回す → 当選者 → おつかれさま',
+    label: '流れ: エントリー → 回す → 当選者（並んだあと 5 秒 読み上げる）→ おつかれさま',
     screen: 'stage',
     play: async (host, tl) => {
       const s = new DoubleChanceStage(host, { speed: tl.speed })
@@ -98,6 +123,9 @@ registerGallery(
       await tl.wait(7000)
       if (tl.cancelled) return s.destroy()
       for (const w of SAMPLE) s.addWinner(w)
+      // 本番では、当選者が並んだあと、司会の「次へ」を待ってから finish() を呼ぶ
+      await tl.wait(900 + SAMPLE.length * 900 + 600 + 5000)
+      if (tl.cancelled) return s.destroy()
       await s.finish()
       if (tl.cancelled) s.destroy()
     },
@@ -117,7 +145,7 @@ registerGallery(
   {
     id: 'doublechance-many',
     group: STAGE,
-    label: '当選者が多いとき（20 人。古い行から畳む）',
+    label: '当選者が多いとき（20 人。古い行から畳む。特賞は最後に大きく）',
     screen: 'stage',
     play: async (host, tl) => {
       const s = new DoubleChanceStage(host, { speed: tl.speed })
@@ -129,7 +157,12 @@ registerGallery(
       MORE_NAMES.forEach((name, i) =>
         list.push({ name, color: i % 6 === 2 ? 'gold' : 'red', prize: MORE_PRIZES[i % MORE_PRIZES.length], isMe: false }),
       )
+      // 権威と同じく、良い景品ほど最後に出す
+      const rank = { white: 0, red: 1, gold: 2, rainbow: 3 }
+      list.sort((a, b) => rank[a.color] - rank[b.color])
       for (const w of list) s.addWinner(w)
+      await tl.wait(900 + list.length * 900 + 600 + 4000)
+      if (tl.cancelled) return s.destroy()
       await s.finish()
       if (tl.cancelled) s.destroy()
     },

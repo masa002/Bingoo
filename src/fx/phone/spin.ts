@@ -11,8 +11,10 @@ import './spin.css' // card.css・aori.css より後に読み込む（カード�
 // 手元の抽選演出（390×844 のスマホ画面に重ねる）。この画面が答える問いは 1 つ: 「この番号は、自分のカードに当たりそうか」。
 // 大画面と同じ拍の列（beats）を同じ時刻でなぞり、色と「どこまで上がるか」だけを、自分のカードにとっての段階（tier）に合わせる。
 // 入力は受けない（タップは下へ通す）。
-//   - 主役の表示は「あなたの期待度」1 つ（自分の段階。言葉は MY_TIER_WORD: 当たるかも？ → リーチかビンゴかも！ → ビンゴのチャンス！
-//     → ビンゴ確定！）。大画面の段階は、小さな 1 行（「会場: ビンゴが出そう！」）にまとめる
+//   - 主語を形で分ける: 「外は会場、内は自分」。画面のふちの光は会場の色（大画面と同じ色）、内側のパネル（リールの枠・自分の段）は
+//     自分の色。パネルの頭に、同じ形の 2 段を常に出す:「会場 ◆ ビンゴが出るかも！」（TIER_WORD）と
+//     「あなた ▲ 当たるかも？」（MY_TIER_WORD: 当たるかも？ → リーチかビンゴかも！ → ビンゴのチャンス！ → ビンゴ確定！）。
+//     自分の段の右には、期待度のランプ（▲ ◆ ★ ✦）が並ぶ。カットインには「あなたに」の札を付ける
 //   - 大画面より低い段階なら途中で上がり止まるか、静かなまま。高ければ（自分のリーチ・ビンゴに絡む回）手元だけで上げる（昇格！）。
 //     虹は自分のビンゴ確定のときだけ（時が止まる → 窓のガラスにヒビ → 「ビンゴ確定！」）
 //   - オリパのお約束の合図:
@@ -62,7 +64,6 @@ const MAX_RPS = 13 // 手元のリールの見た目の速さの上限（コマ 
 const ROW = 64 // リールの 1 コマの高さ（px）
 const RAISE_GAP = 900 // 自分の段階を上げる間隔の最小（演出上の ms）。大きな演出が重なりすぎないように
 const HEART_MS = 625 // 大画面の鼓動の間隔（96 bpm）
-const COL = ['#ff5a5a', '#ffb84d', '#3ccf6e', '#3aa8ff', '#a85aff'] as const // B I N G O の玉の色（aori.ts の BINGO の玉と同じ）
 const LIGHT: Readonly<Record<Tier, string>> = { 0: '#93c5fd', 1: '#86efac', 2: '#fca5a5', 3: '#fff4cc', 4: '#ffffff' }
 const COLORS: Readonly<Record<Tier, readonly string[]>> = {
   0: ['#3b82f6', '#9cc3ff', '#ffffff'],
@@ -71,8 +72,9 @@ const COLORS: Readonly<Record<Tier, readonly string[]>> = {
   3: GOLD,
   4: RAINBOW,
 }
-// 「あなたの期待度」の言葉（青はまだ何も言わない）
-const LAMP_WORD = ['抽選中…', MY_TIER_WORD[1], MY_TIER_WORD[2], MY_TIER_WORD[3], MY_TIER_WORD[4]] as const
+// 2 段の言葉（青は、会場も自分も「静か」）
+const LAMP_WORD = ['静か', MY_TIER_WORD[1], MY_TIER_WORD[2], MY_TIER_WORD[3], MY_TIER_WORD[4]] as const
+const VENUE_WORD = ['静か', TIER_WORD[1], TIER_WORD[2], TIER_WORD[3], TIER_WORD[4]] as const
 // 結果は、何が起きたかをそのまま言う
 const HERO_TEXT: Readonly<Record<Exclude<AoriOutcome, 'none'>, string>> = {
   hit: 'カードにヒット！',
@@ -83,17 +85,8 @@ const HERO_TEXT: Readonly<Record<Exclude<AoriOutcome, 'none'>, string>> = {
 const OUT_POWER: Readonly<Record<AoriOutcome, number>> = { none: 0, hit: 0, reach: 1, double: 2, bingo: 3 }
 const FAIL_TEXT = 'はずれ…'
 const UP_TAG = '<em class="fxs-up">昇格！</em>' // オリパのお約束: 途中で色が上がる
-
-// 砕けるときのかけら（段階のランプを % で分けた多角形。すき間なく敷き詰める）
-const SHARDS: readonly (readonly [number, number])[][] = [
-  [[0, 0], [38, 0], [30, 45], [0, 60]],
-  [[38, 0], [70, 0], [55, 40], [30, 45]],
-  [[70, 0], [100, 0], [100, 35], [55, 40]],
-  [[0, 60], [30, 45], [42, 100], [0, 100]],
-  [[30, 45], [55, 40], [68, 70], [42, 100]],
-  [[55, 40], [100, 35], [100, 75], [68, 70]],
-  [[68, 70], [100, 75], [100, 100], [42, 100]],
-]
+// カットインの頭に付ける札。大画面の「ビンゴが出そう！」（会場の話）と、だれの話かで見分けられるようにする
+const tagsHtml = (up: boolean): string => `<span class="fxs-tags"><em class="fxs-me">あなたに</em>${up ? UP_TAG : ''}</span>`
 
 const clamp = (x: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, x))
 const pickOne = <T>(items: readonly T[]): T => items[Math.floor(Math.random() * items.length)]
@@ -107,12 +100,12 @@ function codeHtml(c: Code): string {
   if (c === Q) return '<b class="fxs-q">?</b>'
   if (c === DASH) return '<b class="fxs-dash">--</b>'
   if (c <= 0) return ''
-  return `<i class="fxs-l" style="--b:${COL[colOf(c)]}">${letterOf(c)}</i><b class="fxs-n">${c}</b>`
+  return `<i class="fxs-l">${letterOf(c)}</i><b class="fxs-n">${c}</b>`
 }
 
 // 叩きつける段階の言葉（自分のカードの話）。up は昇格（途中で色が上がった）
 function emblemHtml(t: Tier, up: boolean): string {
-  return `${up ? UP_TAG : ''}${txt(`${TIER_SHAPE[t]}${MY_TIER_WORD[t]}`)}${t === 4 ? '<small>あなたのカードがそろいます</small>' : ''}`
+  return `${tagsHtml(up)}${txt(`${TIER_SHAPE[t]}${MY_TIER_WORD[t]}`)}${t === 4 ? '<small>あなたのカードがそろいます</small>' : ''}`
 }
 
 // 軽い振動（Android）。ユーザーが画面に触れる前は呼ばない（ブラウザが止めて警告を出すため）
@@ -582,8 +575,10 @@ export class HandSpin {
       <div class="fxs-flock"></div>
       <div class="fxs-body${waits ? ' has-wait' : ''}">
         <div class="fxs-head">
-          <div class="fxs-cap"><b>${HEAT_LABEL.mine}</b><span class="fxs-meter">${'<i></i>'.repeat(4)}</span><span class="fxs-venue">会場: <i></i><b></b></span></div>
-          <span class="fxs-lamp"></span>
+          <div class="fxs-who fxs-venue"><small>会場</small><i></i><b></b></div>
+          <div class="fxs-who fxs-lamp"><small>あなた</small><i></i><b></b><span class="fxs-meter" title="${HEAT_LABEL.mine}">${([1, 2, 3, 4] as const)
+            .map((k) => `<u data-k="${k}">${TIER_SHAPE[k]}</u>`)
+            .join('')}</span></div>
         </div>
         <div class="fxs-win">
           <div class="fxs-reel">${'<div class="fxs-row"></div>'.repeat(5)}</div>
@@ -618,7 +613,7 @@ export class HandSpin {
       emblem: $('.fxs-emblem'),
       body: $('.fxs-body'),
       lamp: $('.fxs-lamp'),
-      meter: [...this.el.querySelectorAll<HTMLElement>('.fxs-meter i')],
+      meter: [...this.el.querySelectorAll<HTMLElement>('.fxs-meter u')],
       venue: $('.fxs-venue'),
       win: $('.fxs-win'),
       reel: $('.fxs-reel'),
@@ -804,21 +799,7 @@ export class HandSpin {
     this.flashed = true
     this.el.classList.add('is-fail')
     this.fadeAura(tl, 400)
-    const miss = el('div', 'fxs-fail', `<b>はずれ…？</b>`)
-    p.fx.append(miss)
-    void play(
-      miss,
-      still
-        ? [{ opacity: 0 }, { opacity: 1 }]
-        : [
-            { transform: 'translate(-50%, -50%) translateY(-50px)', opacity: 0 },
-            { transform: 'translate(-50%, -50%) translateY(6px)', opacity: 1, offset: 0.6 },
-            { transform: 'translate(-50%, -50%) translateY(0px)', opacity: 1 },
-          ],
-      300,
-      tl,
-      { fill: 'backwards' },
-    )
+    const miss = this.missPlate(tl, '<b>はずれ…？</b>')
     await tl.wait(480)
     if (tl.cancelled) return
     // プチュン: 音が切れるところ（0.30 秒）で、画面が落ちきる
@@ -963,7 +944,7 @@ export class HandSpin {
     this.bandAt = this.now()
     this.bandTier = t
     p.cut.dataset.t = String(t)
-    word.innerHTML = `${up ? UP_TAG : ''}${txt(`${TIER_SHAPE[t]}${MY_TIER_WORD[t]}`)}`
+    word.innerHTML = `${tagsHtml(up)}${txt(`${TIER_SHAPE[t]}${MY_TIER_WORD[t]}`)}`
     // 言葉が長いので、画面の幅に収まる大きさにする
     word.style.fontSize = ''
     const k = this.fit(word)
@@ -1543,7 +1524,7 @@ export class HandSpin {
     // 復活のあとは、青のままだった回でも成功の音を鳴らす（revive の和音が、ここでつながる）
     if (t >= 1 || revived) sfx.aoriSuccess(Math.max(1, t) as Tier)
     vibrate(power >= 3 ? 45 : 25)
-    this.el.classList.add('is-win')
+    this.el.classList.add('is-win', 'is-hero') // 言葉が出ている間は、頭の 2 段を消す（重ねない）
     const hero = el('div', 'fxs-hero', txt(HERO_TEXT[outcome]))
     hero.dataset.t = String(revived ? 3 : t) // 復活した当たりは、金の文字で祝う
     hero.style.top = `${wb.y + 2}px`
@@ -1644,7 +1625,7 @@ export class HandSpin {
     return null
   }
 
-  // あおったのに外れた（確変失敗のように）: 光がしぼみ、ランプが砕けて、ちょっと情けない文字が落ちてくる
+  // あおったのに外れた: 光がしぼみ、自分の段の色が抜けて、パネルの中に「はずれ…」が出る
   private async fail(tl: Timeline, label: string): Promise<void> {
     const p = this.parts
     if (!p) return
@@ -1654,104 +1635,58 @@ export class HandSpin {
     this.px?.clear()
     this.fadeAura(tl, 520)
     if (!still) {
+      // 自分の段がしぼんで、色が抜ける（砕いて散らさない。外れは毎回のように出るので、静かに）
       settle(p.lamp)
       void play(
         p.lamp,
         [
-          { transform: 'scale(1, 1) translateY(0px)', filter: 'grayscale(0) brightness(1)' },
-          { transform: 'scale(1.12, 0.88) translateY(0px)', filter: 'grayscale(0.3) brightness(1)', offset: 0.2 },
-          { transform: 'scale(0.8, 0.76) translateY(3px)', filter: 'grayscale(1) brightness(0.75)' },
+          { transform: 'scale(1, 1)', filter: 'grayscale(0) brightness(1)' },
+          { transform: 'scale(1.02, 0.86)', filter: 'grayscale(0.4) brightness(1)', offset: 0.3 },
+          { transform: 'scale(1, 1)', filter: 'grayscale(1) brightness(0.8)' },
         ],
         460,
         tl,
         { fill: 'forwards', easing: 'cubic-bezier(.3,.6,.4,1)' },
       )
       const b = boxIn(p.lamp, this.el)
-      this.onoma('プシュ～', b.x + b.w + 14, b.y + 2, tl)
+      this.onoma('プシュ～', b.x + b.w - 40, b.y - 8, tl)
     }
-    await tl.wait(still ? 150 : 480)
+    await tl.wait(still ? 150 : 420)
     if (tl.cancelled) return
-    if (!still) this.shatter(tl, p.lamp)
-    const msg = el('div', 'fxs-fail', `<b>${FAIL_TEXT}</b><small>${escapeHtml(label)} は、あなたのカードにありません</small><i class="fxs-sweat"></i>`)
-    p.fx.append(msg)
-    if (still) {
-      await tl.wait(1300)
-      if (!tl.cancelled) await this.retract(tl)
-      return
-    }
-    // ドスンと落ちてきて、しょんぼり傾く
-    void play(
-      msg,
-      [
-        { transform: 'translate(-50%, -50%) translateY(-70px) rotate(0deg)', opacity: 0 },
-        { transform: 'translate(-50%, -50%) translateY(8px) rotate(0deg)', opacity: 1, offset: 0.3 },
-        { transform: 'translate(-50%, -50%) translateY(-4px) rotate(0deg)', opacity: 1, offset: 0.42 },
-        { transform: 'translate(-50%, -50%) translateY(0px) rotate(0deg)', opacity: 1, offset: 0.55 },
-        { transform: 'translate(-50%, -50%) translateY(6px) rotate(-7deg)', opacity: 1 },
-      ],
-      1100,
-      tl,
-      { fill: 'forwards', easing: 'ease-out' },
-    )
-    void play(
-      msg.querySelector('.fxs-sweat')!,
-      [
-        { transform: 'rotate(45deg) translate(0px, 0px)', opacity: 0 },
-        { transform: 'rotate(45deg) translate(0px, 0px)', opacity: 1, offset: 0.3 },
-        { transform: 'rotate(45deg) translate(9px, 9px)', opacity: 0 },
-      ],
-      900,
-      tl,
-      { delay: 500, fill: 'backwards' },
-    )
-    await tl.wait(1350)
+    // 「はずれ…」は、下のパネルの中に、不透明で水平に出す（カードには乗せない。外れは抽選の大半で出るので、
+    // 毎回カードの数字が汚れて見えないように）。次につながる一言を添える
+    this.missPlate(tl, `<b>${FAIL_TEXT}</b><small>${escapeHtml(label)} は、あなたのカードにありません</small><em>次の番号に期待！</em>`)
+    await tl.wait(still ? 1300 : 1500)
     if (!tl.cancelled) await this.retract(tl)
+  }
+
+  // 外れの札（パネルの下の段。窓の下の一行と「あと O65」の位置を、不透明の札で覆う）
+  private missPlate(tl: Timeline, html: string): HTMLElement {
+    const plate = el('div', 'fxs-fail', html)
+    this.parts?.body.append(plate)
+    void play(
+      plate,
+      this.still
+        ? [{ opacity: 0 }, { opacity: 1 }]
+        : [
+            { transform: 'translateY(16px)', opacity: 0 },
+            { transform: 'translateY(-2px)', opacity: 1, offset: 0.7 },
+            { transform: 'translateY(0px)', opacity: 1 },
+          ],
+      280,
+      tl,
+      { fill: 'backwards', easing: 'ease-out' },
+    )
+    return plate
   }
 
   // 青（と、あおっていない外れ）: 番号を少し見せてから、静かに引っ込む
   private async quiet(tl: Timeline): Promise<void> {
     const n = this.n
-    if (n !== null) this.msg(`<b>${letterOf(n)} ${n}</b> は、${FAIL_TEXT}`)
+    if (n !== null) this.msg(`<b>${letterOf(n)} ${n}</b> は、${FAIL_TEXT} 次の番号に期待！`)
     this.fadeAura(tl, 300)
     await tl.wait(700)
     if (!tl.cancelled) await this.retract(tl)
-  }
-
-  // ランプを、かけらに分けて落とす
-  private shatter(tl: Timeline, node: HTMLElement): void {
-    const p = this.parts
-    if (!p) return
-    settle(node)
-    const t = node.style.transform
-    const base = t && t !== 'none' ? t : ''
-    const b = boxIn(node, this.el)
-    for (const poly of SHARDS) {
-      const s = node.cloneNode(true) as HTMLElement
-      s.classList.add('fxs-shard')
-      s.style.left = `${b.x}px`
-      s.style.top = `${b.y}px`
-      s.style.width = `${b.w}px`
-      s.style.height = `${b.h}px`
-      s.style.clipPath = `polygon(${poly.map(([x, y]) => `${x}% ${y}%`).join(', ')})`
-      p.fx.append(s)
-      const cx = poly.reduce((a, [x]) => a + x, 0) / poly.length
-      const dx = (cx - 50) * 1.4 + (Math.random() - 0.5) * 24
-      const dy = 90 + Math.random() * 110
-      const rot = (Math.random() - 0.5) * 90
-      void play(
-        s,
-        [
-          { transform: `${base} translate(0px, 0px) rotate(0deg)`, opacity: 1 },
-          { transform: `${base} translate(${dx * 0.35}px, ${-12 - Math.random() * 14}px) rotate(${rot * 0.3}deg)`, opacity: 1, offset: 0.22 },
-          { transform: `${base} translate(${dx}px, ${dy}px) rotate(${rot}deg)`, opacity: 0 },
-        ],
-        900,
-        tl,
-        { fill: 'forwards', easing: 'cubic-bezier(.35,.1,.7,1)' },
-      ).then(() => s.remove())
-    }
-    node.style.visibility = 'hidden'
-    sparkBurst(p.fx, b.x + b.w / 2, b.y + b.h / 2, tl, { count: 10, colors: ['#9aa3b8', '#c7cdd9', '#6b7390'], dist: 70, size: 6, ms: 700 })
   }
 
   // 擬音（「プシュ～」など）
@@ -1837,12 +1772,10 @@ export class HandSpin {
     const p = this.parts
     if (!p) return
     p.lamp.dataset.t = String(t)
-    p.lamp.innerHTML = `<i>${TIER_SHAPE[t]}</i><b>${LAMP_WORD[t]}</b>`
-    // 期待度の目盛り（4 段。虹はすべて点いて虹色になる）
-    p.meter.forEach((m, k) => {
-      m.classList.toggle('on', k < t)
-      m.dataset.t = String(t === 4 ? 4 : k + 1)
-    })
+    p.lamp.querySelector('i')!.textContent = TIER_SHAPE[t]
+    p.lamp.querySelector('b')!.textContent = LAMP_WORD[t]
+    // 期待度のランプ（▲ ◆ ★ ✦ の 4 つ。いまの段階まで点く）
+    p.meter.forEach((m, k) => m.classList.toggle('on', k < t))
     if (!pop || this.still) return
     void play(p.lamp, [{ transform: 'scale(1.45)' }, { transform: 'scale(0.94)', offset: 0.55 }, { transform: 'scale(1)' }], 360, this.tl, {
       easing: 'cubic-bezier(.2,.8,.3,1)',
@@ -1851,15 +1784,16 @@ export class HandSpin {
     sparkBurst(p.fx, b.x + b.w / 2, b.y + b.h / 2, this.tl, { count: 8, colors: COLORS[t], dist: 70, size: 8, ms: 520, shape: t >= 3 ? 'star' : 'diamond' })
   }
 
-  // 会場（大画面）の段階を、小さな 1 行で（「会場: ◆ ビンゴが出るかも！」）。色は戻さない（大画面と同じ）
+  // 会場（大画面）の段階: 頭の「会場」の段（大画面の帯と同じ形: 形 → 言葉）と、画面のふちの光の色。色は戻さない（大画面と同じ）
   private setVenue(h: Tier, pop: boolean, force = false): void {
     const p = this.parts
     if (!p || (!force && h <= this.venueHeat)) return
     this.venueHeat = h
+    this.el.dataset.venue = String(h)
     p.venue.dataset.t = String(h)
     p.venue.querySelector('i')!.textContent = TIER_SHAPE[h]
-    p.venue.querySelector('b')!.textContent = TIER_WORD[h] || '抽選中'
-    if (pop && !this.still) void play(p.venue, [{ opacity: 0.3 }, { opacity: 1 }], 300, this.tl)
+    p.venue.querySelector('b')!.textContent = VENUE_WORD[h]
+    if (pop && !this.still) void play(p.venue, [{ transform: 'scale(1.12)' }, { transform: 'scale(1)' }], 300, this.tl)
   }
 
   // 本体の中の一行（声かけ・大画面のテロップ）
@@ -1924,6 +1858,7 @@ export class HandSpin {
     this.el.replaceChildren()
     this.el.className = 'fxs'
     delete this.el.dataset.tier
+    delete this.el.dataset.venue
     delete this.el.dataset.phase
     this.el.style.removeProperty('--fxs-rise')
     this.parts = null

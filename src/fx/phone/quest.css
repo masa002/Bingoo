@@ -337,6 +337,17 @@
 }
 
 /* ---- 上の時計 -------------------------------------------------------------- */
+/* 残り時間のバーは金（大画面の金の輪と同じ色）。帯の上端に、大画面と同じ黄黒の警戒の帯を細く入れる（動かさない） */
+
+.fxq .fxq-hud::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 6px;
+  background: repeating-linear-gradient(-45deg, #ffc21a 0 8px, #17130a 8px 16px);
+}
 
 /* 名前とリーチの札の上に重ねる帯（下の画面が透けないように塗る） */
 .fxq .fxq-hud {
@@ -345,7 +356,7 @@
   right: 0;
   top: 28px;
   z-index: 5;
-  padding: 2px 14px 9px;
+  padding: 8px 14px 9px;
   opacity: 0;
   background: linear-gradient(180deg, rgba(8, 11, 28, 0.97), rgba(12, 16, 40, 0.97));
   box-shadow:
@@ -366,7 +377,7 @@
   gap: 3px;
   padding: 3px 8px 3px 6px;
   border-radius: 8px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 900;
   white-space: nowrap;
   color: #1a1405;
@@ -433,15 +444,7 @@
   display: block;
   border-radius: inherit;
   transform-origin: 0 50%;
-  background: linear-gradient(90deg, #16a34a, #5aff8c);
-}
-
-.fxq.is-half .fxq-fill {
-  background: linear-gradient(90deg, #e8930c, #ffd34d);
-}
-
-.fxq.is-hurry .fxq-fill {
-  background: linear-gradient(90deg, #ff5a2a, #ff9a3d);
+  background: linear-gradient(90deg, #d9a520, #f5c542 60%, #fff4cc);
 }
 
 /* 時計の下のひと言（「ラストスパート！」・コンボ） */
@@ -545,7 +548,7 @@
 
 .fxq .fxq-combo small {
   margin-top: 2px;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 900;
   letter-spacing: 1.5px;
   color: #c9d1f5;
@@ -583,6 +586,45 @@
   color: #fff;
 }
 
+/* 1 回も押していない人への促し。カードの外（「撃退 0 匹」の行の右。連続の数が出る場所）に出す */
+.fxq .fxq-row {
+  position: relative;
+}
+
+.fxq .fxq-nudge {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  display: none;
+  align-items: center;
+  gap: 12px;
+  height: 50px;
+  margin-top: -25px;
+  padding: 0 14px 0 8px;
+  border-radius: 14px;
+  white-space: nowrap;
+  color: #1a1400;
+  background: linear-gradient(180deg, #ffe08a, #f5c542);
+  box-shadow:
+    0 3px 0 rgba(0, 0, 0, 0.45),
+    0 0 16px rgba(245, 197, 66, 0.55);
+}
+
+.fxq .fxq-nudge.on {
+  display: flex;
+}
+
+.fxq .fxq-nudge b {
+  font-size: 19px;
+  font-weight: 900;
+}
+
+.fxq .fxq-nudge .fxq-finger {
+  position: relative;
+  flex: none;
+  width: 26px;
+}
+
 /* 狙われている（▲・橙）／狙われていない（✦・水色）。色だけでなく記号と文字でも分ける */
 .fxq .fxq-mission {
   display: flex;
@@ -607,7 +649,7 @@
 
 .fxq .fxq-mission small {
   display: block;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: #c9d1f5;
 }
@@ -804,7 +846,7 @@
 .fxq .fxq-howto-txt small {
   display: block;
   margin-top: 4px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: #ffe9b0;
 }
@@ -939,26 +981,26 @@
   line-height: 1.3;
 }
 
-/* まだ始まっていないこと（水色・文字で伝える。点滅はさせない） */
+/* まだ始まっていないこと（文字で伝える。点滅はさせない。水色は「あなた」の印なので使わない） */
 .fxq .fxq-wait {
   margin-top: 8px;
   padding: 7px 14px 8px;
   border-radius: 14px;
   text-align: center;
-  background: rgba(90, 210, 255, 0.14);
-  box-shadow: inset 0 0 0 1.5px rgba(90, 210, 255, 0.55);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.28);
 }
 
 .fxq .fxq-wait b {
   display: block;
   font-size: 17px;
   font-weight: 900;
-  color: #d6f5ff;
+  color: #fff;
 }
 
 .fxq .fxq-wait small {
   display: block;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: #c9d1f5;
 }
@@ -979,7 +1021,7 @@
   border-radius: inherit;
   transform-origin: 0 50%;
   transform: scaleX(0);
-  background: #5ad2ff;
+  background: #f5c542;
 }
 
 /* ---- 結果の札（下の点数と同じ場所） ------------------------------------------- */
@@ -1006,9 +1048,9 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 14px;
+  padding: 3px 16px;
   border-radius: 999px;
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 900;
 }
 
@@ -1062,33 +1104,47 @@
   color: #fff;
 }
 
-/* やられた: 落ち着いた藤色（悔しいが、重くしすぎない） */
+/* やられた: 灰青と ▼（悔しいが、重くしすぎない）。大画面の「やられた」と同じ色・形 */
+.fxq .fxq-res.is-lost {
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 2px rgba(148, 163, 184, 0.6);
+}
+
 .fxq .fxq-res.is-lost .fxq-res-head {
-  color: #dfe3ff;
-  background: rgba(139, 147, 201, 0.3);
+  color: #0f172a;
+  background: #94a3b8;
 }
 
 .fxq .fxq-res.is-lost .fxq-res-main > b {
   color: #ffb36b;
 }
 
-/* 守りきった: 金 */
+/* 次につながる一言 */
+.fxq .fxq-res-next {
+  margin-top: 10px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #e2e8f0;
+}
+
+/* 守りきった: 緑と ◆。大画面の「守りきった」と同じ色・形 */
 .fxq .fxq-res.is-win {
   box-shadow:
     0 12px 30px rgba(0, 0, 0, 0.5),
-    inset 0 0 0 2px rgba(245, 197, 66, 0.75),
-    0 0 26px rgba(245, 197, 66, 0.3);
+    inset 0 0 0 2px rgba(34, 197, 94, 0.85),
+    0 0 26px rgba(34, 197, 94, 0.3);
 }
 
 .fxq .fxq-res.is-win .fxq-res-head {
-  color: #3b2600;
-  background: linear-gradient(90deg, #f5c542, #fff0b0, #f5c542);
+  color: #052e14;
+  background: #22c55e;
 }
 
-/* 狙われていない: 水色 */
+/* 狙われていない: 「あなた」の印（水色の地に濃い文字） */
 .fxq .fxq-res.is-free .fxq-res-head {
-  color: #d6f5ff;
-  background: rgba(90, 210, 255, 0.22);
+  color: #06223a;
+  background: #5ad2ff;
 }
 
 .fxq .fxq-king {
@@ -1212,28 +1268,29 @@
   transform: translateX(-50%) rotate(45deg);
 }
 
-/* 守ったマスの金の盾 */
+/* 守ったマスの緑の盾（◆ 守った） */
 .fxq .fxq-guard {
   position: absolute;
   display: grid;
   place-items: center;
   align-content: center;
   border-radius: 40% 40% 50% 50% / 30% 30% 70% 70%;
-  color: #3b2600;
-  background: linear-gradient(160deg, #fff4cc, #f5c542 50%, #d9a520);
+  color: #052e14;
+  background: linear-gradient(160deg, #bbf7d0, #22c55e 55%, #15803d);
   box-shadow:
-    0 0 0 2px #fff8dc,
-    0 0 20px rgba(245, 197, 66, 0.8);
+    0 0 0 2px #dcfce7,
+    0 0 20px rgba(34, 197, 94, 0.8);
 }
 
 .fxq .fxq-guard b {
-  font-size: 28px;
+  font-size: 22px;
   line-height: 1;
 }
 
 .fxq .fxq-guard small {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 900;
+  line-height: 1.2;
 }
 
 /* ---- 真ん中の文字（警報・叩け！・そこまで！・防衛成功！） ------------------------ */
@@ -1254,8 +1311,11 @@
   text-align: center;
 }
 
+/* 見出しの型（共通の決まり）: 塗りは金のグラデーション、縁は濃い茶の 1 種類。種類ごとに変えるのは大きさだけ */
 .fxq .fxq-ban .fxa-txt {
   --sw: 0.2em;
+  --stroke: #2a1a05;
+  --fill: linear-gradient(180deg, #fff4cc, #f5c542 55%, #d9a520);
 }
 
 .fxq .fxq-ban.is-alarm {
@@ -1293,8 +1353,6 @@
 }
 
 .fxq .fxq-ban.is-alarm .fxq-ban-main .fxa-txt {
-  --stroke: #1a1405;
-  --fill: linear-gradient(180deg, #fffbe0 0%, #ffd34d 45%, #ff9a1a 100%);
   font-size: 36px;
 }
 
@@ -1303,16 +1361,12 @@
 }
 
 .fxq .fxq-ban.is-alarm .fxq-ban-sub .fxa-txt {
-  --stroke: #ff9a1a;
-  --fill: linear-gradient(180deg, #ffffff, #ffe9c2);
   --sw: 0.16em;
   font-size: 26px;
   letter-spacing: 6px;
 }
 
 .fxq .fxq-ban.is-go .fxa-txt {
-  --stroke: #3b1d06;
-  --fill: linear-gradient(180deg, #ffffff 0%, #fff15a 40%, #ff9a1a 100%);
   font-size: 66px;
   font-style: italic;
 }
@@ -1323,9 +1377,7 @@
 }
 
 .fxq .fxq-ban.is-count .fxq-cd-num .fxa-txt {
-  --stroke: #1a1405;
   --sw: 0.14em;
-  --fill: linear-gradient(180deg, #ffffff 0%, #fff15a 45%, #ff9a1a 100%);
   font-size: 132px;
   font-variant-numeric: tabular-nums;
 }
@@ -1336,7 +1388,7 @@
   margin: 6px auto 0;
   color: #ffe08a;
   background: rgba(5, 8, 20, 0.85);
-  box-shadow: inset 0 0 0 1.5px rgba(255, 194, 26, 0.7);
+  box-shadow: inset 0 0 0 1.5px rgba(245, 197, 66, 0.7);
 }
 
 /* 「タップで 叩け！」: 指で触ることが分かるように、上に小さく添える */
@@ -1345,50 +1397,20 @@
 }
 
 .fxq .fxq-ban.is-go .fxq-ban-pre .fxa-txt {
-  --fill: linear-gradient(180deg, #ffffff, #ffe9a8);
   font-size: 34px;
   font-style: normal;
   letter-spacing: 2px;
 }
 
-/* 1 回も押していない人への「モグラをタップ！」（下のモグラが見えるよう、帯は半分透かす） */
-.fxq .fxq-ban.is-nudge {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-  padding: 10px 0;
-  background: linear-gradient(90deg, rgba(8, 11, 28, 0), rgba(8, 11, 28, 0.72) 18%, rgba(8, 11, 28, 0.72) 82%, rgba(8, 11, 28, 0));
-}
-
-.fxq .fxq-ban.is-nudge .fxa-txt {
-  --stroke: #1a1405;
-  --fill: linear-gradient(180deg, #ffffff 0%, #ffe08a 60%, #ffc21a 100%);
-  font-size: 36px;
-}
-
-.fxq .fxq-ban.is-nudge .fxq-finger {
-  position: relative;
-  flex: none;
-  width: 40px;
-}
-
 .fxq .fxq-ban.is-end .fxa-txt {
-  --stroke: #0b1440;
-  --fill: linear-gradient(180deg, #ffffff 0%, #bfe6ff 55%, #5ad2ff 100%);
   font-size: 54px;
 }
 
 .fxq .fxq-ban.is-win .fxa-txt {
-  --stroke: #3b2600;
-  --fill: linear-gradient(180deg, #fffbe6 0%, #ffe08a 30%, #f5c542 55%, #b8860b 80%, #ffe08a 100%);
   font-size: 52px;
 }
 
 .fxq .fxq-ban.is-done .fxa-txt {
-  --stroke: #062a3a;
-  --fill: linear-gradient(180deg, #ffffff 0%, #bff2ff 50%, #5ad2ff 100%);
   font-size: 44px;
 }
 
@@ -1402,9 +1424,17 @@
   background: rgba(5, 8, 20, 0.75);
 }
 
+/* 守りきった: 見出しは金（型どおり）、添える札は緑と ◆ */
 .fxq .fxq-ban.is-win .fxq-ban-note {
-  color: #ffe08a;
-  box-shadow: inset 0 0 0 1.5px rgba(245, 197, 66, 0.7);
+  color: #bbf7d0;
+  background: rgba(5, 20, 12, 0.85);
+  box-shadow: inset 0 0 0 1.5px rgba(34, 197, 94, 0.85);
+}
+
+.fxq .fxq-ban.is-win .fxq-ban-note i {
+  margin-right: 6px;
+  font-style: normal;
+  color: #22c55e;
 }
 
 /* 全面の淡い光（守りきった瞬間に 1 回だけ） */

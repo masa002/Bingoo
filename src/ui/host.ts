@@ -19,17 +19,22 @@ const HOST_HTML = `
   <button class="hc-next">次へ ▶</button>
   <button class="hc-push" disabled>公開する</button>
   <div class="hc-row">
-    <label><input type="checkbox" class="hc-auto" /> 自動進行</label>
     <label><input type="checkbox" class="hc-sound" checked /> 音</label>
+    <button class="hc-new">新しいゲーム</button>
+  </div>
+  <p class="hc-keys">キー操作: Space 次へ ／ P 公開する</p>
+  <p class="hc-hash"></p>
+</section>
+<details class="dp" open>
+  <summary><b>操作パネル</b><i>DEMO</i><small>デモ専用（本番の主催卓にはありません）</small></summary>
+  <div class="dp-msg"></div>
+  <h4>進み方</h4>
+  <div class="hc-row">
+    <label><input type="checkbox" class="hc-auto" /> 自動進行</label>
   </div>
   <div class="hc-row hc-speed">速度
     <button data-speed="0.5">×0.5</button><button data-speed="1" class="on">×1</button><button data-speed="2">×2</button><button data-speed="4">×4</button>
   </div>
-  <p class="hc-keys">キー操作: Space 次へ ／ P 公開する</p>
-</section>
-<section class="dp">
-  <h3>操作パネル <small>デモ専用</small></h3>
-  <div class="dp-msg"></div>
   <h4>イベント（次の「次へ」で起きる）</h4>
   <div class="dp-ev">
     <button data-ev="wild">🌈 全員確定（虹玉）</button><button data-ev="mole">モグラ撃退クエスト</button><button data-ev="moleMe">モグラ撃退（自分が本当に狙われる）</button>
@@ -67,12 +72,13 @@ const HOST_HTML = `
     <label>シード <input class="dp-seed" spellcheck="false" /></label>
     <button class="dp-new">新しいゲーム</button>
   </div>
-</section>
+</details>
 `
 
 export class HostView {
   private readonly root: HTMLDivElement
   private pushReady = false
+  private hash = ''
 
   constructor(
     host: HTMLElement,
@@ -137,11 +143,13 @@ export class HostView {
     this.root.querySelectorAll<HTMLButtonElement>('[data-ff]').forEach((b) =>
       b.addEventListener('click', () => this.auth.fastForward(Number(b.dataset.ff))),
     )
-    this.$('.dp-new').addEventListener('click', () => {
-      const seed = this.$<HTMLInputElement>('.dp-seed').value.trim() || Math.random().toString(36).slice(2, 8)
+    const newGame = (seed: string) => {
       const num = (sel: string) => Number(this.$<HTMLSelectElement>(sel).value)
-      this.restart({ seed, size: num('.dp-size'), lower: num('.dp-lower'), upper: num('.dp-upper'), dc: num('.dp-dc') })
-    })
+      this.restart({ seed: seed || Math.random().toString(36).slice(2, 8), size: num('.dp-size'), lower: num('.dp-lower'), upper: num('.dp-upper'), dc: num('.dp-dc') })
+    }
+    this.$('.dp-new').addEventListener('click', () => newGame(this.$<HTMLInputElement>('.dp-seed').value.trim()))
+    // 主催コンソールの「新しいゲーム」は、いまの設定のまま、別の展開で始める
+    this.$('.hc-new').addEventListener('click', () => newGame(''))
     document.addEventListener('keydown', (e) => {
       const tag = (e.target as HTMLElement).tagName
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
@@ -177,7 +185,8 @@ export class HostView {
         this.$<HTMLSelectElement>('.dp-upper').value = String(s.upper)
         this.$<HTMLSelectElement>('.dp-dc').value = String(s.dc)
         this.$('.dp-msg').textContent = ''
-        this.status('受付中（「次へ」で締め切って開始）')
+        this.hash = m.deckHash
+        this.status('受付中 — 参加がそろったら「受付を締め切って開始」')
         break
       }
       case 'eventPlay':
@@ -217,19 +226,22 @@ export class HostView {
         else this.status(m.entries.some((e) => e.isMe) ? '景品の開封中（あなたのスマホで開けてください）' : '景品の開封中')
         break
       case 'idle':
-        this.status(`待機中 — 抽選 ${m.totals.drawCount} 回目まで終了`)
+        this.status(`待機中 — 抽選 ${m.totals.drawCount} 回目まで終了。「次へ」で次の抽選`)
+        break
+      case 'bulkDrawn':
+        this.status(`待機中 — 抽選 ${m.totals.drawCount} 回目まで進めました。「次へ」で次の抽選`)
         break
       case 'gameOver':
-        this.status('景品がなくなりました。「次へ」でダブルチャンス')
+        this.status('すべての景品の当選者が決まりました。「ダブルチャンスへ」で進む')
         break
       case 'dcEntry':
         this.status('ダブルチャンスのエントリー受付中（「次へ」で締め切り）')
         break
       case 'dcSpin':
-        this.status('ガラポン中')
+        this.status('ガラポン中 — このあと当選者を発表します')
         break
       case 'dcEnd':
-        this.status('おつかれさまでした（「新しいゲーム」でもう一度）')
+        this.status('おつかれさまでした。もう一度遊ぶなら「新しいゲーム」')
         break
       case 'notice':
         this.$('.dp-msg').textContent = m.text
@@ -251,11 +263,22 @@ export class HostView {
     const busy = auth.busy
     const phase = auth.phase
     const next = this.$<HTMLButtonElement>('.hc-next')
-    // 説明の画面を出している間は、同じボタンが「スタート」になる
+    // 司会の合図を待っている間（説明の画面、当選者の発表）は、同じボタンがその合図になる
     const holding = auth.holding
-    next.textContent = holding ? 'スタート ▶' : phase === 'over' ? 'ダブルチャンスへ ▶' : phase === 'dc-entry' ? 'エントリー締め切り ▶' : '次へ ▶'
+    next.textContent = holding
+      ? auth.holdLabel
+      : phase === 'reception'
+        ? '受付を締め切って開始 ▶'
+        : phase === 'over'
+          ? 'ダブルチャンスへ ▶'
+          : phase === 'dc-entry'
+            ? 'エントリー締め切り ▶'
+            : '次へ ▶'
     next.disabled = !holding && ((busy && phase !== 'dc-entry') || phase === 'dc-spin' || phase === 'done')
-    next.classList.toggle('start', holding)
+    if (holding && phase === 'dc-spin') this.status('当選者の発表中 — 読み上げが終わったら「締めくくりへ」')
+    // 終わったら、次に押すのは「新しいゲーム」
+    this.$('.hc-new').classList.toggle('primary', phase === 'done')
+    this.$('.hc-hash').textContent = this.hash ? `抽選順と景品の並びのハッシュ ${this.hash.slice(0, 16)}…${auth.isTampered ? '（デモ操作で変更あり）' : ''}` : ''
     this.$<HTMLButtonElement>('.hc-push').disabled = !this.pushReady
     this.$('.hc-push').classList.toggle('ready', this.pushReady)
     const playing = phase === 'reception' || phase === 'playing'
@@ -266,6 +289,7 @@ export class HostView {
     const deckNext = g.nextInDeck()
     this.$('.dp-grid').innerHTML = Array.from({ length: 75 }, (_, i) => {
       const n = i + 1
+      const head = i % 15 === 0 ? `<div class="dp-letter">${'BINGO'[i / 15]}<small>${n}〜${n + 14}</small></div>` : ''
       const drawn = g.isDrawn(n)
       const imp = impacts.get(n)
       const cls = ['dp-n']
@@ -275,7 +299,7 @@ export class HostView {
       if (imp?.newBingo) cls.push('hot')
       const me = imp ? (imp.me.bingo || imp.me.challenge ? '★' : imp.me.reach ? '●' : imp.me.hit ? '・' : '') : ''
       const info = imp && !drawn ? `<small>${imp.newBingo ? `<b class="b">B${imp.newBingo}</b>` : ''}<b class="r">R${imp.newReach}</b>${me}</small>` : ''
-      return `<button class="${cls.join(' ')}" data-n="${n}" ${drawn || busy || !playing ? 'disabled' : ''} title="${labelOf(n)}">${n}${info}</button>`
+      return `${head}<button class="${cls.join(' ')}" data-n="${n}" ${drawn || busy || !playing ? 'disabled' : ''} title="${labelOf(n)}">${n}${info}</button>`
     }).join('')
 
     this.root.querySelectorAll<HTMLButtonElement>('[data-tier]').forEach((b) => {

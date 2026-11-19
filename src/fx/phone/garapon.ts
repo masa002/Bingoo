@@ -8,8 +8,13 @@ import { GOLD, RAINBOW, TIER_COLOR, type BallColor } from '../theme'
 // 連打でヒートアップして、玉がコロンと出たら、熱がすっと冷めて落ち着いて終わる。
 //
 //   if (await askEntry(phone, { seconds: 30 })) {
-//     await playGarapon(phone, { balls: [{ color: 'red', prize: 'グルメカタログ' }], stats })
+//     await playGarapon(phone, { balls: [{ color: 'red', prize: 'グルメカタログ' }], stats, outro })
+//   } else {
+//     await playFinalResult(phone, { stats }) // エントリーしなかった人にも、同じ見た目の「あなたの結果」を出す
 //   }
+//
+// outro（大画面の締めで解決する Promise）を渡すと、自分の玉の結果までを見せて待ち、解決してから最後の結果へ進む
+// （大画面が当選者を発表している間に、スマホだけ先に「おつかれさまでした」まで行かないようにする）。
 //
 // 抽選器の絵（GaraponMachine）と玉（ballHtml）は、大画面（stage/doublechance.ts）でも使い回す
 
@@ -423,9 +428,10 @@ export async function askEntry(
     `<div class="fxg-bg"></div>
     <div class="fxg-head">
       <div class="fxg-kicker">DOUBLE CHANCE</div>
-      <div class="fxg-title">ダブルチャンス</div>
+      <div class="fxg-title"><span class="fxg-ol" data-text="ダブルチャンス"><b>ダブルチャンス</b></span></div>
       <div class="fxg-en-lead">最後に、ガラポンで景品が当たるかも！<br>参加する人は、ボタンを押してください</div>
     </div>
+    <div class="fxg-en-time"></div>
     <div class="fxg-en-wrap">
       <svg class="fxg-en-ring" viewBox="0 0 264 264" aria-hidden="true">
         <circle class="bg" cx="132" cy="132" r="124"/>
@@ -434,7 +440,6 @@ export async function askEntry(
       <div class="fxg-en-wave"></div>
       <button class="fxg-en-btn" type="button"><b>エントリー</b><small>タップで参加</small></button>
     </div>
-    <div class="fxg-en-time"></div>
     <div class="fxg-en-note">ボタンを押した人だけが、ガラポンを回せます</div>`,
   )
   setSpeedVar(root, tl)
@@ -474,7 +479,7 @@ export async function askEntry(
       const n = Math.ceil(left)
       if (n !== shown && state !== 'closed') {
         shown = n
-        time.innerHTML = state === 'done' ? `締め切りまで あと<b>${n}</b>秒` : `受付 のこり<b>${n}</b>秒`
+        time.innerHTML = state === 'done' ? `締め切りまで あと<b>${n}</b>秒` : `受付 残り<b>${n}</b>秒`
         if (n <= 5) ring.style.stroke = state === 'done' ? '' : '#ffa24d'
       }
       ring.setAttribute('stroke-dashoffset', (RING_C * (1 - left / total)).toFixed(1))
@@ -558,6 +563,7 @@ export interface GaraponStats {
   maxReach: number // いちばん多かったリーチの本数
   nearMiss: number // あと 1 つで外れた回数
   won?: string // 当たった景品（あれば）
+  rank?: number // ビンゴした順位（ビンゴしていれば。景品がないときの主役にする）
 }
 
 const TURNS_NEEDED = 4 // これだけ回すと玉が出る（×1 のとき）
@@ -566,20 +572,21 @@ const IDLE_MS = 2200 // タップが途切れてから、係の人が回すよ�
 const POP_WORDS = ['ガラッ', 'ガラ', 'ガラガラ', 'ゴロッ', 'ガラッ', 'ゴロ'] // 当たりを思わせる「カラン」は使わない
 const DWELL: Readonly<Record<BallColor, number>> = { white: 2600, red: 2900, gold: 3300, rainbow: 3700 }
 
-// ガラポンを回す。連打で速く回る（タップはスマホの中だけで処理し、サーバーには送らない）。
+// ガラポンを回す。タップで速く回る（タップはスマホの中だけで処理し、サーバーには送らない）。
 // 結果は balls に先に決まっている（1 回なら 1 個、ラストワン争奪で外れた人は複数）。
 // 最後に、その人のゲームの結果（stats）を出して「おつかれさまでした」で終える。
-// その画面は残す（keep: false なら閉じる）。sound: false で音を出さない
-export async function playGarapon(
-  host: HTMLElement,
-  o: {
-    speed?: number
-    balls: GaraponBall[]
-    stats: GaraponStats
-    sound?: boolean
-    keep?: boolean
-  },
-): Promise<void> {
+// その画面は残す（keep: false なら閉じる）。sound: false で音を出さない。
+// outro を渡すと、自分の玉の結果までを見せて「大画面で当選者を発表しています」で待ち、解決してから最後の結果へ進む
+export interface GaraponOptions {
+  speed?: number
+  balls: GaraponBall[]
+  stats: GaraponStats
+  sound?: boolean
+  keep?: boolean
+  outro?: Promise<void> // 大画面の締め（おつかれさまでした）で解決する。締めのタイミングを大画面とそろえる
+}
+
+export async function playGarapon(host: HTMLElement, o: GaraponOptions): Promise<void> {
   const play = new GaraponPlay(host, o)
   try {
     await play.run()
@@ -592,12 +599,103 @@ function noshiHtml(color: BallColor, prize: string | undefined): string {
   return `<div class="fxg-noshi" data-color="${color}"><small>目録</small><b>${escapeHtml(prize || '景品が当たりました')}</b></div>`
 }
 
-function cheerText(s: GaraponStats, wins: number): string {
-  if (s.won || wins > 0) return 'おめでとうございます！'
+// 景品がなかった人へのひとこと（追い打ちになる数字は出さず、良かったところを拾う）
+function cheerText(s: GaraponStats): string {
   if (s.nearMiss >= 2) return `あと 1 つが ${s.nearMiss} 回…！<br>本当に惜しかった`
   if (s.maxReach >= 2) return `${s.maxReach} 本のリーチ、見事でした`
   if (s.maxReach === 1) return 'リーチまで行きました。あと一歩！'
   return '今日は、運をためておく日でした'
+}
+
+// ---- あなたの結果（ガラポンのあとと、エントリーしなかった人の、共通の締めの画面） ----------------
+
+function countUp(node: HTMLElement, to: number, dur: number, reduced: boolean): void {
+  if (reduced || to <= 0 || dur <= 0) {
+    node.textContent = String(to)
+    return
+  }
+  const t0 = performance.now()
+  const step = (now: number) => {
+    if (!node.isConnected) return
+    const k = Math.min(1, (now - t0) / dur)
+    node.textContent = String(Math.round(to * (1 - Math.pow(1 - k, 3))))
+    if (k < 1) requestAnimationFrame(step)
+  }
+  requestAnimationFrame(step)
+}
+
+// いちばん上に主役（当たった景品。なければ「ビンゴ 第 N 位」か「またの機会に！」）を大きく、戦績はその下に小さく出す
+function resultHtml(s: GaraponStats, balls: readonly GaraponBall[]): string {
+  // 当たった景品（ゲーム本編の景品と、ガラポンの景品）。同じ名前は 1 つにまとめる
+  const prizes = new Map<string, BallColor>()
+  if (s.won) prizes.set(s.won, 'red')
+  for (const b of balls) if (b.color !== 'white' && b.prize) prizes.set(b.prize, b.color)
+  const rank = s.rank && s.rank > 0 ? Math.round(s.rank) : 0
+  const main = prizes.size
+    ? `<div class="fxg-rs-lead fxg-in">おめでとうございます！</div>
+      <div class="fxg-rs-prizes fxg-in" data-n="${Math.min(3, prizes.size)}">${[...prizes].slice(0, 3).map(([p, c]) => noshiHtml(c, p)).join('')}</div>`
+    : `<div class="fxg-rs-main fxg-in"><b>${rank ? `ビンゴ 第 ${rank} 位` : 'またの機会に！'}</b><span>${rank ? 'ビンゴ達成、おめでとうございます！' : cheerText(s)}</span></div>`
+  return `
+    <div class="fxg-rs-kicker fxg-in">RESULT</div>
+    <div class="fxg-rs-title fxg-in"><span class="fxg-ol" data-text="あなたの結果"><b>あなたの結果</b></span></div>
+    ${main}
+    ${balls.length ? `<div class="fxg-rs-row fxg-in"><span>ガラポンで出た玉</span>${balls.map((b) => ballHtml(b.color)).join('')}</div>` : ''}
+    <ul class="fxg-rs-list fxg-in">
+      <li><span>カードに出た番号</span><span><b data-n="${s.hits}">0</b><small>個</small></span></li>
+      <li><span>いちばん多いリーチ</span><span><b data-n="${s.maxReach}">0</b><small>本</small></span></li>
+      <li><span>あと 1 つで外れた回数</span><span><b data-n="${s.nearMiss}">0</b><small>回</small></span></li>
+    </ul>
+    <div class="fxg-rs-fin fxg-in"><b>おつかれさまでした</b><small>ご参加ありがとうございました</small></div>`
+}
+
+// 結果を上から順にそっと出して、最後に「おつかれさまでした」。root は .fxg（data-phase を result にする）
+async function runResult(
+  root: HTMLElement,
+  tl: Timeline,
+  o: { stats: GaraponStats; balls: readonly GaraponBall[]; sound: boolean; fx: Particles | null; gone: () => boolean },
+): Promise<void> {
+  const reduced = prefersReducedMotion()
+  root.dataset.phase = 'result'
+  root.dataset.mood = 'cool'
+  const rs = root.querySelector<HTMLElement>('.fxg-result')!
+  rs.innerHTML = resultHtml(o.stats, o.balls)
+  const items = [...rs.querySelectorAll<HTMLElement>('.fxg-in')]
+  const fin = items.pop()!
+  await tl.wait(500)
+  for (const item of items) {
+    if (o.gone()) return
+    item.classList.add('on')
+    item.querySelectorAll<HTMLElement>('b[data-n]').forEach((num) => countUp(num, Number(num.dataset.n) || 0, tl.ms(900), reduced))
+    await tl.wait(260)
+  }
+  await tl.wait(1100)
+  if (o.gone()) return
+  fin.classList.add('on')
+  if (o.sound) sfx.outro()
+  const w = root.clientWidth || 390
+  const h = root.clientHeight || 844
+  o.fx?.rise(26, ['#ffd9a0', '#ffe9c7', '#c9d6ff', '#9fb4ff'], 30, w - 30, h - 40)
+  await tl.wait(1800)
+}
+
+// エントリーしなかった人（ガラポンを回さなかった人）にも、ガラポンのあとと同じ見た目の「あなたの結果」を出す。
+// 背後のカードが透けないよう、地は不透明。出した画面は残す。sound: false で締めの音を出さない
+export async function playFinalResult(host: HTMLElement, o: { speed?: number; stats: GaraponStats; sound?: boolean }): Promise<void> {
+  const tl = new Timeline(o.speed ?? 1)
+  // エントリーの画面や、前の結果が残っていれば片付ける
+  host.querySelectorAll(':scope > .fxg').forEach((n) => n.remove())
+  const root = el('div', 'fxg fxg-final', '<div class="fxg-bg"></div><div class="fxg-result"></div>')
+  setSpeedVar(root, tl)
+  host.append(root)
+  swallow(root)
+  root.addEventListener('pointerdown', (e) => {
+    e.stopPropagation()
+    e.preventDefault()
+  })
+  void root.offsetWidth
+  root.classList.add('on')
+  const fx = prefersReducedMotion() ? null : makeParticles(root, tl)
+  await runResult(root, tl, { stats: o.stats, balls: [], sound: o.sound ?? true, fx, gone: () => tl.cancelled || !root.isConnected })
 }
 
 class GaraponPlay {
@@ -613,7 +711,7 @@ class GaraponPlay {
   private readonly sub: HTMLElement
   private fx: Particles | null = null
   private voice: GaraponVoice | null = null
-  private phase: 'spin' | 'drop' | 'reveal' | 'result' = 'spin'
+  private phase: 'spin' | 'drop' | 'reveal' | 'wait' | 'result' = 'spin'
   private wake: (() => void) | null = null
   private heat = 0
   private elapsed = 0 // この回を回し始めてからの、演出上の ms
@@ -622,9 +720,18 @@ class GaraponPlay {
   private lastPop = 0
   private lastVoice = -1
   private glowUsed = false
+  private readonly outro: Promise<void> | null
+  private outroDone = false
 
-  constructor(host: HTMLElement, o: { speed?: number; balls: GaraponBall[]; stats: GaraponStats; sound?: boolean; keep?: boolean }) {
+  constructor(host: HTMLElement, o: GaraponOptions) {
     this.tl = new Timeline(o.speed ?? 1)
+    // 大画面の締めが来たら、待っているところを先へ進める
+    this.outro = o.outro ?? null
+    const done = (): void => {
+      this.outroDone = true
+      if (this.phase === 'wait') this.release()
+    }
+    this.outro?.then(done, done)
     this.sound = o.sound ?? true
     this.keep = o.keep ?? true
     this.balls = o.balls
@@ -637,7 +744,7 @@ class GaraponPlay {
       `<div class="fxg-bg"></div>
       <div class="fxg-head">
         <div class="fxg-kicker">DOUBLE CHANCE</div>
-        <div class="fxg-title">ガラポン抽選</div>
+        <div class="fxg-title"><span class="fxg-ol" data-text="ガラポン抽選"><b>ガラポン抽選</b></span></div>
         <div class="fxg-left"></div>
         <div class="fxg-slots"></div>
       </div>
@@ -645,7 +752,7 @@ class GaraponPlay {
       <div class="fxg-foot">
         <div class="fxg-meter-label"><span>ガラガラ…</span><span>玉が出るまで</span></div>
         <div class="fxg-meter"><b></b></div>
-        <div class="fxg-prompt">連打で回せ！</div>
+        <div class="fxg-prompt">タップで回せ！</div>
         <div class="fxg-sub"></div>
       </div>
       <div class="fxg-pops"></div>
@@ -688,6 +795,9 @@ class GaraponPlay {
       if (this.gone()) return
     }
     this.renderHead(n)
+    // 大画面が当選者を発表している間は、自分の玉の結果を見せたまま待つ（締めのタイミングを大画面とそろえる）
+    if (this.outro && !this.outroDone) await this.waitOutro()
+    if (this.gone()) return
     await this.result()
     if (this.gone() || this.keep) return
     this.root.classList.add('out')
@@ -749,7 +859,7 @@ class GaraponPlay {
     this.idle = 0
     this.taps = 0
     this.meter.style.setProperty('--p', '0')
-    this.$('.fxg-prompt').textContent = i === 0 ? '連打で回せ！' : 'もう一回！ 連打で回せ！'
+    this.$('.fxg-prompt').textContent = i === 0 ? 'タップで回せ！' : 'もう一回！ タップで回せ！'
     this.setSub('画面のどこでもタップ')
     return new Promise<void>((resolve) => {
       this.wake = resolve
@@ -980,73 +1090,31 @@ class GaraponPlay {
     })
   }
 
+  // ---- 大画面の締めを待つ ----
+
+  private waitOutro(): Promise<void> {
+    this.phase = 'wait'
+    const wait = el('div', 'fxg-rv-wait', '<i></i><i></i><i></i><span>大画面で 当選者を発表しています</span>')
+    this.$('.fxg-reveal').append(wait)
+    void wait.offsetWidth
+    wait.classList.add('on')
+    return new Promise<void>((resolve) => {
+      this.wake = resolve
+      if (this.gone() || this.outroDone) this.release()
+    })
+  }
+
   // ---- その人の結果と、締め ----
 
   private async result(): Promise<void> {
-    const s = this.stats
     this.stopVoice()
     this.machine.cruise = 0
     this.phase = 'result'
     const rv = this.$('.fxg-reveal')
     rv.querySelectorAll('.on').forEach((n) => n.classList.remove('on'))
-    await this.tl.wait(this.balls.length ? 400 : 0)
+    await this.tl.wait(rv.childElementCount ? 400 : 0)
     if (this.gone()) return
     rv.replaceChildren()
-    this.root.dataset.phase = 'result'
-    this.root.dataset.mood = 'cool'
-
-    // 当たった景品（ゲーム本編の景品と、ガラポンの景品）。同じ名前は 1 つにまとめる
-    const prizes = new Map<string, BallColor>()
-    if (s.won) prizes.set(s.won, 'red')
-    for (const b of this.balls) if (b.color !== 'white' && b.prize) prizes.set(b.prize, b.color)
-    const wins = this.balls.filter((b) => b.color !== 'white').length
-    const rs = this.$('.fxg-result')
-    rs.innerHTML = `
-      <div class="fxg-rs-kicker fxg-in">RESULT</div>
-      <div class="fxg-rs-title fxg-in">あなたの結果</div>
-      <ul class="fxg-rs-list">
-        <li class="fxg-in"><span>カードに出た番号</span><span><b data-n="${s.hits}">0</b><small>個</small></span></li>
-        <li class="fxg-in"><span>いちばん多いリーチ</span><span><b data-n="${s.maxReach}">0</b><small>本</small></span></li>
-        <li class="fxg-in"><span>あと 1 つで外れた回数</span><span><b data-n="${s.nearMiss}">0</b><small>回</small></span></li>
-      </ul>
-      ${this.balls.length ? `<div class="fxg-rs-row fxg-in"><span>ガラポン</span>${this.balls.map((b) => ballHtml(b.color)).join('')}</div>` : ''}
-      <div class="fxg-rs-cheer fxg-in">${cheerText(s, wins)}</div>
-      ${prizes.size ? `<div class="fxg-rs-prizes fxg-in">${[...prizes].slice(0, 3).map(([p, c]) => noshiHtml(c, p)).join('')}</div>` : ''}
-      <div class="fxg-rs-fin fxg-in"><b>おつかれさまでした</b><small>ご参加ありがとうございました</small></div>`
-
-    const items = [...rs.querySelectorAll<HTMLElement>('.fxg-in')]
-    const fin = items.pop()!
-    await this.tl.wait(500)
-    for (const item of items) {
-      if (this.gone()) return
-      item.classList.add('on')
-      const num = item.querySelector<HTMLElement>('b[data-n]')
-      if (num) this.countUp(num, Number(num.dataset.n) || 0, 900)
-      await this.tl.wait(260)
-    }
-    await this.tl.wait(1100)
-    if (this.gone()) return
-    fin.classList.add('on')
-    if (this.sound) sfx.outro()
-    const w = this.root.clientWidth || 390
-    const h = this.root.clientHeight || 844
-    this.fx?.rise(26, ['#ffd9a0', '#ffe9c7', '#c9d6ff', '#9fb4ff'], 30, w - 30, h - 40)
-    await this.tl.wait(1800)
-  }
-
-  private countUp(node: HTMLElement, to: number, ms: number): void {
-    if (this.reduced || to <= 0) {
-      node.textContent = String(to)
-      return
-    }
-    const dur = Math.max(1, this.tl.ms(ms))
-    const t0 = performance.now()
-    const step = (now: number) => {
-      if (!node.isConnected) return
-      const k = Math.min(1, (now - t0) / dur)
-      node.textContent = String(Math.round(to * (1 - Math.pow(1 - k, 3))))
-      if (k < 1) requestAnimationFrame(step)
-    }
-    requestAnimationFrame(step)
+    await runResult(this.root, this.tl, { stats: this.stats, balls: this.balls, sound: this.sound, fx: this.fx, gone: () => this.gone() })
   }
 }

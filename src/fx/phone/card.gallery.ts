@@ -160,10 +160,13 @@ function shotItem(id: string, label: string, run: (host: HTMLElement, speed: num
 registerGallery(
   shotItem('reach', 'リーチ！', (host, speed) => playReach(host, { lines: 1, waiting: ['O65'], speed })),
   shotItem('double', 'ダブルリーチ！', (host, speed) => playReach(host, { lines: 2, waiting: ['O65', 'O62'], speed })),
-  shotItem('triple', 'リーチ 3 本（ダブルリーチ＋ライン数）', (host, speed) => playReach(host, { lines: 3, waiting: ['O65', 'O62', 'N41'], speed })),
+  shotItem('triple', 'トリプルリーチ！（3 本）', (host, speed) => playReach(host, { lines: 3, waiting: ['O65', 'O62', 'N41'], speed })),
+  shotItem('quad', 'トリプルリーチ！（4 本。本数の札と、番号が 2 段になるとき）', (host, speed) =>
+    playReach(host, { lines: 4, waiting: ['O65', 'O62', 'N41', 'B12'], speed }),
+  ),
   shotItem('bingo', 'ビンゴ（第 3 位）', (host, speed) => playBingo(host, { rank: 3, speed })),
-  shotItem('wild', '虹玉: マスが開いた', (host, speed) => playWildResult(host, { label: 'N44', newReach: false, speed })),
-  shotItem('wild-reach', '虹玉: 開いてリーチ', (host, speed) => playWildResult(host, { label: 'N44', newReach: true, speed })),
+  shotItem('wild', '全員確定（虹玉）: あなたのカードも 1 マス開いた', (host, speed) => playWildResult(host, { label: 'N44', newReach: false, speed })),
+  shotItem('wild-reach', '全員確定（虹玉）: 開いてリーチ', (host, speed) => playWildResult(host, { label: 'N44', newReach: true, speed })),
 )
 
 // ---- 通し（組み込み側の呼び方の見本） ------------------------------------------
@@ -172,7 +175,7 @@ registerGallery(
   {
     id: 'phone-flow-wild',
     group: G_FLOW,
-    label: '虹玉: マスが開く → リーチ',
+    label: '全員確定（虹玉）: マスが開く → リーチ',
     screen: 'phone',
     async play(host, tl) {
       const card = mockPhone(host, tl)

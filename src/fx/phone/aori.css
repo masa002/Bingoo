@@ -1,4 +1,5 @@
-/* スマホの単発の演出（.fxo-、z-index 20〜29）と、縁取りした文字（.fxa-txt）。aori.ts */
+/* スマホの単発の演出（.fxo-、z-index 20〜29）と、縁取りした文字（.fxa-txt）。aori.ts
+   見出しは共通の型: 金の塗り（--fxo-gold）に濃い茶の縁（#2a1a05）。虹で塗るのは「全員確定！」の文字だけ */
 
 .fxo {
   position: absolute;
@@ -10,6 +11,7 @@
   user-select: none;
   -webkit-user-select: none;
   z-index: 22;
+  --fxo-gold: linear-gradient(180deg, #fff4cc, #f5c542 55%, #d9a520);
 }
 
 .fxo * {
@@ -98,9 +100,9 @@
   }
 }
 
-/* 虹の文字 */
+/* 虹の文字（面の虹は横のグラデーション。theme.ts の RAINBOW_FACE_CSS と同じ並び）。「全員確定！」だけに使う */
 .fxa-txt.is-rainbow {
-  --stroke: #fff;
+  --stroke: #2a1a05;
   --fill: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
   font-size: 60px;
 }
@@ -133,8 +135,13 @@
     0 10px 30px rgba(0, 0, 0, 0.5);
 }
 
-.fxo-reach[data-kind='double'] .fxo-band {
-  background: linear-gradient(180deg, rgba(255, 236, 160, 0.97), rgba(245, 197, 66, 0.97) 50%, rgba(201, 146, 18, 0.97));
+/* 2 本以上: 黒地に金の縁の帯（金の見出しが沈まないように、地は金にしない） */
+.fxo-reach:not([data-kind='single']) .fxo-band {
+  background: linear-gradient(180deg, rgba(58, 38, 6, 0.97), rgba(26, 16, 2, 0.97));
+  box-shadow:
+    0 0 0 4px #f5c542,
+    0 0 26px rgba(245, 197, 66, 0.55),
+    0 10px 30px rgba(0, 0, 0, 0.5);
 }
 
 .fxo-reach-word {
@@ -148,22 +155,45 @@
 }
 
 .fxo-reach-word .fxa-txt {
-  --stroke: #5a0a0a;
-  --fill: linear-gradient(180deg, #ffffff 30%, #ffe08a 100%);
+  --stroke: #2a1a05;
+  --fill: var(--fxo-gold);
   font-size: 76px;
 }
 
 .fxo-reach[data-kind='double'] .fxo-reach-word .fxa-txt {
-  --stroke: #7a1a00;
-  --fill: linear-gradient(180deg, #ffffff 20%, #ffd2c2 60%, #ff5a3d 100%);
   font-size: 46px;
 }
 
+.fxo-reach[data-kind='triple'] .fxo-reach-word .fxa-txt {
+  font-size: 40px;
+}
+
+/* あと 1 つの番号。カード（ui/phone.ts の並びで y 111〜519）のすぐ下に、地のある枠で出す。
+   枠は「最新の番号」の見出しと数字（y 527〜596）をまるごと隠す。文字どうしは重ねない */
 .fxo-reach-wait {
   position: absolute;
-  left: 0;
-  right: 0;
-  top: 57%;
+  left: 16px;
+  right: 16px;
+  top: 524px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px 16px;
+  border: 2px solid #f5c542;
+  border-radius: 18px;
+  background: rgba(8, 10, 24, 0.96);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.55);
+}
+
+.fxo-reach-wait small {
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.3;
+  color: #ffe08a;
+}
+
+.fxo-reach-nums {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -171,16 +201,10 @@
   gap: 10px;
 }
 
-.fxo-reach-wait small {
-  font-size: 22px;
-  font-weight: 900;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
-}
-
-.fxo-reach-wait b {
-  padding: 6px 16px;
+.fxo-reach-nums b {
+  padding: 6px 14px;
   border-radius: 14px;
-  font-size: 42px;
+  font-size: 36px;
   font-weight: 900;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -188,20 +212,17 @@
   background: linear-gradient(180deg, #fff8dc, #ffe08a);
   box-shadow:
     0 0 0 3px #f5c542,
-    0 0 20px rgba(245, 197, 66, 0.7);
+    0 0 16px rgba(245, 197, 66, 0.6);
 }
 
-.fxo-reach-count {
-  position: absolute;
-  left: 50%;
-  top: 70%;
-  padding: 4px 16px;
+/* 4 本以上のときだけ、本数を添える（3 本までは見出しの言葉で分かる） */
+.fxo-reach-wait em {
+  padding: 3px 14px;
   border-radius: 999px;
-  font-size: 18px;
+  font-size: 15px;
+  font-style: normal;
   font-weight: 900;
-  background: rgba(8, 10, 24, 0.8);
   box-shadow: 0 0 0 2px #f5c542;
-  translate: -50% 0;
 }
 
 /* ---- 単発: ビンゴ ---------------------------------------------------------- */
@@ -254,33 +275,50 @@
 }
 
 .fxo-rank .fxa-txt {
-  --stroke: #3b2600;
-  --fill: linear-gradient(180deg, #fffbe6 0%, #ffe08a 30%, #f5c542 50%, #b8860b 75%, #ffe08a 100%);
+  --stroke: #2a1a05;
+  --fill: var(--fxo-gold);
   font-size: 54px;
 }
 
-/* ---- 単発: 虹玉 ------------------------------------------------------------ */
+/* ---- 単発: 全員確定（虹玉）で 1 マス開いた ---------------------------------- */
 
+/* 白い玉に虹の縁（全面が虹の玉にはしない。スマホの全面の虹は「あなたのビンゴ確定」だけ） */
 .fxo-wild-orb {
   position: absolute;
   left: 50%;
-  top: 30%;
-  width: 112px;
-  height: 112px;
-  margin: -56px 0 0 -56px;
+  top: 28%;
+  width: 100px;
+  height: 100px;
+  margin: -50px 0 0 -50px;
 }
 
 .fxo-wild-orb i {
   position: absolute;
   inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff, #ff5a5a);
+  box-shadow: 0 0 22px rgba(255, 255, 255, 0.55);
+  animation: fxa-hue var(--fxa-hue-ms, 12000ms) linear infinite;
+}
+
+.fxo-wild-orb i::before {
+  content: '';
+  position: absolute;
+  inset: 7px;
   border-radius: 50%;
   background:
-    radial-gradient(circle at 34% 30%, #fff 0 12%, rgba(255, 255, 255, 0) 38%),
-    conic-gradient(from 0deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff, #ff5a5a);
-  box-shadow:
-    0 0 24px rgba(255, 255, 255, 0.7),
-    0 0 50px rgba(168, 90, 255, 0.5);
-  animation: fxa-hue var(--fxa-hue-ms, 12000ms) linear infinite;
+    radial-gradient(circle at 34% 28%, #fff 0 22%, rgba(255, 255, 255, 0) 46%),
+    radial-gradient(circle at 50% 55%, #f4f6ff 0 55%, #c9d2ee 100%);
+  box-shadow: inset 0 -5px 8px rgba(40, 50, 100, 0.25);
+}
+
+.fxo-wild-orb b {
+  position: relative;
+  font-size: 34px;
+  line-height: 1;
+  color: #2a1a05;
 }
 
 .fxo-ring {
@@ -296,37 +334,55 @@
   position: absolute;
   left: 0;
   right: 0;
-  top: 43%;
+  top: 40%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   text-align: center;
 }
 
 .fxo-wild-text .fxa-txt {
-  font-size: 64px;
+  font-size: 58px;
 }
 
 .fxo-wild-text p {
   margin: 0;
   padding: 6px 18px;
   border-radius: 999px;
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 900;
-  background: rgba(8, 10, 24, 0.8);
+  background: rgba(8, 10, 24, 0.85);
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8);
 }
 
 .fxo-wild-text p b {
-  font-size: 30px;
-  font-variant-numeric: tabular-nums;
+  color: #ffe08a;
 }
 
+/* 開いた番号の札: カードの虹玉のマスと同じく、縁だけが虹 */
+.fxo-wild-cell {
+  padding: 3px;
+  border-radius: 16px;
+  background: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
+}
+
+.fxo-wild-cell b {
+  display: block;
+  padding: 4px 18px;
+  border-radius: 13px;
+  font-size: 34px;
+  font-weight: 900;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  background: #0a0e26;
+}
+
+/* 「リーチ！」の札は、「最新の番号」の数字（〜y 596）より下に出す */
 .fxo-wild-reach {
   position: absolute;
   left: 50%;
-  top: 64%;
+  top: 77%;
   padding: 6px 22px 8px;
   border-radius: 16px;
   background: linear-gradient(90deg, #ff7a3d, #ef4444);
@@ -337,8 +393,8 @@
 }
 
 .fxo-wild-reach .fxa-txt {
-  --stroke: #5a0a0a;
-  --fill: linear-gradient(180deg, #ffffff 30%, #ffe08a 100%);
+  --stroke: #2a1a05;
+  --fill: var(--fxo-gold);
   font-size: 44px;
 }
 

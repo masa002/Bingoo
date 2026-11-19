@@ -9,7 +9,8 @@
   --pulse: 1400ms;
   --hue: 3600ms;
   --rainbow: conic-gradient(from 0deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff, #ff5a5a);
-  --rainbow-x: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff, #ff5a5a);
+  /* 虹の描き方は 2 つ（theme.ts と同じ並び）: 玉と輪は円すい（--rainbow）、面（文字・札の縁）は横（--rainbow-x） */
+  --rainbow-x: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
   position: absolute;
   inset: 0;
   overflow: hidden;
@@ -59,6 +60,11 @@
   z-index: 60;
   pointer-events: none;
   transition: opacity calc(var(--u) * 0.5) ease;
+}
+
+/* 文字の後ろで散らす粒子（body の中に置き、置いた順に重ねる） */
+.fxe-canvas-in {
+  z-index: auto;
 }
 
 /* 動きを減らす設定: 動きを止めて、色と文字だけで伝える（暗転だけは、急に暗くならないようになめらかに変える） */
@@ -308,8 +314,9 @@
   transition: transform calc(var(--u) * 0.6) cubic-bezier(0.5, 0, 0.2, 1);
 }
 
+/* 縮めた見出しは HUD（y 0〜90）のすぐ下に収める（縁と影を入れて y 96〜240） */
 .fxe-k-logo.up {
-  transform: translateY(-205px) scale(0.5);
+  transform: translateY(-142px) scale(0.44);
 }
 
 .fxe-k-title {
@@ -343,15 +350,15 @@
   }
 }
 
-/* 白いふちと影（文字の後ろに同じ文字を太く描く） */
+/* ふちと影（文字の後ろに同じ文字を太く描く）。縁は見出しの共通の濃い茶で、塗りだけが虹 */
 .fxe-k-title::before {
   content: attr(data-text);
   position: absolute;
   left: 0;
   top: 0;
-  color: #fff;
-  -webkit-text-stroke: 28px #fff;
-  filter: drop-shadow(0 12px 0 #2b0f63) drop-shadow(0 0 34px rgba(255, 255, 255, 0.5));
+  color: #2a1a05;
+  -webkit-text-stroke: 28px #2a1a05;
+  filter: drop-shadow(0 12px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 30px rgba(255, 255, 255, 0.7));
 }
 
 .fxe-k-title b {
@@ -389,11 +396,11 @@
 
 .fxe-k-sub {
   margin-top: 10px;
-  font-size: 84px;
+  font-size: 76px;
   font-weight: 900;
   letter-spacing: 0.04em;
   white-space: nowrap;
-  text-shadow: 0 6px 0 #2b0f63, 0 0 30px rgba(168, 90, 255, 0.85);
+  text-shadow: 0 6px 0 #2a1a05, 0 0 30px rgba(255, 255, 255, 0.4);
   opacity: 0;
   transition: opacity calc(var(--u) * 0.3) ease;
 }
@@ -409,16 +416,11 @@
   text-shadow: none;
 }
 
+/* 会場の人数は、副題の行の中に入れる */
 .fxe-k-sub em {
-  display: inline-block;
-  margin-left: 0.5em;
-  padding: 0 0.5em;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
-  font-size: 0.55em;
   font-style: normal;
-  vertical-align: 0.25em;
-  text-shadow: none;
+  font-variant-numeric: tabular-nums;
+  color: #ffe08a;
 }
 
 .fxe-k-logo.up .fxe-k-sub {
@@ -450,7 +452,7 @@
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  box-shadow: 0 0 50px rgba(255, 255, 255, 0.5), 0 0 120px rgba(168, 90, 255, 0.55);
+  box-shadow: 0 0 50px rgba(255, 255, 255, 0.5), 0 0 120px rgba(255, 255, 255, 0.3);
   transition: transform calc(var(--u) * 0.4) ease-in;
 }
 
@@ -496,52 +498,54 @@
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 116px;
-  height: 116px;
-  margin: -58px 0 0 -58px;
+  width: 124px;
+  height: 124px;
+  margin: -62px 0 0 -62px;
   border-radius: 50%;
   background: #fff;
-  color: #2b0f63;
+  color: #2a1a05;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   font-weight: 900;
-  box-shadow: inset 0 -6px 0 rgba(43, 15, 99, 0.15);
+  box-shadow: inset 0 -6px 0 rgba(42, 26, 5, 0.15);
 }
 
 .fxe-k-ball-face b {
-  font-size: 56px;
+  font-size: 46px;
   line-height: 1;
 }
 
 .fxe-k-ball-face small {
-  font-size: 21px;
-  letter-spacing: 0.12em;
+  font-size: 28px;
+  line-height: 1.15;
+  letter-spacing: 0.06em;
 }
 
-/* 「全員のカードが 1 マス開く！」と結果 */
+/* 「会場 ○ 人 全員のカードが 1 マス開く！」と結果。
+   HUD の下の見出し（〜y 240）と番号の盤（y 800〜）の間に収める（縁を入れて y 263〜786） */
 .fxe-k-panel {
   position: absolute;
   left: 50%;
-  top: 610px;
-  width: 1260px;
-  margin-left: -630px;
-  padding: 30px 48px 28px;
+  top: 270px;
+  width: 1320px;
+  margin-left: -660px;
+  padding: 24px 44px 30px;
   border-radius: 36px;
   background: linear-gradient(180deg, rgba(22, 32, 74, 0.95), rgba(8, 11, 28, 0.95));
-  transform: translateY(-50%);
   isolation: isolate;
   opacity: 0;
 }
 
+/* 札の縁は虹の面（横のグラデーション） */
 .fxe-k-panel::before {
   content: '';
   position: absolute;
   inset: -7px;
   z-index: -1;
   border-radius: 42px;
-  background: var(--rainbow);
+  background: var(--rainbow-x);
   animation: fxe-hue var(--hue) linear infinite;
 }
 
@@ -556,29 +560,20 @@
 
 .fxe-k-panel.on {
   opacity: 1;
-  animation: fxe-k-panel calc(var(--u) * 0.5) cubic-bezier(0.2, 1.3, 0.4, 1) backwards;
-}
-
-@keyframes fxe-k-panel {
-  from {
-    transform: translateY(-50%) scale(0.6);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(-50%) scale(1);
-    opacity: 1;
-  }
+  animation: fxe-pop calc(var(--u) * 0.5) cubic-bezier(0.2, 1.3, 0.4, 1) backwards;
 }
 
 .fxe-k-head {
   text-align: center;
-  font-size: 72px;
+  font-size: 56px;
   font-weight: 900;
+  line-height: 1.3;
   white-space: nowrap;
   text-shadow: 0 5px 0 rgba(0, 0, 0, 0.35);
 }
 
 .fxe-k-head em {
+  margin-left: 0.15em;
   font-style: normal;
   text-shadow: none;
 }
@@ -587,61 +582,85 @@
   display: flex;
   align-items: center;
   gap: 44px;
-  margin-top: 22px;
+  margin-top: 18px;
 }
 
-/* 見本のカード（1 マスが虹で開く） */
+/* 見本のカード。スマホのカード（phone/card.css）と同じ見た目にする:
+   紺地のマス、開いたマスは濃いピンクのスタンプ、FREE は金の星、虹玉で開いたマスは虹の縁 */
 .fxe-k-card {
   flex: none;
   display: grid;
-  grid-template-columns: repeat(5, 48px);
+  grid-template-columns: repeat(5, 62px);
   gap: 6px;
   padding: 14px;
-  border-radius: 20px;
-  background: #f4f1ff;
+  border: 3px solid transparent;
+  border-radius: 26px;
+  background:
+    radial-gradient(130% 80% at 50% 0%, #1f2a66 0%, #121a44 55%, #0c1232 100%) padding-box,
+    linear-gradient(160deg, #4b5cb8 0%, #222c68 35%, #1a2254 65%, #3a4aa0 100%) border-box;
   box-shadow: 0 10px 0 rgba(0, 0, 0, 0.3);
 }
 
 .fxe-k-card i {
   position: relative;
+  isolation: isolate;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 10px;
-  background: #e2ddf5;
-  color: #6b6290;
-  font-size: 19px;
+  width: 62px;
+  height: 62px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #232e6c 0%, #19214f 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 -3px 0 rgba(0, 0, 0, 0.22);
+  color: #e8ecff;
+  font-size: 30px;
   font-style: normal;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
 
-.fxe-k-card i.o::after {
+/* スタンプは数字の後ろに重ねる */
+.fxe-k-card i::before {
   content: '';
   position: absolute;
-  inset: 7px;
+  inset: 8%;
+  z-index: -1;
   border-radius: 50%;
-  background: rgba(245, 197, 66, 0.9);
-  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.15);
 }
 
-.fxe-k-card i.w::after {
-  content: '✦';
-  position: absolute;
-  inset: -4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: var(--rainbow);
-  color: #fff;
-  font-size: 28px;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+/* 開いたマス: 濃いピンクのインクのスタンプ */
+.fxe-k-card i.o::before {
+  background: radial-gradient(circle, rgba(255, 72, 138, 0.8) 0 54%, rgba(255, 72, 138, 0.62) 55% 61%, #e3206e 62% 69%, rgba(227, 32, 110, 0) 70.5%);
+}
+
+/* FREE: 金の星 */
+.fxe-k-card i.f {
+  background: linear-gradient(180deg, #3b3010 0%, #261e08 100%);
+  color: #f5c542;
+  font-size: 34px;
+}
+
+.fxe-k-card i.f::before {
+  background: radial-gradient(circle, rgba(245, 197, 66, 0.16) 0 56%, rgba(245, 197, 66, 0.9) 58% 66%, rgba(245, 197, 66, 0) 67.5%);
+}
+
+/* 虹玉で開くマス: 虹の縁の穴（数字は残す） */
+.fxe-k-card i.w::before {
+  background:
+    radial-gradient(circle, #0a0e26 0 40%, rgba(10, 14, 38, 0) 41.5%),
+    var(--rainbow);
+  -webkit-mask: radial-gradient(circle, #000 0 69%, transparent 70.5%);
+  mask: radial-gradient(circle, #000 0 69%, transparent 70.5%);
   opacity: 0;
 }
 
-.fxe-k-card.go i.w::after {
+.fxe-k-card.go i.w {
+  color: #fff;
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.fxe-k-card.go i.w::before {
   opacity: 1;
   animation: fxe-k-stamp calc(var(--u) * 0.4) cubic-bezier(0.2, 1.5, 0.4, 1) backwards, fxe-hue var(--hue) linear infinite;
 }
@@ -712,14 +731,6 @@
   40% {
     transform: scale(1.12);
   }
-}
-
-.fxe-k-foot {
-  margin-top: 16px;
-  text-align: center;
-  font-size: 34px;
-  font-weight: 800;
-  color: #c9d2ff;
 }
 
 /* ==== 「この1球で景品が尽きる！」の予告（赤の点滅は使わず、金と白のゆっくりした脈動で） ==== */
@@ -906,15 +917,15 @@
   position: absolute;
   left: 0;
   top: 0;
-  color: #2a1a00;
-  -webkit-text-stroke: 26px #2a1a00;
+  color: #2a1a05;
+  -webkit-text-stroke: 26px #2a1a05;
   filter: drop-shadow(0 10px 0 rgba(0, 0, 0, 0.45));
 }
 
 .fxe-f-main b {
   position: relative;
   font-weight: 900;
-  background: linear-gradient(180deg, #fffbe8 0%, #ffe08a 36%, #f5c542 58%, #b7860f 82%, #ffe9a8 100%);
+  background: linear-gradient(180deg, #fff4cc, #f5c542 55%, #d9a520);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;

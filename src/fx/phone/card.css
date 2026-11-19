@@ -170,8 +170,8 @@
 .fxc-cell.is-free .fxc-num {
   display: grid;
   place-items: center;
-  font-size: 2.8cqw;
-  letter-spacing: 0.4cqw;
+  font-size: 3.4cqw; /* 390 幅で約 12px（10px では読めない） */
+  letter-spacing: 0.2cqw;
   color: #ffe08a;
 }
 

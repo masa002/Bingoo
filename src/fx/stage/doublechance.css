@@ -40,33 +40,71 @@
 
 .fxdc-head {
   position: absolute;
-  top: 56px;
+  top: 50px;
   left: 0;
   right: 0;
   text-align: center;
-  transition: opacity calc(800ms * var(--fxdc-k)) ease;
+  transform-origin: 50% 0;
+  transition:
+    opacity calc(800ms * var(--fxdc-k)) ease,
+    transform calc(1200ms * var(--fxdc-k)) cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .fxdc-kicker {
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 700;
   letter-spacing: 0.42em;
   color: #f5c542;
 }
 
-.fxdc-title {
-  margin-top: 4px;
-  font-size: 84px;
+/* 見出しの型（ほかのイベントと同じ）: 塗りは金のグラデーション、縁は濃い茶 #2a1a05（後ろに同じ文字を太く描く） */
+.fxdc-ol {
+  position: relative;
+  display: inline-block;
   font-weight: 900;
-  letter-spacing: 0.08em;
+}
+
+.fxdc-ol::before {
+  content: attr(data-text);
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: #2a1a05;
+  -webkit-text-stroke: 18px #2a1a05;
+  filter: drop-shadow(0 7px 0 rgba(0, 0, 0, 0.35));
+}
+
+.fxdc-ol > b {
+  position: relative;
+  font-weight: 900;
+  background: linear-gradient(180deg, #fff4cc, #f5c542 55%, #d9a520);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.fxdc-title {
+  margin-top: 6px;
+  font-size: 92px;
+  letter-spacing: 0.06em;
   line-height: 1.15;
+  white-space: nowrap;
 }
 
 .fxdc-sub {
-  margin-top: 6px;
-  font-size: 34px;
-  font-weight: 700;
+  margin-top: 8px;
+  font-size: 40px;
+  font-weight: 800;
   color: #dfe4f5;
+}
+
+/* 当選者の発表では、見出しを小さく上に寄せて、一覧に場所をゆずる（「当選者の発表」は一覧の見出しが言う） */
+.fxdc[data-phase='winners'] .fxdc-head {
+  transform: translateY(-34px) scale(0.7);
+}
+
+.fxdc[data-phase='winners'] .fxdc-sub {
+  opacity: 0;
 }
 
 .fxdc[data-phase='fin'] .fxdc-head {
@@ -105,16 +143,14 @@
 }
 
 .fxdc[data-phase='winners'] .fxdc-mwrap {
-  transform: translate(150px, 330px) scale(0.84);
+  transform: translate(110px, 330px) scale(0.84);
 }
 
+/* 締めでは、抽選器も一覧も消す（締めの言葉だけの画面にする） */
 .fxdc[data-phase='fin'] .fxdc-mwrap {
-  opacity: 0.16;
-  transform: translate(640px, 240px) scale(0.9);
-}
-
-.fxdc[data-phase='fin'] .fxdc-mwrap::before {
   opacity: 0;
+  transform: translate(110px, 330px) scale(0.84);
+  transition-duration: calc(600ms * var(--fxdc-k));
 }
 
 /* ---- エントリー受付 ---- */
@@ -207,8 +243,8 @@
   display: flex;
   align-items: baseline;
   gap: 14px;
-  margin-top: 26px;
-  font-size: 34px;
+  margin-top: 18px;
+  font-size: 36px;
   color: #c9cfe6;
 }
 
@@ -219,10 +255,17 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* いちばん大事な指示なので、大きく、札にして目立たせる */
 .fxdc-howto {
-  margin: 10px 0 0;
-  font-size: 30px;
-  color: #ffe2b8;
+  margin: 14px 0 0;
+  padding: 14px 34px;
+  border-radius: 999px;
+  font-size: 44px;
+  font-weight: 900;
+  white-space: nowrap;
+  color: #fff4e0;
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 0 0 3px rgba(255, 226, 184, 0.45);
 }
 
 /* ---- 全員で回している ---- */
@@ -230,22 +273,24 @@
 .fxdc-spin {
   left: 0;
   right: 0;
-  top: 960px;
+  top: 950px;
   text-align: center;
-  font-size: 34px;
+  font-size: 44px;
+  font-weight: 900;
   color: #ffe2b8;
   transform: translateY(20px);
 }
 
 .fxdc-spin small {
-  margin-left: 26px;
-  font-size: 28px;
+  margin-left: 30px;
+  font-size: 32px;
+  font-weight: 700;
   color: #c9cfe6;
 }
 
 .fxdc-spin small b {
   margin: 0 6px;
-  font-size: 36px;
+  font-size: 40px;
   color: #fff;
   font-variant-numeric: tabular-nums;
 }
@@ -286,63 +331,79 @@
   }
 }
 
-/* ---- 当選者 ---- */
+/* ---- 当選者（finish() が呼ばれるまで出したままにする） ---- */
 
 .fxdc-win {
-  left: 880px;
-  top: 250px;
-  width: 960px;
-  height: 780px;
+  left: 790px;
+  top: 178px;
+  width: 1070px;
+  height: 872px;
   display: flex;
   flex-direction: column;
   transform: translateX(60px);
 }
 
-.fxdc[data-phase='winners'] .fxdc-win,
-.fxdc[data-phase='fin'] .fxdc-win {
+.fxdc[data-phase='winners'] .fxdc-win {
   opacity: 1;
   transform: none;
 }
 
 .fxdc[data-phase='fin'] .fxdc-win {
-  opacity: 0.12;
+  opacity: 0;
+  transform: none;
+  transition-duration: calc(600ms * var(--fxdc-k));
 }
 
 .fxdc-win-head {
+  flex: none;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  padding: 0 8px 14px;
+  padding: 0 8px 10px;
   border-bottom: 2px solid rgba(245, 197, 66, 0.35);
 }
 
 .fxdc-win-head b {
-  font-size: 44px;
+  font-size: 46px;
   font-weight: 900;
   letter-spacing: 0.1em;
 }
 
 .fxdc-win-head span {
-  font-size: 28px;
+  font-size: 32px;
   color: #c9cfe6;
 }
 
 .fxdc-win-head span b {
   margin-right: 6px;
-  font-size: 44px;
+  font-size: 48px;
   letter-spacing: 0;
   color: #fff;
   font-variant-numeric: tabular-nums;
 }
 
 .fxdc-more {
-  min-height: 34px;
-  padding: 8px 8px 0;
-  font-size: 22px;
-  color: #8a93b8;
+  flex: none;
+  min-height: 46px;
+  padding: 6px 8px 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: #aab3d6;
 }
 
+/* 一覧は欄に収まる分だけ（あふれた分は TS で古い行から畳む） */
 .fxdc-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+}
+
+/* 特賞（虹の玉）の大きな 1 行。出ていないときは場所を取らない */
+.fxdc-top {
+  flex: none;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -350,22 +411,23 @@
 
 .fxdc-row {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) auto;
+  grid-template-columns: 64px auto minmax(0, 1fr);
   align-items: center;
-  gap: 22px;
-  max-height: 84px;
+  gap: 20px;
+  min-height: 86px;
   margin-bottom: 10px;
-  padding: 10px 22px 10px 14px;
+  padding: 8px 22px 8px 14px;
   overflow: hidden;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(255, 255, 255, 0.08);
   opacity: 0;
   transform: translateX(40px);
   transition:
     opacity calc(700ms * var(--fxdc-k)) ease-out,
     transform calc(700ms * var(--fxdc-k)) ease-out,
     max-height calc(500ms * var(--fxdc-k)) ease,
+    min-height calc(500ms * var(--fxdc-k)) ease,
     margin calc(500ms * var(--fxdc-k)) ease,
     padding calc(500ms * var(--fxdc-k)) ease;
 }
@@ -375,11 +437,14 @@
   transform: none;
 }
 
+/* 畳む（始まりの高さは TS が max-height に入れる） */
 .fxdc-row.leaving {
-  max-height: 0;
+  max-height: 0 !important;
+  min-height: 0;
   margin-bottom: 0;
   padding-top: 0;
   padding-bottom: 0;
+  border-width: 0;
   opacity: 0;
 }
 
@@ -395,11 +460,12 @@
 
 .fxdc-row[data-color='rainbow'] .fxg-ball {
   box-shadow:
-    0 0 22px rgba(200, 160, 255, 0.45),
+    0 0 22px rgba(255, 255, 255, 0.4),
     inset 0 -4px 7px rgba(0, 0, 0, 0.22);
 }
 
 .fxdc-who {
+  max-width: 420px;
   overflow: hidden;
   font-size: 40px;
   font-weight: 900;
@@ -407,40 +473,98 @@
   text-overflow: ellipsis;
 }
 
+/* 「あなた」の印: 水色の札（ほかの画面と同じ形） */
 .fxdc-who i {
   display: inline-block;
   margin-right: 14px;
-  padding: 2px 14px;
+  padding: 2px 16px;
   border-radius: 999px;
-  vertical-align: 6px;
-  font-size: 22px;
+  vertical-align: 5px;
+  font-size: 28px;
   font-style: normal;
   font-weight: 900;
-  color: #3a2600;
-  background: #f5c542;
+  color: #06223a;
+  background: #5ad2ff;
 }
 
+/* 賞の名前（玉の形と名前）と、景品の名前。長い名前は切らずに折り返す */
 .fxdc-prize {
-  max-width: 420px;
-  overflow: hidden;
-  font-size: 30px;
-  font-weight: 700;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  color: #ffe2b8;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 2px 16px;
+  text-align: right;
 }
 
-.fxdc-prize span {
-  margin-right: 10px;
-  font-size: 24px;
+.fxdc-prize em {
+  flex: none;
+  font-size: 28px;
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
   color: #c9cfe6;
 }
 
-/* 自分の行は、金の縁とあたたかい背景で目立たせる（点滅はしない） */
+.fxdc-row[data-color='red'] .fxdc-prize em {
+  color: #ffb3b3;
+}
+
+.fxdc-row[data-color='gold'] .fxdc-prize em {
+  color: #ffe08a;
+}
+
+.fxdc-prize b {
+  font-size: 36px;
+  font-weight: 800;
+  line-height: 1.2;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  color: #ffe2b8;
+}
+
+/* 自分の行は、水色の縁と明るい地で目立たせる（点滅はしない） */
 .fxdc-row.me {
-  background: linear-gradient(90deg, rgba(245, 197, 66, 0.22), rgba(245, 197, 66, 0.06));
-  border: 2px solid rgba(245, 197, 66, 0.8);
-  box-shadow: 0 0 30px rgba(245, 197, 66, 0.25);
+  background: linear-gradient(90deg, rgba(90, 210, 255, 0.2), rgba(90, 210, 255, 0.05));
+  border-color: #5ad2ff;
+}
+
+/* 特賞: 大きな 1 行。虹は縁取りだけにとどめる（面で虹を使うのは「確定」だけ） */
+.fxdc-row.big {
+  grid-template-columns: 96px auto minmax(0, 1fr);
+  gap: 26px;
+  min-height: 150px;
+  margin: 12px 0 0;
+  padding: 14px 30px 14px 22px;
+  border: 5px solid transparent;
+  border-radius: 26px;
+  background:
+    linear-gradient(180deg, #232c5e, #121839) padding-box,
+    linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff) border-box;
+  box-shadow: 0 0 40px rgba(255, 255, 255, 0.14);
+}
+
+.fxdc-row.big .fxg-ball {
+  --d: 92px;
+}
+
+.fxdc-row.big .fxdc-who {
+  font-size: 58px;
+}
+
+.fxdc-row.big .fxdc-prize em {
+  font-size: 40px;
+  font-weight: 900;
+  background: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.fxdc-row.big .fxdc-prize b {
+  font-size: 52px;
+  font-weight: 900;
+  color: #fff4e0;
 }
 
 /* ---- おつかれさまでした ---- */
@@ -454,9 +578,11 @@
   transition-duration: calc(1800ms * var(--fxdc-k));
 }
 
+/* 一覧と抽選器が消えてから出す（残像と重ねない） */
 .fxdc[data-phase='fin'] .fxdc-fin {
   opacity: 1;
   transform: none;
+  transition-delay: calc(550ms * var(--fxdc-k));
 }
 
 .fxdc-fin b {
@@ -476,7 +602,7 @@
 
 .fxdc-fin p {
   margin: 26px 0 0;
-  font-size: 30px;
+  font-size: 36px;
   color: #ffe2b8;
 }
 

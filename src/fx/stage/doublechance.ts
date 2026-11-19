@@ -15,17 +15,26 @@ import { GOLD, type BallColor } from '../theme'
 //   s.addWinner({...})       // 当たった人を 1 人ずつ出す（続けて呼んでも、間をあけて 1 人ずつ並べる）
 //   await s.finish()         // おつかれさまでした（この画面は destroy() まで残る）
 //
+// 当選者の一覧は、finish() が呼ばれるまで出したままにする（司会が読み上げる時間。権威の側で「次へ」を待つ）。
+// finish() では一覧と抽選器を消してから、締めの言葉だけの画面にする。
+// 一覧は画面に収まる行数だけ並べ、あふれたら古い行から畳んで「ほか ○ 人」にする（自分の行は残す）。
+// 特賞（虹の玉）は、一覧の下に大きな 1 行で出す。賞の格は、玉の絵と賞の名前（ダブルチャンス賞・上位賞・特賞）で伝える。
+//
 // 抽選器の絵はスマホと同じもの（phone/garapon.ts の GaraponMachine）を大きく描く
 
 type Phase = 'entry' | 'spin' | 'winners' | 'fin'
 
 const RING_C = 2 * Math.PI * 170 // 残り時間の輪の長さ
-const MAX_ROWS = 8 // 当選者を一度に並べる行数（超えたら古い行から畳む。自分の行は残す）
+const ROW_SPACE = 10 // 当選者の行の間（doublechance.css の .fxdc-row の margin-bottom と合わせる）
 const ROW_GAP = 900 // 当選者を 1 人ずつ出す間隔（演出上の ms）
 // 大きな絵なので、回転はゆっくり（1 秒に 0.1 回転以下）
 const CRUISE: Readonly<Record<Phase, number>> = { entry: 0, spin: 0.1, winners: 0.06, fin: 0 }
 // 回している音の文字だけにする（「カラン」など当たりを思わせる言葉は、結果と関係なく出さない）
 const POP_WORDS = ['ガラガラ', 'ガラッ', 'ゴロゴロ', 'ガラガラ…', 'ガラッ']
+// 玉の色ごとの賞の名前（玉の絵に添える。色の名前だけでは、何の格か分からないため）
+const AWARD: Readonly<Record<BallColor, string>> = { white: 'はずれ', red: 'ダブルチャンス賞', gold: '上位賞', rainbow: '特賞' }
+// 景品の名前の頭に賞の名前が付いていたら外す（賞の名前は札で出すので、重ねない）
+const prizeName = (prize: string): string => prize.replace(/^(ダブルチャンス賞|特賞|上位賞|SR\s*賞)[\s　:：]*/, '') || prize
 
 export interface DoubleChanceWinner {
   name: string
@@ -66,7 +75,7 @@ export class DoubleChanceStage {
       <div class="fxdc-pops"></div>
       <header class="fxdc-head">
         <div class="fxdc-kicker">DOUBLE CHANCE</div>
-        <div class="fxdc-title">ダブルチャンス</div>
+        <div class="fxdc-title fxdc-ol" data-text="ダブルチャンス"><b>ダブルチャンス</b></div>
         <div class="fxdc-sub"></div>
       </header>
       <section class="fxdc-entry">
@@ -80,11 +89,12 @@ export class DoubleChanceStage {
         <div class="fxdc-entrants"><span>エントリー</span><b data-k="entrants">0</b><span>人</span></div>
         <p class="fxdc-howto">スマホの「エントリー」ボタンを押してください</p>
       </section>
-      <div class="fxdc-spin">スマホを連打して、玉を出そう<small>参加<b data-k="entrants">0</b>人</small></div>
+      <div class="fxdc-spin">スマホをタップして、玉を出そう<small>参加<b data-k="entrants">0</b>人</small></div>
       <section class="fxdc-win">
         <div class="fxdc-win-head"><b>当選者</b><span><b class="fxdc-win-n">0</b>人</span></div>
         <div class="fxdc-more"></div>
         <ol class="fxdc-list"></ol>
+        <ol class="fxdc-top"></ol>
       </section>
       <div class="fxdc-fin"><b>おつかれさまでした</b><small>ご参加ありがとうございました</small></div>`,
     )
@@ -146,7 +156,8 @@ export class DoubleChanceStage {
     this.queue = this.queue.then(() => this.showWinner(o))
   }
 
-  // おつかれさまでした。並べ終わるのを待ってから出す
+  // おつかれさまでした。並べ終わるのを待ち、一覧と抽選器を消してから、締めの言葉だけを出す。
+  // 呼ばれるまでは、当選者の一覧を出したままにする（司会が読み上げ終えてから呼ぶ）
   async finish(): Promise<void> {
     await this.queue
     if (this.dead) return
@@ -154,7 +165,7 @@ export class DoubleChanceStage {
     this.stopVoice()
     this.machine.friction = 0.5
     if (this.sound) sfx.outro()
-    await this.tl.wait(600)
+    await this.tl.wait(1100) // 一覧と抽選器が消えて、締めの言葉が出るまで
     if (this.dead) return
     this.fx?.rise(40, ['#ffd9a0', '#ffe9c7', '#c9d6ff', '#9fb4ff'], 200, 1720, 1040)
     await this.tl.wait(2600)
@@ -207,44 +218,61 @@ export class DoubleChanceStage {
       if (this.dead) return
     }
     const info = BALL_INFO[o.color]
-    const list = this.$('.fxdc-list')
+    const top = o.color === 'rainbow' // 特賞は、一覧の下に大きな 1 行で出す
     const row = el(
       'li',
-      `fxdc-row${o.isMe ? ' me' : ''}`,
+      `fxdc-row${o.isMe ? ' me' : ''}${top ? ' big' : ''}`,
       `${ballHtml(o.color)}
       <span class="fxdc-who">${o.isMe ? '<i>あなた</i>' : ''}${o.isMe && o.name === 'あなた' ? '' : escapeHtml(o.name)}</span>
-      <span class="fxdc-prize"><span>${info.shape} ${info.short}</span>${escapeHtml(o.prize)}</span>`,
+      <span class="fxdc-prize"><em>${info.shape} ${AWARD[o.color]}</em><b>${escapeHtml(prizeName(o.prize))}</b></span>`,
     )
     row.dataset.color = o.color
-    list.append(row)
-    this.fold(list)
+    if (top) {
+      // 前の特賞があれば、ふつうの大きさにして一覧へ移す
+      const box = this.$('.fxdc-top')
+      for (const old of [...box.children]) {
+        old.classList.remove('big')
+        this.$('.fxdc-list').append(old)
+      }
+      box.append(row)
+    } else {
+      this.$('.fxdc-list').append(row)
+    }
+    this.fold()
     void row.offsetWidth
     row.classList.add('on')
     this.winners++
     this.$('.fxdc-win-n').textContent = String(this.winners)
     if (this.sound) sfx.telop()
-    if (o.isMe && this.fx) {
-      // 自分の行は、玉のところに金の小さな粒をそっと添える（画面の縮小表示を打ち消して座標にする）
+    if ((o.isMe || top) && this.fx) {
+      // 自分の行と特賞の行は、玉のところに金の小さな粒をそっと添える（画面の縮小表示を打ち消して座標にする）
       const r = this.el.getBoundingClientRect()
-      const b = row.getBoundingClientRect()
+      const b = row.querySelector('.fxg-ball')!.getBoundingClientRect()
       const s = r.width / 1920 || 1
+      const x = (b.left + b.width / 2 - r.left) / s
       const y = Math.min(1040, (b.top + b.height / 2 - r.top) / s)
-      this.fx.burst(926, y, { count: 26, colors: GOLD, speed: 4, size: 6, life: 60, shape: 'dot', gravity: 0.05 })
+      this.fx.burst(x, y, { count: top ? 40 : 26, colors: GOLD, speed: 4, size: 6, life: 60, shape: 'dot', gravity: 0.05 })
     }
-    await this.tl.wait(ROW_GAP)
+    await this.tl.wait(top ? ROW_GAP * 1.6 : ROW_GAP)
   }
 
-  // 行が多すぎたら、古い行から畳む（自分の行は残す）
-  private fold(list: HTMLElement): void {
+  // 一覧が欄からあふれたら、収まるまで古い行から畳む（自分の行は残す）。行の高さは景品の名前の長さで変わるので、測って決める
+  private fold(): void {
+    const list = this.$('.fxdc-list')
     const rows = [...list.querySelectorAll<HTMLElement>('.fxdc-row:not(.leaving)')]
-    if (rows.length <= MAX_ROWS) return
-    const old = rows.find((r) => !r.classList.contains('me'))
-    if (!old) return
-    old.classList.add('leaving')
-    this.folded++
-    this.$('.fxdc-more').textContent = `ほか ${this.folded} 人`
-    this.tl.at(550, () => old.remove())
-    if (this.reduced) old.remove()
+    let height = rows.reduce((sum, r) => sum + r.offsetHeight + ROW_SPACE, 0)
+    for (const old of rows) {
+      if (height <= list.clientHeight + ROW_SPACE) break
+      if (old.classList.contains('me')) continue
+      height -= old.offsetHeight + ROW_SPACE
+      old.style.maxHeight = `${old.offsetHeight}px` // 畳む動きの始まりの高さ
+      void old.offsetWidth
+      old.classList.add('leaving')
+      this.folded++
+      if (this.reduced) old.remove()
+      else this.tl.at(550, () => old.remove())
+    }
+    if (this.folded) this.$('.fxdc-more').textContent = `ほか ${this.folded} 人`
   }
 
   private readonly onFrame = (dt: number): void => {

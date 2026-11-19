@@ -37,6 +37,9 @@ const planOf = (tier: Tier, o: Partial<Plan> = {}): Plan => ({
   ...o,
 })
 
+// 着地のあとにカードの帯へ出す結果の言葉の見本（組み込みでは、ui 側がその回の結果から作って渡す）
+const RESULT = ['ビンゴなし', 'リーチ +12 人', 'リーチ +28 人', 'ビンゴ 1 人！'] as const
+
 // 見本が終わっても最後の画面を残し、ギャラリーで次を選んだ（tl が取り消された）ときに片付ける
 async function linger(tl: Timeline, m: DrawMachine): Promise<void> {
   await tl.wait(10 * 60 * 1000)
@@ -58,7 +61,7 @@ async function drawOnce(tl: Timeline, m: DrawMachine, tier: Tier, rng: Rng, o: {
     await tl.wait(o.pushWait ?? 1600)
     if (tl.cancelled) return false
   }
-  await m.reveal(rng.pick(pool), tier)
+  await m.reveal(rng.pick(pool), tier, { result: RESULT[Math.min(3, tier)] })
   return !tl.cancelled
 }
 
@@ -82,7 +85,7 @@ async function custom(
     await tl.wait(o.push)
     if (tl.cancelled) return false
   }
-  await m.reveal(rng.pick(pool), o.tier)
+  await m.reveal(rng.pick(pool), o.tier, { result: RESULT[Math.min(3, o.tier)] })
   return !tl.cancelled
 }
 
@@ -105,7 +108,7 @@ function sample(
   })
 }
 
-const TIER_LABEL = ['青（静か）', `緑（${TIER_WORD[1]}）`, `赤（${TIER_WORD[2]}）`, `金（${TIER_WORD[3]}・PUSH 待ちのあと公開）`] as const
+const TIER_LABEL = ['青（静か）', `緑（${TIER_WORD[1]}）`, `赤（${TIER_WORD[2]}）`, `金（${TIER_WORD[3]}・司会の合図を待って公開）`] as const
 
 registerGallery(
   // ---- 段階ごとの通し（毎回ちがう計画と型） ----
@@ -129,7 +132,7 @@ registerGallery(
   // ---- 要素ごとの見本 ----
   sample(
     'steps',
-    'ビンゴ期待度の目盛り 5 段（★ が増える。青 → 金）',
+    '会場の期待度の目盛り（段階と 1 対 1 の 4 段。色が上がると、下から順に点く）',
     [
       beat(0, 'appear', 0),
       beat(300, 'spin', 0),

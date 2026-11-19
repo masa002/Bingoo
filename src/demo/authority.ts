@@ -83,7 +83,8 @@ export class DemoAuthority {
   private questScore: ((score: number) => void) | null = null
   private pendingEvent: EventKind | null = null
   private pushNow: (() => void) | null = null
-  private gate: (() => void) | null = null // 説明の画面で、司会の「スタート」を待っている
+  private gate: (() => void) | null = null // 説明の画面などで、司会の合図を待っている
+  holdLabel = '' // 待っている間の、主催のボタンの名前
   private choiceNow: ((kind: 'receive' | 'challenge') => void) | null = null
   private entryClose: (() => void) | null = null
 
@@ -168,8 +169,14 @@ export class DemoAuthority {
     return this.gate !== null
   }
 
-  private async hold(): Promise<void> {
+  // デモの操作で抽選順を変えた（主催コンソールに出す）
+  get isTampered(): boolean {
+    return this.tampered
+  }
+
+  private async hold(label = 'スタート ▶'): Promise<void> {
     const pressed = new Promise<void>((r) => (this.gate = r))
+    this.holdLabel = label
     this.onChange()
     await Promise.race([pressed, this.clock.wait(this.auto ? BRIEF.auto : BRIEF.max)])
     this.gate = null
@@ -662,6 +669,9 @@ export class DemoAuthority {
     this.hub.publish({ type: 'dcSpin', balls: myBalls, winners, entrants: this.entrants.size })
     await this.clock.wait(9000 + winners.length * 900)
     if (gen !== this.generation) return
+    // 当選者の一覧は、司会が読み上げ終わるまで出しておく（締めくくりは、主催の合図で）
+    await this.hold('締めくくりへ ▶')
+    if (gen !== this.generation) return
     this.hub.publish({ type: 'dcEnd' })
     this.phase = 'done'
     this.busy = false
@@ -790,7 +800,7 @@ export class DemoAuthority {
   }
 
   private publishJoined(): void {
-    this.hub.publish({ type: 'joined', count: this.botsJoined + (this.joined ? 1 : 0) })
+    this.hub.publish({ type: 'joined', count: this.botsJoined + (this.joined ? 1 : 0), meJoined: this.joined })
   }
 
   private say(text: string): void {

@@ -26,7 +26,8 @@ import type { StageEventBase } from './events'
 //   D          一斉に発表。当たりの札は金に光り（王冠と ★ ラストワン賞）、外れの札は白い玉になって暗くなる
 //   D+0.7 秒   「はずれた人には ダブルチャンスの玉 3 個」
 //   T-0.5 秒   ふわっと消して、T で片付けて解決する
-// 名前は 16 枠まで並べる（超えたら 15 人と「ほか○人」の札。自分と当たりの人を先に入れる）。
+// 名前は 12 枠まで並べる（超えたら 11 人と「ほか○人」の札。自分と当たりの人を先に入れる）。
+// 後ろの席からも読めるよう、名前は 40px 以上、名前の下のひとこと（回しています・はずれ）は 28px にする。
 // 大画面は勝ち負けしか知らないので、当たりの札は玉の色ではなく王冠で見せる（スマホの玉の色と食い違わないように）。
 // 重なり順はイベントの層が z-index 44、粒子の canvas が 60。山場では BGM を下げ、終わったら戻す
 
@@ -58,7 +59,7 @@ export async function playLastOneGarapon(host: HTMLElement, o: LastOneStageOptio
 // 取り消されたときに、演出の途中から抜けるための印
 const CANCELLED = Symbol('cancelled')
 
-const CELLS = 16 // 名前の札の枠
+const CELLS = 12 // 名前の札の枠（これより多いと、名前が小さくなって後ろの席から読めない）
 const GRID = { x: 620, y: 296, w: 1240, h: 640 } // 名前の札を並べる欄
 const GAP = 20
 const MACHINE = { x: 110, y: 290, size: 420 } // 大きな抽選器（位置は lastone.css の .fxls-mwrap と合わせる）
@@ -67,7 +68,7 @@ const CRUISE = 0.08 // 大きな絵なので、回転はゆっくり（1 秒に 
 const DC_BALLS = 3 // 外れた人がもらえるダブルチャンスの玉
 // 回している音の文字だけにする（「カラン」など当たりを思わせる言葉は、結果と関係なく出さない）
 const POP_WORDS = ['ガラガラ', 'ガラッ', 'ゴロゴロ', 'ガラガラ…', 'ゴロッ']
-const SPIN_LABELS = ['ガラガラ…', 'ゴロゴロ…', 'ガラッ ガラッ', '回しています…']
+const SPIN_LABELS = ['ガラガラ…', 'ゴロゴロ…', 'ガラッ ガラッ', '回しています']
 
 // 音で例外が出ても、演出は止めずに進める（音は鳴らなくても、見た目と時刻はスマホとそろえる）
 const safe = (fn: () => void): void => {
@@ -126,15 +127,15 @@ function pick(all: readonly Entrant[], max: number): Entrant[] {
   return [...keep].sort((a, b) => a - b).map((i) => all[i])
 }
 
-// 札の並べ方。人数に合わせて 1〜4 列にし、欄の真ん中に寄せる（最後の行も真ん中に寄せる）
+// 札の並べ方。人数に合わせて 1〜3 列にし、欄の真ん中に寄せる（最後の行も真ん中に寄せる）
 function layout(cells: number) {
-  const cols = cells <= 3 ? 1 : cells <= 8 ? 2 : cells <= 12 ? 3 : 4
+  const cols = cells <= 3 ? 1 : cells <= 8 ? 2 : 3
   const rows = Math.max(1, Math.ceil(cells / cols))
   const cw = Math.min(cols === 1 ? 680 : 600, (GRID.w - (cols - 1) * GAP) / cols)
   const ch = Math.min(150, (GRID.h - (rows - 1) * GAP) / rows)
-  const sd = Math.round(Math.min(cw >= 560 ? 88 : cw >= 380 ? 76 : 62, ch - 44)) // 玉の大きさ
-  const fs = cw >= 560 ? 46 : cw >= 380 ? 40 : 30 // 名前の大きさ
-  const pad = cw >= 380 ? 20 : 14
+  const sd = Math.round(Math.min(cw >= 560 ? 88 : 76, ch - 44)) // 玉の大きさ
+  const fs = cw >= 560 ? 46 : 40 // 名前の大きさ
+  const pad = 20
   const x0 = GRID.x + (GRID.w - (cols * cw + (cols - 1) * GAP)) / 2
   const y0 = GRID.y + (GRID.h - (rows * ch + (rows - 1) * GAP)) / 2
   const at = (i: number): { x: number; y: number } => {
@@ -280,7 +281,7 @@ class LastOneShow {
         ' fxls-more',
         `<div class="fxls-in">
           <div class="fxls-slot"><span class="fxls-q"><i>…</i></span><span class="fxls-res"></span></div>
-          <div class="fxls-txt"><b>ほか ${fmt(this.hidden.length)} 人</b><small>みんな スマホで回しています</small></div>
+          <div class="fxls-txt"><b>ほか ${fmt(this.hidden.length)} 人</b><small>回しています</small></div>
         </div>`,
       )
       this.centers.pop()

@@ -16,7 +16,14 @@
   --fxp-sheen: 3200ms;
   --fxp-hue: 6000ms;
   --fxp-spin: 26000ms;
-  --fxp-beat: 860ms;
+  /* 色の決まり（prize.ts が theme.ts の値を入れる。ここは同じ値の控え） */
+  --fxp-rc-c: #c0c6d6;
+  --fxp-rc-r: #2dd4bf;
+  --fxp-rc-sr: #f5c542;
+  --fxp-rainbow: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
+  --fxp-rainbow-ball: conic-gradient(from 0deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff, #ff5a5a);
+  --fxp-gold: linear-gradient(180deg, #fff4cc, #f5c542 55%, #d9a520);
+  --fxp-edge: #2a1a05;
 }
 
 .fxp *,
@@ -76,7 +83,7 @@
   text-align: center;
   font-size: 13px;
   letter-spacing: 2px;
-  color: #8a93b8;
+  color: #aab3d6;
   opacity: 0;
 }
 
@@ -144,6 +151,61 @@
   }
 }
 
+/* ---- 見出しの型 --------------------------------------------------------------- */
+
+/* 太さ 900、金の塗り、濃い茶の縁（1 種類）。縁は同じ文字（data-t）を下に重ねて描く（塗りを削らない）。 */
+/* data-r を付けると、塗りがそのレア度の色になる（SR は金のまま、UR は虹の面） */
+.fxp-h {
+  display: grid;
+  margin: 0;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.fxp-h::before,
+.fxp-h > span {
+  grid-area: 1 / 1;
+}
+
+.fxp-h::before {
+  content: attr(data-t);
+  color: var(--fxp-edge);
+  text-shadow:
+    2px 0 var(--fxp-edge),
+    -2px 0 var(--fxp-edge),
+    0 2px var(--fxp-edge),
+    0 -2px var(--fxp-edge),
+    1.5px 1.5px var(--fxp-edge),
+    -1.5px 1.5px var(--fxp-edge),
+    1.5px -1.5px var(--fxp-edge),
+    -1.5px -1.5px var(--fxp-edge),
+    0 3px var(--fxp-edge);
+}
+
+.fxp-h > span {
+  background: var(--fxp-gold);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.fxp-h[data-r='C'] > span {
+  background-image: linear-gradient(180deg, #ffffff, var(--fxp-rc-c) 55%, #8a93a8);
+}
+
+.fxp-h[data-r='R'] > span {
+  background-image: linear-gradient(180deg, #d5fff8, var(--fxp-rc-r) 55%, #14a392);
+}
+
+.fxp-h[data-r='UR'] > span {
+  background-image: var(--fxp-rainbow);
+  animation: fxp-hue var(--fxp-hue) linear infinite;
+}
+
+.fxp-h[data-r='W'] > span {
+  background-image: linear-gradient(180deg, #ffffff, #a5f3fc 55%, #67e8f9);
+}
+
 /* ---- パックの光（先バレ。ガセあり） ---------------------------------------- */
 
 .fxp-halo {
@@ -166,9 +228,9 @@
   background: radial-gradient(closest-side, rgba(255, 220, 120, 0.7), rgba(245, 197, 66, 0.24) 58%, transparent);
 }
 
-/* 虹は色だけを回す（大きい面なので、見かけの回転も 1 秒に 0.1 回転以下になる長さで） */
+/* 虹は色だけを回す（大きい面なので、見かけの回転も 1 秒に 0.1 回転以下になる長さで）。丸い光なので、玉と同じ円すいで描く */
 .fxp-halo[data-glow='rainbow'] {
-  background: conic-gradient(from 0deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff, #ff5a5a);
+  background: var(--fxp-rainbow-ball);
   filter: blur(26px);
   -webkit-mask-image: radial-gradient(closest-side, #000 30%, transparent 100%);
   mask-image: radial-gradient(closest-side, #000 30%, transparent 100%);
@@ -212,8 +274,9 @@
   filter: drop-shadow(0 0 18px rgba(245, 197, 66, 0.9));
 }
 
+/* 虹の色は後ろの光（fxp-halo）が出す。パックの縁は白で光らせる（単色で虹を表さない） */
 .fxp-pack[data-glow='rainbow'] {
-  filter: drop-shadow(0 0 16px rgba(255, 140, 230, 0.8));
+  filter: drop-shadow(0 0 16px rgba(255, 255, 255, 0.7));
 }
 
 .fxp-pack-in {
@@ -402,8 +465,8 @@
 }
 
 .fxp-pack[data-glow='rainbow'] .fxp-slit {
-  background: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
-  box-shadow: 0 0 14px 5px rgba(255, 170, 240, 0.85);
+  background: var(--fxp-rainbow);
+  box-shadow: 0 0 14px 5px rgba(255, 255, 255, 0.6);
 }
 
 /* 開いた瞬間に上へ伸びる光の柱（局所の光） */
@@ -432,7 +495,7 @@
 }
 
 .fxp-pack[data-glow='rainbow'] .fxp-beam {
-  background: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
+  background: var(--fxp-rainbow);
 }
 
 /* 開け方の案内 */
@@ -455,8 +518,8 @@
 }
 
 .fxp-hint small {
-  font-size: 12px;
-  color: #8a93b8;
+  font-size: 13px;
+  color: #aab3d6;
 }
 
 .fxp-hint em {
@@ -532,8 +595,9 @@
   background: linear-gradient(135deg, #7d8598 0%, #eef1f7 20%, #9aa2b6 38%, #ffffff 52%, #a3abbf 68%, #e3e7f0 84%, #737b8f 100%);
 }
 
-.fxp-frame[data-edge='blue'] {
-  background: linear-gradient(135deg, #163a8f 0%, #6ea8ff 22%, #2f6fe0 40%, #b5d3ff 54%, #3b82f6 72%, #9cc3ff 86%, #1d4ed8 100%);
+/* R は青緑（段階の青と紛れないため） */
+.fxp-frame[data-edge='teal'] {
+  background: linear-gradient(135deg, #0b5f57 0%, #5eead4 22%, #14b8a6 40%, #ccfbf1 54%, var(--fxp-rc-r) 72%, #99f6e4 86%, #0d9488 100%);
 }
 
 .fxp-frame[data-edge='gold'] {
@@ -541,7 +605,7 @@
 }
 
 .fxp-frame[data-edge='rainbow'] {
-  background: conic-gradient(from 0deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff, #ff5a5a);
+  background: var(--fxp-rainbow);
   animation: fxp-hue var(--fxp-hue) linear infinite;
 }
 
@@ -615,7 +679,7 @@
 
 .fxp-card[data-r='R'] .fxp-front .fxp-face-in,
 .fxp-mini[data-r='R'] .fxp-mini-in {
-  background: radial-gradient(circle at 50% 36%, #2e68dc, #0c1d52 74%);
+  background: radial-gradient(circle at 50% 36%, #138a7c, #052a2c 74%);
 }
 
 .fxp-card[data-r='SR'] .fxp-front .fxp-face-in,
@@ -627,7 +691,7 @@
 .fxp-mini[data-r='UR'] .fxp-mini-in {
   background:
     radial-gradient(circle at 50% 38%, rgba(30, 14, 60, 0.3), #12082a 74%),
-    conic-gradient(from 0deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff, #ff5a5a);
+    var(--fxp-rainbow);
 }
 
 .fxp-card[data-r='W'] .fxp-front .fxp-face-in {
@@ -699,8 +763,8 @@
 .fxp-card[data-r='R'] .fxp-rank {
   color: #fff;
   text-shadow:
-    0 0 16px rgba(59, 130, 246, 0.95),
-    0 2px 0 #1d4ed8;
+    0 0 16px rgba(45, 212, 191, 0.95),
+    0 2px 0 #0f766e;
 }
 
 .fxp-card[data-r='SR'] .fxp-rank {
@@ -711,7 +775,7 @@
 }
 
 .fxp-card[data-r='UR'] .fxp-rank {
-  background: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
+  background: var(--fxp-rainbow);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -760,8 +824,8 @@
   font-size: 32px;
   color: #fff;
   text-shadow:
-    0 0 12px #9cc3ff,
-    0 0 24px #3b82f6;
+    0 0 12px #99f6e4,
+    0 0 24px var(--fxp-rc-r);
   opacity: 0;
   pointer-events: none;
 }
@@ -798,9 +862,13 @@
     0 12px 30px rgba(0, 0, 0, 0.5);
 }
 
+/* 虹の光は、4 方向に色を分けて出す（単色で虹を表さない） */
 .fxp-card.is-rainbow .fxp-face {
   box-shadow:
-    0 0 34px 8px rgba(255, 150, 235, 0.55),
+    -14px 0 30px 2px rgba(255, 90, 90, 0.45),
+    0 -14px 30px 2px rgba(255, 241, 90, 0.4),
+    14px 0 30px 2px rgba(90, 210, 255, 0.45),
+    0 14px 30px 2px rgba(168, 90, 255, 0.45),
     0 12px 30px rgba(0, 0, 0, 0.5);
 }
 
@@ -834,48 +902,38 @@
   font-style: normal;
 }
 
-.fxp-caption b {
+/* 景品名は見出しの型（塗りはレア度の色。fxp-h） */
+.fxp-caption .fxp-h {
   font-size: 27px;
-  font-weight: 900;
-  line-height: 1.25;
 }
 
 .fxp-caption em {
   font-style: normal;
-  font-size: 12px;
-  color: #8a93b8;
+  font-size: 13px;
+  color: #aab3d6;
 }
 
 .fxp-caption[data-r='C'] small {
-  color: #c0c6d6;
+  color: var(--fxp-rc-c);
 }
 
 .fxp-caption[data-r='R'] small {
-  color: #7fb2ff;
+  color: var(--fxp-rc-r);
 }
 
 .fxp-caption[data-r='SR'] small {
-  color: #f5c542;
+  color: var(--fxp-rc-sr);
 }
 
-.fxp-caption[data-r='SR'] b {
-  color: #fff4cc;
-  text-shadow: 0 0 18px rgba(245, 197, 66, 0.6);
-}
-
-.fxp-caption[data-r='UR'] {
-  animation: fxp-hue var(--fxp-hue) linear infinite;
-}
-
-.fxp-caption[data-r='UR'] small,
-.fxp-caption[data-r='UR'] b {
-  background: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
+.fxp-caption[data-r='UR'] small {
+  background: var(--fxp-rainbow);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  animation: fxp-hue var(--fxp-hue) linear infinite;
 }
 
-.fxp-caption[data-r='UR'] b {
+.fxp-caption[data-r='UR'] .fxp-h {
   font-size: 31px;
 }
 
@@ -944,7 +1002,7 @@
   font-weight: 900;
   letter-spacing: 2px;
   color: #1a0b2a;
-  background: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
+  background: var(--fxp-rainbow);
 }
 
 /* ---- 在庫切れで 1 ランクアップ --------------------------------------------- */
@@ -953,7 +1011,7 @@
   position: absolute;
   left: 24px;
   right: 24px;
-  top: 88px;
+  top: 68px;
   z-index: 4;
   padding: 10px 14px 12px;
   border-radius: 16px;
@@ -964,9 +1022,11 @@
   opacity: 0;
 }
 
+/* 発表のあと 0.82 倍の札になって残るので、縮んでも 13px を下回らない大きさにする */
 .fxp-rankup small {
   display: block;
-  font-size: 12px;
+  font-size: 16px;
+  font-weight: 800;
   letter-spacing: 2px;
   color: #ffe3a3;
 }
@@ -1008,28 +1068,35 @@
 
 .fxp-chip i {
   font-style: normal;
-  font-size: 13px;
+  font-size: 16px;
   color: var(--fxp-c);
 }
 
 .fxp-chip[data-r='C'] {
-  --fxp-c: #c0c6d6;
+  --fxp-c: var(--fxp-rc-c);
 }
 
 .fxp-chip[data-r='R'] {
-  --fxp-c: #5b9bff;
+  --fxp-c: var(--fxp-rc-r);
 }
 
 .fxp-chip[data-r='SR'] {
-  --fxp-c: #f5c542;
+  --fxp-c: var(--fxp-rc-sr);
 }
 
+/* UR は縁も形も虹（単色で虹を表さない） */
 .fxp-chip[data-r='UR'] {
-  --fxp-c: #ff8ae0;
   border-color: transparent;
   background:
     linear-gradient(#1a1240, #1a1240) padding-box,
-    linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff) border-box;
+    var(--fxp-rainbow) border-box;
+}
+
+.fxp-chip[data-r='UR'] i {
+  background: var(--fxp-rainbow);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 /* ---- ビンゴ後の選択 ---------------------------------------------------------- */
@@ -1043,30 +1110,29 @@
   background: radial-gradient(ellipse 90% 60% at 50% 30%, #3a1747 0%, #170a26 60%, #05070f 100%);
 }
 
-/* 残り 3 秒から、周りが暗くなって迫ってくる */
-.fxp-choice::after {
+/* 残り 3 秒から、周りが暗くなって迫ってくる（背景だけを暗くする。ボタンと文字は暗くしない） */
+.fxp-choice .fxp-bg::after {
   content: '';
   position: absolute;
   inset: 0;
-  z-index: 2;
   pointer-events: none;
   background: radial-gradient(ellipse 75% 60% at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.55));
   opacity: 0;
   transition: opacity calc(800ms * var(--fxp-t));
 }
 
-.fxp-choice.is-double::after {
+.fxp-choice.is-double .fxp-bg::after {
   background: radial-gradient(ellipse 75% 60% at 50% 50%, transparent 48%, rgba(40, 0, 30, 0.65));
 }
 
-.fxp-choice.is-hurry::after {
+.fxp-choice.is-hurry .fxp-bg::after {
   opacity: 1;
 }
 
 .fxp-ch {
   position: absolute;
   inset: 0;
-  padding: 54px 22px 30px;
+  padding: 48px 22px 30px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1075,27 +1141,45 @@
 
 .fxp-ch-head {
   display: grid;
+  justify-items: center;
   gap: 2px;
   text-align: center;
 }
 
 .fxp-ch-head small {
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 5px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 2px;
   color: #aab8f0;
 }
 
-.fxp-ch-head h2 {
-  margin: 0;
+.fxp-ch-head .fxp-h {
   font-size: 34px;
-  font-weight: 900;
 }
 
+/* 条件（そろえば上位、そろわなければ景品なし）は、選ぶ前にここで読める */
 .fxp-ch-head p {
-  margin: 0;
+  margin: 4px 0 0;
+  display: grid;
+  gap: 1px;
   font-size: 14px;
+  line-height: 1.5;
   color: #c9d1f3;
+}
+
+.fxp-ch-head p span + span {
+  font-size: 15px;
+  font-weight: 800;
+  color: #eef1ff;
+}
+
+.fxp-ch-head p b {
+  font-weight: 900;
+  color: #fff;
+  text-decoration: underline;
+  text-decoration-color: #94a3b8;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
 }
 
 .fxp-ch-head i {
@@ -1104,13 +1188,6 @@
 
 .is-double .fxp-ch-head small {
   color: #ffb84d;
-}
-
-.is-double .fxp-ch-head h2 {
-  background: linear-gradient(180deg, #fff4cc, #f5c542);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
 }
 
 .fxp-ch-prize {
@@ -1154,12 +1231,6 @@
   font-weight: 900;
 }
 
-.fxp-mini-in span {
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 1px;
-}
-
 /* 倍々では、いまの景品が惜しく見えるように光らせる */
 .is-double .fxp-mini {
   box-shadow: 0 0 22px rgba(245, 197, 66, 0.55);
@@ -1182,8 +1253,36 @@
 }
 
 .fxp-ch-pname small {
-  font-size: 12px;
-  color: #8a93b8;
+  font-size: 13px;
+  color: #aab3d6;
+}
+
+/* レア度の名前は、小さいカードの中ではなく、読める大きさで景品名の下に書く */
+.fxp-ch-rar {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: var(--fxp-rc-c);
+}
+
+.fxp-ch-rar i {
+  font-style: normal;
+}
+
+.fxp-ch-rar[data-r='R'] {
+  color: var(--fxp-rc-r);
+}
+
+.fxp-ch-rar[data-r='SR'] {
+  color: var(--fxp-rc-sr);
+}
+
+.fxp-ch-rar[data-r='UR'] {
+  justify-self: start;
+  background: var(--fxp-rainbow);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .fxp-ch-pname b {
@@ -1261,15 +1360,16 @@
 
 .fxp-ch-note {
   margin-top: -6px;
-  font-size: 12px;
-  color: #8a93b8;
+  font-size: 13px;
+  color: #aab3d6;
 }
 
+/* 上から「上位チャレンジ」→「受け取る」。押し間違えないよう、間を広くあける */
 .fxp-ch-btns {
   width: 100%;
   margin-top: auto;
   display: grid;
-  gap: 12px;
+  gap: 22px;
 }
 
 .fxp-btn {
@@ -1293,7 +1393,7 @@
 }
 
 .fxp-btn b {
-  font-size: 23px;
+  font-size: 21px;
   font-weight: 900;
   line-height: 1.2;
 }
@@ -1305,55 +1405,82 @@
   white-space: nowrap;
   font-size: 13px;
   font-weight: 700;
-  opacity: 0.88;
+  opacity: 0.92;
 }
 
-.fxp-btn small i {
+.fxp-btn i {
   font-style: normal;
 }
 
 .fxp-btn em {
   font-style: normal;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
   color: #ffe08a;
+}
+
+/* 失うものの注意書き（上位チャレンジのボタンの中。▼ は失敗の印） */
+.fxp-warn {
+  margin-top: 5px;
+  padding: 5px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.35;
+  color: #f1f4ff;
+  background: rgba(0, 0, 0, 0.42);
+}
+
+.fxp-warn i {
+  color: #94a3b8;
 }
 
 .fxp-btn:active {
   transform: scale(0.97);
 }
 
+/* 受け取る: 主ボタン（金から橙の明るい面）。最下段の、親指がいちばん届く位置に置く */
 .fxp-take {
-  background: linear-gradient(180deg, #2b3670, #1a2152);
+  min-height: 92px;
+  color: #1a1400;
+  background: linear-gradient(135deg, #f5c542, #ff8a3d);
   box-shadow:
-    inset 0 0 0 2px rgba(255, 255, 255, 0.2),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.35),
     0 8px 20px rgba(0, 0, 0, 0.4);
 }
 
+.fxp-take b {
+  font-size: 26px;
+}
+
+.fxp-take small {
+  font-size: 14px;
+  font-weight: 800;
+  opacity: 1;
+}
+
+/* 上位チャレンジ: 金の縁は残すが、暗い面にして光らせない（主ボタンより一段弱く） */
 .fxp-risk {
-  border: 3px solid transparent;
+  border: 2px solid transparent;
   color: #fff4cc;
   background:
-    linear-gradient(180deg, #4b2c05, #241400) padding-box,
+    linear-gradient(180deg, #33220a, #1c1304) padding-box,
     linear-gradient(135deg, #fff4cc, #f5c542 40%, #d9a520 70%, #ffe08a) border-box;
-  box-shadow:
-    0 0 26px rgba(245, 197, 66, 0.35),
-    0 8px 20px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
 }
 
+/* UR を狙うときは、縁だけ虹（小さな面積にとどめる） */
 .fxp-risk[data-target='UR'] {
   color: #fff;
   background:
     linear-gradient(180deg, #2c1148, #150826) padding-box,
-    linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff) border-box;
-  box-shadow:
-    0 0 26px rgba(255, 140, 230, 0.35),
-    0 8px 20px rgba(0, 0, 0, 0.4);
+    var(--fxp-rainbow) border-box;
 }
 
-/* チャレンジできないとき（色だけでなく × と理由の文でも伝える） */
+/* チャレンジできないとき（色だけでなく × と理由の文でも伝える）。理由は読めるよう、画面側の button:disabled の薄さは打ち消す */
 .fxp-risk:disabled {
   cursor: not-allowed;
+  opacity: 1;
   color: #aab0c4;
   background:
     linear-gradient(180deg, #23283c, #181c2c) padding-box,
@@ -1369,25 +1496,6 @@
   white-space: normal;
 }
 
-/* 倍々のチャレンジボタンは鼓動する（大きさだけ。明るさは変えない） */
-.is-double .fxp-risk:not(:disabled):not(.is-on):not(.is-gone) {
-  animation: fxp-beat var(--fxp-beat) ease-in-out infinite;
-}
-
-@keyframes fxp-beat {
-  0%,
-  30%,
-  100% {
-    transform: scale(1);
-  }
-  15% {
-    transform: scale(1.035);
-  }
-  45% {
-    transform: scale(1.02);
-  }
-}
-
 .fxp-choice.is-chosen .fxp-btn {
   pointer-events: none;
 }
@@ -1398,12 +1506,16 @@
 
 .fxp-take.is-on {
   box-shadow:
-    inset 0 0 0 2px #fff,
-    0 0 26px rgba(200, 215, 255, 0.45);
+    inset 0 0 0 3px #fff,
+    0 0 26px rgba(255, 190, 90, 0.6);
 }
 
 .fxp-risk.is-on {
-  box-shadow: 0 0 34px rgba(245, 197, 66, 0.75);
+  box-shadow: 0 0 30px rgba(245, 197, 66, 0.7);
+}
+
+.fxp-risk[data-target='UR'].is-on {
+  box-shadow: 0 0 30px rgba(255, 255, 255, 0.55);
 }
 
 .fxp-btn.is-gone {
@@ -1435,9 +1547,23 @@
   transform: rotate(-10deg);
 }
 
-.fxp-start[data-target='UR'] .fxp-band {
-  color: #1a0b2a;
-  background: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff, #ff5a5a);
+/* UR を狙うときも、帯は金のまま。虹は縁の細い線だけ（全面の虹は「確定」だけなので、挑戦の段階では広く使わない） */
+.fxp-start[data-target='UR'] .fxp-band::before,
+.fxp-start[data-target='UR'] .fxp-band::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--fxp-rainbow);
+}
+
+.fxp-start[data-target='UR'] .fxp-band::before {
+  top: 0;
+}
+
+.fxp-start[data-target='UR'] .fxp-band::after {
+  bottom: 0;
 }
 
 .fxp-band-a {
@@ -1477,32 +1603,22 @@
   opacity: 0;
 }
 
+/* 見出しの型（fxp-h） */
 .fxp-st-title {
   position: absolute;
   left: 0;
   right: 0;
-  top: 318px;
+  top: 314px;
   text-align: center;
   font-size: 46px;
-  font-weight: 900;
-  color: #fff;
-  text-shadow:
-    0 0 22px rgba(245, 197, 66, 0.75),
-    0 4px 0 rgba(0, 0, 0, 0.45);
   opacity: 0;
-}
-
-.fxp-start[data-target='UR'] .fxp-st-title {
-  text-shadow:
-    0 0 22px rgba(255, 140, 230, 0.75),
-    0 4px 0 rgba(0, 0, 0, 0.45);
 }
 
 .fxp-st-target {
   position: absolute;
   left: 0;
   right: 0;
-  top: 402px;
+  top: 392px;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -1512,16 +1628,47 @@
   opacity: 0;
 }
 
+/* ルール（選択の画面と同じ言い方）。そろえば上位、そろわなければ景品なし */
 .fxp-st-rule {
   position: absolute;
   left: 24px;
   right: 24px;
-  top: 462px;
+  top: 446px;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 12px 10px 13px;
+  border-radius: 16px;
   text-align: center;
-  font-size: 14px;
-  line-height: 1.6;
-  color: #c9d1f3;
+  line-height: 1.4;
+  background: rgba(5, 7, 15, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   opacity: 0;
+}
+
+.fxp-st-rule i {
+  font-style: normal;
+}
+
+.fxp-st-rule small {
+  font-size: 14px;
+  color: #c9d1f3;
+}
+
+.fxp-st-rule b {
+  font-size: 19px;
+  font-weight: 900;
+  color: #fff4cc;
+}
+
+.fxp-st-rule span {
+  font-size: 16px;
+  font-weight: 800;
+  color: #cbd5e1;
+}
+
+.fxp-st-rule span i {
+  color: #94a3b8;
 }
 
 /* ---- 上位チャレンジの結果 ------------------------------------------------------ */
@@ -1544,15 +1691,14 @@
   color: #ffe08a;
 }
 
-.fxp-win-title b {
+/* 見出しの型（fxp-h）。塗りは、もらえる景品のレア度の色（SR は金、UR は虹） */
+.fxp-win-title .fxp-h {
   font-size: 36px;
-  font-weight: 900;
-  text-shadow: 0 0 20px rgba(245, 197, 66, 0.7);
 }
 
-/* 失敗: 色を落として静かに。赤や点滅は使わない */
+/* 失敗: 静かに。全面を灰色にはしない（背景はいつもの濃紺）。赤や点滅は使わない */
 .fxp-lose .fxp-bg {
-  background: radial-gradient(ellipse 85% 60% at 50% 40%, #1d2438 0%, #0c101d 60%, #05070f 100%);
+  background: radial-gradient(ellipse 85% 60% at 50% 42%, #18224f 0%, #0b1029 60%, #05070f 100%);
 }
 
 .fxp-broken {
@@ -1586,39 +1732,66 @@
   clip-path: polygon(53% 0, 100% 0, 100% 100%, 47% 100%, 54% 74%, 45% 55%, 56% 36%, 47% 18%);
 }
 
+/* 失敗の色は灰青と ▼（決まり） */
 .fxp-lose-title {
   position: absolute;
   left: 0;
   right: 0;
-  top: 262px;
+  top: 268px;
   text-align: center;
-  font-size: 38px;
+  font-size: 34px;
   font-weight: 900;
-  color: #d5dbee;
+  color: #94a3b8;
   opacity: 0;
 }
 
+.fxp-lose-title i {
+  font-style: normal;
+  font-size: 24px;
+  vertical-align: 3px;
+}
+
+/* 事実は小さく書く（追い打ちにしない） */
 .fxp-lose-none {
   position: absolute;
   left: 0;
   right: 0;
-  top: 330px;
+  top: 326px;
   text-align: center;
-  font-size: 26px;
-  font-weight: 900;
-  color: #9aa3c0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #cbd5e1;
   opacity: 0;
 }
 
-.fxp-lose-sub {
+/* 次につながる一言。この画面でいちばん明るくする */
+.fxp-lose-next {
   position: absolute;
-  left: 0;
-  right: 0;
-  top: 380px;
+  left: 26px;
+  right: 26px;
+  top: 384px;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 16px 10px 18px;
+  border-radius: 18px;
   text-align: center;
-  font-size: 14px;
-  color: #8a93b8;
+  background: rgba(125, 211, 252, 0.1);
+  border: 2px solid rgba(125, 211, 252, 0.55);
   opacity: 0;
+}
+
+.fxp-lose-next small {
+  font-size: 14px;
+  font-weight: 800;
+  color: #bae6fd;
+}
+
+.fxp-lose-next b {
+  font-size: 19px;
+  font-weight: 900;
+  line-height: 1.35;
+  color: #ffffff;
 }
 
 /* ギャラリーで、選んだ結果を見せる札 */

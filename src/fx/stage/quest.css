@@ -78,16 +78,15 @@
   transition: opacity var(--fade) ease;
 }
 
+/* 下の画面（前の抽選のカードや番号の盤）が、パネルのすき間から透けて読みにくくならない濃さにする */
+
 .fxqs[data-phase='alarm'] .fxqs-dim,
 .fxqs[data-phase='brief'] .fxqs-dim,
 .fxqs[data-phase='count'] .fxqs-dim,
 .fxqs[data-phase='play'] .fxqs-dim,
-.fxqs[data-phase='end'] .fxqs-dim {
-  opacity: 0.8;
-}
-
+.fxqs[data-phase='end'] .fxqs-dim,
 .fxqs[data-phase='result'] .fxqs-dim {
-  opacity: 0.88;
+  opacity: 0.94;
 }
 
 /* 赤い縁（動かない。場面が変わるときだけ、ゆっくり濃さを変える） */
@@ -133,7 +132,7 @@
   opacity: 0;
 }
 
-/* 文字のふち（後ろに同じ文字を太く描く）。--olc がふちの色、--olw が太さ */
+/* 見出しの型: 塗りは金のグラデーション、縁は濃い茶 #2a1a05 の 1 種類（後ろに同じ文字を太く描く）。--olw が縁の太さ */
 .fxqs-ol {
   position: relative;
   display: inline-block;
@@ -145,14 +144,18 @@
   position: absolute;
   left: 0;
   top: 0;
-  color: var(--olc, #2a0a10);
-  -webkit-text-stroke: var(--olw, 22px) var(--olc, #2a0a10);
+  color: #2a1a05;
+  -webkit-text-stroke: var(--olw, 22px) #2a1a05;
   filter: drop-shadow(0 9px 0 rgba(0, 0, 0, 0.35));
 }
 
 .fxqs-ol > b {
   position: relative;
   font-weight: 900;
+  background: linear-gradient(180deg, #fff4cc, #f5c542 55%, #d9a520);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 /* ==== 警告の帯（上下。縞は動かさず、中の文字だけがゆっくり流れる） ==================== */
@@ -218,7 +221,7 @@
 .fxqs-marq span {
   flex: none;
   white-space: nowrap;
-  font-size: 30px;
+  font-size: 32px;
   font-weight: 900;
   letter-spacing: 0.08em;
   color: var(--amber);
@@ -456,7 +459,6 @@
   line-height: 1.14;
   letter-spacing: 0.02em;
   white-space: nowrap;
-  --olc: #3d0410;
   --olw: 26px;
   opacity: 0;
   transform: skewX(-8deg);
@@ -465,18 +467,6 @@
 .fxqs-title.on {
   opacity: 1;
   animation: fxqs-slam calc(var(--u) * 0.4) cubic-bezier(0.2, 1.3, 0.4, 1) backwards;
-}
-
-/* 文字の上を、淡い金のきらめきが 1 回だけ通る（幅 3 倍の絵を 100% → 0% に動かす。この範囲なら文字の全体を必ず覆う） */
-.fxqs-title b {
-  background: linear-gradient(100deg, #fff 0 42%, #ffe6a3 50%, #fff 58% 100%) 100% 0 / 300% 100% no-repeat;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.fxqs-title.on b {
-  animation: fxqs-glint calc(var(--u) * 0.9) ease-out calc(var(--u) * 0.3) backwards;
 }
 
 @keyframes fxqs-slam {
@@ -491,15 +481,6 @@
   100% {
     transform: skewX(-8deg);
     opacity: 1;
-  }
-}
-
-@keyframes fxqs-glint {
-  from {
-    background-position: 100% 0;
-  }
-  to {
-    background-position: 0% 0;
   }
 }
 
@@ -533,7 +514,6 @@
   line-height: 1.15;
   white-space: nowrap;
   color: #ffd23f;
-  --olc: #3b2412;
   --olw: 24px;
 }
 
@@ -602,46 +582,64 @@
   line-height: 1.14;
   white-space: nowrap;
   color: var(--amber);
-  --olc: #3d0410;
   --olw: 22px;
 }
 
 .fxqs-brief-t {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-top: 22px;
-  padding: 6px 34px 8px 26px;
-  border-radius: 999px;
-  background: rgba(24, 4, 10, 0.88);
+  margin-top: 18px;
+  padding: 10px 44px 8px;
+  border-radius: 30px;
+  background: rgba(24, 4, 10, 0.9);
   box-shadow:
     inset 0 0 0 3px rgba(255, 197, 61, 0.6),
     0 8px 24px rgba(0, 0, 0, 0.4);
-  font-size: 34px;
-  font-weight: 900;
+  text-align: center;
   white-space: nowrap;
 }
 
+.fxqs-brief-t > span {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  font-size: 38px;
+  font-weight: 900;
+}
+
 .fxqs-brief-t .fxqs-reticle {
-  width: 48px;
-  height: 48px;
+  width: 46px;
+  height: 46px;
   color: #ff6b78;
 }
 
 .fxqs-brief-t b {
-  font-size: 84px;
+  font-size: 92px;
+  font-weight: 900;
   line-height: 1.05;
   font-variant-numeric: tabular-nums;
 }
 
 .fxqs-brief-t small {
-  font-size: 36px;
+  margin-left: 8px;
+  font-size: 40px;
   font-weight: 900;
+}
+
+/* 狙われたリーチが 0 人のとき: 「会場みんなで モグラを追い返せ！」 */
+.fxqs-brief.free .fxqs-brief-b {
+  font-size: 66px;
+}
+
+.fxqs-brief.free .fxqs-brief-p {
+  margin-top: 26px;
+  font-size: 44px;
+  font-weight: 900;
+  color: #fff;
 }
 
 .fxqs-brief-p {
   margin-top: 12px;
-  font-size: 30px;
+  font-size: 34px;
   font-weight: 800;
   color: #c9d2ff;
 }
@@ -741,7 +739,7 @@
   border-radius: 24px;
   background: #fffaf0;
   color: #3b2412;
-  font-size: 34px;
+  font-size: 36px;
   font-weight: 900;
   white-space: nowrap;
   box-shadow: 0 6px 0 rgba(0, 0, 0, 0.3);
@@ -813,7 +811,7 @@
 .fxqs-res-boss .fxqs-bubble {
   right: -10px;
   bottom: calc(100% + 6px);
-  font-size: 30px;
+  font-size: 32px;
   transform-origin: 80% 100%;
 }
 
@@ -983,7 +981,7 @@
   transition-delay: 0s;
 }
 
-/* 残り時間 */
+/* 残り時間。色はスマホの残り時間とそろえる: ふだんは金 #f5c542、残り 3 秒からは橙 #ff9f1a（赤にはしない。点滅もしない） */
 .fxqs-time {
   left: 86px;
   top: 90px;
@@ -1023,7 +1021,7 @@
 
 .fxqs-ring-arc {
   fill: none;
-  stroke: #ffd27a;
+  stroke: #f5c542;
   stroke-width: 18;
   stroke-linecap: round;
   filter: drop-shadow(0 0 8px rgba(255, 190, 80, 0.7));
@@ -1050,7 +1048,7 @@
 }
 
 .fxqs-time-in small {
-  font-size: 30px;
+  font-size: 36px;
   font-weight: 900;
   line-height: 1.1;
   color: #ffe9b0;
@@ -1120,7 +1118,7 @@
   justify-content: center;
   align-items: center;
   gap: 12px;
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 800;
   white-space: nowrap;
   color: #c9d2ff;
@@ -1166,9 +1164,9 @@
 
 /* 狙われたリーチ */
 .fxqs-tgt {
-  left: 1504px;
+  left: 1488px;
   top: 90px;
-  width: 330px;
+  width: 366px;
   height: 316px;
   text-align: center;
 }
@@ -1179,7 +1177,7 @@
   align-items: center;
   gap: 10px;
   margin-top: 30px;
-  font-size: 32px;
+  font-size: 36px;
   font-weight: 900;
   white-space: nowrap;
   color: #ffd6da;
@@ -1219,7 +1217,7 @@
 
 .fxqs-tgt-p {
   margin-top: 6px;
-  font-size: 26px;
+  font-size: 30px;
   font-weight: 800;
   color: #c9d2ff;
 }
@@ -1368,7 +1366,6 @@
   font-size: 400px;
   line-height: 1;
   color: #ffd27a;
-  --olc: #2a1205;
   --olw: 36px;
 }
 
@@ -1420,7 +1417,6 @@
 .fxqs-end .fxqs-ol {
   font-size: 230px;
   line-height: 1.1;
-  --olc: #3d0410;
   --olw: 30px;
 }
 
@@ -1539,15 +1535,7 @@
 .fxqs-go .fxqs-ol {
   font-size: 250px;
   line-height: 1.1;
-  --olc: #6b2a00;
   --olw: 32px;
-}
-
-.fxqs-go .fxqs-ol b {
-  background: linear-gradient(180deg, #fffdf2 20%, #ffd84a 75%, #ff9f1a);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
 }
 
 /* ==== 結果（左: 撃退数・守った人・やられた人、右: 撃退王、右上: ボスの反応） ===================== */
@@ -1590,7 +1578,6 @@
   font-size: 130px;
   line-height: 1.12;
   white-space: nowrap;
-  --olc: #4a2a00;
   --olw: 26px;
   opacity: 0;
 }
@@ -1613,24 +1600,6 @@
     transform: none;
     opacity: 1;
   }
-}
-
-.fxqs-res-t b {
-  background: linear-gradient(180deg, #fffbe6 12%, #ffd84a 58%, #f0a500 92%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-/* やられた人が多いとき（笑える BAD）は、金ではなく藤色 */
-.fxqs-res[data-mood='bad'] .fxqs-res-t {
-  --olc: #2a1a4a;
-}
-
-.fxqs-res[data-mood='bad'] .fxqs-res-t b {
-  background: linear-gradient(180deg, #fff 12%, #d9ccff 60%, #a78bfa 95%);
-  -webkit-background-clip: text;
-  background-clip: text;
 }
 
 .fxqs-res-l {
@@ -1717,10 +1686,14 @@
   gap: 30px;
 }
 
+/* 中身は上下の真ん中に寄せる（「リーチが消えた」の行を出さないときも、片寄らない） */
 .fxqs-card {
   flex: 1;
   height: 290px;
-  padding: 20px 16px 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 16px 6px;
   border-radius: 26px;
   background: rgba(14, 16, 34, 0.92);
   text-align: center;
@@ -1738,14 +1711,14 @@
 
 .fxqs-card.def {
   box-shadow:
-    inset 0 0 0 4px rgba(52, 211, 153, 0.8),
-    0 0 40px rgba(52, 211, 153, 0.22);
+    inset 0 0 0 4px rgba(34, 197, 94, 0.85),
+    0 0 40px rgba(34, 197, 94, 0.22);
 }
 
 .fxqs-card.lost {
   box-shadow:
-    inset 0 0 0 4px rgba(167, 139, 250, 0.8),
-    0 0 40px rgba(167, 139, 250, 0.22);
+    inset 0 0 0 4px rgba(148, 163, 184, 0.85),
+    0 0 40px rgba(148, 163, 184, 0.18);
 }
 
 .fxqs-card-h {
@@ -1759,11 +1732,11 @@
 }
 
 .fxqs-card.def .fxqs-card-h i {
-  color: #34d399;
+  color: #22c55e;
 }
 
 .fxqs-card.lost .fxqs-card-h i {
-  color: #a78bfa;
+  color: #94a3b8;
 }
 
 .fxqs-card-n {
@@ -1784,7 +1757,7 @@
 }
 
 .fxqs-card-s {
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 800;
   white-space: nowrap;
   color: #c9d2ff;
@@ -1793,7 +1766,7 @@
 .fxqs-card-s i {
   margin-right: 6px;
   font-style: normal;
-  color: #ffb4bd;
+  color: #94a3b8;
 }
 
 .fxqs-card-s b {
@@ -1830,11 +1803,11 @@
 }
 
 .fxqs-ratio i.def {
-  background: #34d399;
+  background: #22c55e;
 }
 
 .fxqs-ratio i.lost {
-  background: #a78bfa;
+  background: #94a3b8;
 }
 
 .fxqs-ratio.on i.def {
@@ -1938,7 +1911,7 @@
 
 .fxqs-pod-score small {
   margin-left: 4px;
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 900;
 }
 
@@ -1977,18 +1950,18 @@
 }
 
 .fxqs-pod-base small {
-  font-size: 30px;
+  font-size: 36px;
   font-weight: 900;
   color: rgba(255, 255, 255, 0.92);
   text-shadow: 0 3px 0 rgba(0, 0, 0, 0.25);
 }
 
-/* 自分（あなた）は金のふちで目立たせる */
+/* 自分（あなた）は、水色の札とふちで目立たせる */
 .fxqs-pod.me .fxqs-pod-who {
-  background: rgba(255, 216, 74, 0.16);
+  background: rgba(90, 210, 255, 0.14);
   box-shadow:
-    inset 0 0 0 4px #ffd84a,
-    0 0 40px rgba(255, 216, 74, 0.5);
+    inset 0 0 0 4px #5ad2ff,
+    0 0 40px rgba(90, 210, 255, 0.45);
 }
 
 .fxqs-pod-me {
@@ -1996,9 +1969,9 @@
   margin-bottom: 2px;
   padding: 2px 18px 4px;
   border-radius: 999px;
-  background: #ffd84a;
-  color: #2a1a00;
-  font-size: 28px;
+  background: #5ad2ff;
+  color: #06223a;
+  font-size: 32px;
   font-weight: 900;
 }
 
@@ -2079,7 +2052,7 @@
 
 /* ボスは左の列へ下がって、ゆっくり体をゆらすだけ */
 .fxqs[data-phase='brief'] .fxqs-boss.on {
-  transform: translate(-610px, 78px) scale(0.68);
+  transform: translate(-610px, 96px) scale(0.64);
   transition: transform calc(var(--u) * 0.6) cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -2219,7 +2192,7 @@
 }
 
 .fxqs-hold-b {
-  font-size: 32px;
+  font-size: 36px;
   font-weight: 800;
   line-height: 1.3;
   white-space: nowrap;
@@ -2293,7 +2266,6 @@
   font-size: 440px;
   line-height: 1.02;
   color: #ffd27a;
-  --olc: #2a1205;
   --olw: 38px;
   opacity: 0;
 }
@@ -2312,4 +2284,27 @@
   line-height: 1.2;
   color: var(--amber);
   text-shadow: 0 5px 0 rgba(0, 0, 0, 0.5);
+}
+
+/* ==== 結果（狙われたリーチが 0 人のとき。守った人・やられた人は出さず、撃退数の合計を主役にする） ==== */
+
+.fxqs-res.free .fxqs-res-total {
+  top: 110px;
+}
+
+.fxqs-res-note {
+  position: absolute;
+  left: 0;
+  top: 384px;
+  width: 850px;
+  text-align: center;
+  font-size: 44px;
+  font-weight: 900;
+  color: #ffe9b0;
+  opacity: 0;
+  transition: opacity calc(var(--u) * 0.3) ease;
+}
+
+.fxqs-res-note.on {
+  opacity: 1;
 }

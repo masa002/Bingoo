@@ -9,16 +9,24 @@
   pointer-events: none;
   color: #fff;
   font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
-  /* 段階の色: h = 基本、hl = 明るい、hd = 暗い、hx1・hx2 = ホロのにじみ（虹にはしない。虹は全員確定のため） */
+  --ray: 22.5deg;
+}
+
+/* 段階の色: h = 基本、hl = 明るい、hd = 暗い、hx1・hx2 = ホロのにじみ（虹にはしない。虹は全員確定のため）。
+   カードの面（.fxd-side・.fxd-flick）にも直接書く: 親（動かしている最中の要素）からの継承だけに頼ると、
+   目盛りは赤なのにカードが青のまま残ることがあった（色がずれると「会場の色」が読めなくなる） */
+.fxd,
+.fxd-side,
+.fxd-flick {
   --h: #3b82f6;
   --hl: #93c5fd;
   --hd: #1d3f99;
   --hx1: #38bdf8;
   --hx2: #a78bfa;
-  --ray: 22.5deg;
 }
 
-.fxd[data-heat='1'] {
+.fxd[data-heat='1'],
+.fxd[data-heat='1'] :is(.fxd-side, .fxd-flick) {
   --h: #22c55e;
   --hl: #86efac;
   --hd: #14652f;
@@ -26,7 +34,8 @@
   --hx2: #2dd4bf;
 }
 
-.fxd[data-heat='2'] {
+.fxd[data-heat='2'],
+.fxd[data-heat='2'] :is(.fxd-side, .fxd-flick) {
   --h: #ef4444;
   --hl: #fca5a5;
   --hd: #8f1d1d;
@@ -34,7 +43,8 @@
   --hx2: #f472b6;
 }
 
-.fxd[data-heat='3'] {
+.fxd[data-heat='3'],
+.fxd[data-heat='3'] :is(.fxd-side, .fxd-flick) {
   --h: #f5c542;
   --hl: #fff4cc;
   --hd: #9a6a0c;
@@ -137,14 +147,14 @@
   }
 }
 
-/* ---- ビンゴ期待度の目盛り（下から ★ 1 つ → 上へ ★ 5 つ） ----------------- */
+/* ---- 会場の期待度の目盛り（段階と 1 対 1 の 4 段。下から 青 → 緑 → 赤 → 金） ---- */
 
 .fxd-steps {
   position: absolute;
   left: 52px;
-  top: 194px;
-  width: 250px;
-  height: 492px;
+  top: 200px;
+  width: 450px;
+  height: 454px;
   z-index: 4;
 }
 
@@ -152,10 +162,10 @@
 .fxd-steps-title {
   position: absolute;
   left: 0;
-  top: -58px;
-  padding: 6px 22px 7px;
+  top: -66px;
+  padding: 6px 24px 7px;
   border-radius: 999px;
-  font-size: 30px;
+  font-size: 36px;
   font-weight: 900;
   letter-spacing: 3px;
   line-height: 1.2;
@@ -168,43 +178,20 @@
   transition: box-shadow 0.4s;
 }
 
-.fxd-gauge {
-  position: absolute;
-  left: 0;
-  top: 4px;
-  bottom: 4px;
-  width: 10px;
-  border-radius: 5px;
-  background: #0b1029;
-  box-shadow: inset 0 0 0 2px #1c2550;
-  overflow: hidden;
-}
-
-.fxd-gauge::after {
-  content: '';
-  position: absolute;
-  left: 2px;
-  right: 2px;
-  bottom: 2px;
-  height: calc((100% - 4px) * var(--fill, 0));
-  border-radius: 3px;
-  background: linear-gradient(to top, #3b82f6, #22c55e 35%, #ef4444 65%, #f5c542) bottom / 100% 480px no-repeat;
-  box-shadow: 0 0 12px rgba(255, 255, 255, 0.35);
-  transition: height 0.35s cubic-bezier(0.2, 1.2, 0.4, 1);
-}
-
+/* 各段に、形と言葉を書く（点いていない段も、うすく読める）。いまの色の段まで点く */
 .fxd-step {
   position: absolute;
-  left: 30px;
-  height: 84px;
+  left: 0;
+  width: 450px;
+  height: 100px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 22px;
-  border-radius: 12px;
+  gap: 16px;
+  padding: 0 18px 0 22px;
+  border-radius: 14px;
   border: 3px solid #1f2850;
   background: linear-gradient(180deg, #121a3c, #0a1028);
-  color: #2e3864;
+  color: #4d5990;
   font-weight: 900;
   transform: skewX(-10deg);
   overflow: hidden;
@@ -220,32 +207,25 @@
   transform: skewX(10deg);
 }
 
-/* ★ の数が期待度（上の段ほど多い） */
 .fxd-step b {
-  font-size: 25px;
+  font-size: 36px;
   line-height: 1;
-  letter-spacing: 1px;
   white-space: nowrap;
 }
 
-/* 段階の形（色だけに頼らない）。★ の列と紛れないよう、丸い札に入れる */
+/* 段階の形（色だけに頼らない） */
 .fxd-step em {
   flex: none;
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
-  margin-left: auto;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   font-style: normal;
-  font-size: 22px;
+  font-size: 32px;
   line-height: 1;
   background: rgba(4, 6, 16, 0.4);
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35);
-}
-
-.fxd-step em:empty {
-  visibility: hidden;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.22);
 }
 
 .fxd-step.on {
@@ -261,6 +241,21 @@
     0 0 30px color-mix(in srgb, var(--c) 70%, transparent),
     inset 0 2px 0 rgba(255, 255, 255, 0.45);
   text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+
+.fxd-step.on em {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.5);
+}
+
+/* 金の段は、文字を濃い茶にする（金の地に白は読みにくい） */
+.fxd-step.on[data-t='3'] {
+  color: #2a1a05;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.fxd-step.on[data-t='3'] em {
+  color: #fff4cc;
+  text-shadow: none;
 }
 
 /* 点いた瞬間に光の帯が 1 回だけ横切る */
@@ -533,44 +528,66 @@
   background: linear-gradient(180deg, #07080e, #0d0f18);
 }
 
+/* カードの帯: 「会場」の札 ＋ 形 → 言葉（スマホの「あなた」の段と同じ形）。カードの幅いっぱいの帯にして、文字を大きく取る。
+   番号が出たあとは、結果の言葉（「ビンゴ 1 人！」など）に替わる */
 .fxd-badge {
   position: absolute;
-  left: 50%;
-  bottom: 34px;
+  left: 0;
+  right: 0;
+  bottom: 16px;
+  z-index: 1; /* ホロと光の筋より上（帯の文字が、覆い焼きで薄くならないように） */
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 6px 20px;
-  border-radius: 999px;
+  gap: 4px;
+  padding: 8px 0 10px;
   background: linear-gradient(180deg, var(--hl), var(--h) 40%, var(--hd));
   box-shadow:
     0 0 22px color-mix(in srgb, var(--h) 55%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    inset 0 2px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.25);
   font-weight: 900;
   white-space: nowrap;
   text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
-  transform: translateX(-50%);
+}
+
+/* 「会場」の札（だれの話かを、形で分ける。スマホの「あなた」は水色の札） */
+.fxd-badge small {
+  padding: 0 14px 1px;
+  border-radius: 8px;
+  font-size: 28px;
+  letter-spacing: 4px;
+  line-height: 1.25;
+  color: #16204a;
+  background: #eef1ff;
+  text-shadow: none;
+}
+
+.fxd-badge span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .fxd-badge i {
   font-style: normal;
-  font-size: 26px;
-  line-height: 1.2;
+  font-size: 34px;
+  line-height: 1.15;
 }
 
-/* 段階の言葉（「ビンゴが出るかも！」など）。カードの幅に収める */
 .fxd-badge b {
-  font-size: 27px;
+  font-size: 36px;
   letter-spacing: 0;
-  line-height: 1.2;
+  line-height: 1.15;
 }
 
-.fxd-badge b:empty {
-  display: none;
+.fxd-badge.is-result b {
+  font-size: 44px;
+  letter-spacing: 1px;
 }
 
 .fxd[data-heat='3'] .fxd-badge {
-  color: #3a2600;
+  color: #2a1a05;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
@@ -795,13 +812,13 @@
   font-size: 58px;
   font-weight: 900;
   line-height: 1;
-  color: #fff;
-  background: radial-gradient(circle at 34% 28%, var(--hl), var(--h) 48%, var(--hd));
+  /* 列の文字の玉は、中立の色（白地に濃紺）。色は段階だけに使う（スマホの玉も同じ色） */
+  color: #16204a;
+  background: radial-gradient(circle at 34% 28%, #ffffff, #e6eaff 48%, #b4bfe6);
   box-shadow:
-    inset 0 -6px 12px rgba(0, 0, 0, 0.35),
-    inset 0 3px 6px rgba(255, 255, 255, 0.35),
-    0 0 20px color-mix(in srgb, var(--h) 55%, transparent);
-  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+    inset 0 -6px 12px rgba(20, 30, 80, 0.3),
+    inset 0 3px 6px rgba(255, 255, 255, 0.6),
+    0 0 20px rgba(200, 212, 255, 0.35);
 }
 
 .fxd-n,
@@ -867,10 +884,16 @@
 .fxd.is-done .fxd-stack .fxd-l,
 .fxd.is-done .fxd-flap .fxd-l {
   box-shadow:
-    inset 0 -6px 12px rgba(0, 0, 0, 0.35),
-    inset 0 3px 6px rgba(255, 255, 255, 0.35),
+    inset 0 -6px 12px rgba(20, 30, 80, 0.3),
+    inset 0 3px 6px rgba(255, 255, 255, 0.6),
     0 0 0 4px rgba(255, 255, 255, 0.85),
-    0 0 34px var(--h);
+    0 0 34px rgba(220, 228, 255, 0.6);
+}
+
+/* リール型: 着地したら、上下の隣のコマは消す（窓の端に、隣の数字の切れ端を残さない） */
+.fxd.is-done .fxd-row:not(.is-c) {
+  opacity: 0 !important;
+  transition: opacity 0.2s;
 }
 
 .fxd.is-done[data-heat='3'] .fxd-row.is-c .fxd-n,
@@ -944,8 +967,8 @@
 .fxd-reel[data-blur='2'] .fxd-l,
 .fxd-reel[data-blur='3'] .fxd-l {
   box-shadow:
-    0 -28px 0 color-mix(in srgb, var(--h) 35%, transparent),
-    0 28px 0 color-mix(in srgb, var(--h) 35%, transparent);
+    0 -28px 0 rgba(220, 228, 255, 0.28),
+    0 28px 0 rgba(220, 228, 255, 0.28);
 }
 
 /* ---- カードめくり型 ----------------------------------------------------- */
@@ -1120,7 +1143,7 @@
 .fxd-next {
   position: absolute;
   left: 480px;
-  top: 500px;
+  top: 458px; /* カードの帯（会場の札）にかからない高さ */
   z-index: 5;
   display: flex;
   align-items: center;
@@ -1215,9 +1238,13 @@
 
 /* ---- 群予告 ------------------------------------------------------------- */
 
+/* 飛ぶのは抽選機の領域（x 40〜1240、y 90〜790）の中だけ。HUD と右の欄には出さない */
 .fxd-flock {
   position: absolute;
-  inset: 0;
+  left: 40px;
+  top: 90px;
+  width: 1200px;
+  height: 700px;
   z-index: 13;
   overflow: hidden;
 }
@@ -1336,7 +1363,7 @@
 .fxd-push {
   position: absolute;
   left: 810px;
-  top: 748px;
+  top: 726px; /* 外側の輪が、下の番号の盤（y 800〜）に乗らない高さ */
   z-index: 16;
   display: flex;
   align-items: center;
@@ -1376,7 +1403,7 @@
 }
 
 .fxd-push small {
-  font-size: 24px;
+  font-size: 28px;
   font-style: normal;
   letter-spacing: 1px;
   line-height: 1.2;

@@ -105,15 +105,17 @@ class Scene {
     this.dim.style.opacity = String(opacity)
   }
 
-  // 粒子の canvas（z-index 60）。動きを減らす設定のときは出さない
-  particles(): Particles | null {
+  // 粒子の canvas（z-index 60）。動きを減らす設定のときは出さない。
+  // behind なら、いちばん手前ではなく body の今の位置に重ねる（このあと add する文字やパネルは、粒子より手前になる）
+  particles(behind = false): Particles | null {
     if (this.rm) return null
     if (!this.fx) {
-      const c = el('canvas', 'fxe-canvas')
+      const c = el('canvas', behind ? 'fxe-canvas fxe-canvas-in' : 'fxe-canvas')
       c.width = STAGE_W
       c.height = STAGE_H
       this.timeVars(c)
-      this.host.append(c)
+      if (behind) this.body.append(c)
+      else this.host.append(c)
       this.canvas = c
       this.fx = new Particles(c)
       this.fx.speed = this.tl.speed
@@ -271,11 +273,12 @@ function makeShards(s: Scene, cx: number, cy: number): HTMLElement[] {
   return list
 }
 
-// 見本のカード。開いている斜めの 3 マスに、虹玉で 1 マス（★ の右下）が開いてリーチになる
+// 見本のカード（見た目はスマホのカード phone/card.css に合わせる: 紺地、開いたマスは濃いピンクのスタンプ、FREE は金の星）。
+// 開いている斜めの 3 マスに、虹玉で 1 マス（★ の右下）が虹の縁で開いてリーチになる
 function miniCard(): string {
   const nums = [7, 19, 33, 52, 64, 12, 24, 41, 49, 70, 3, 28, 0, 55, 61, 14, 17, 38, 47, 72, 9, 22, 44, 58, 66]
-  const open = new Set([0, 6, 12, 3, 21])
-  return nums.map((n, i) => `<i class="${i === 18 ? 'w' : open.has(i) ? 'o' : ''}">${i === 12 ? '★' : n}</i>`).join('')
+  const open = new Set([0, 6, 3, 21])
+  return nums.map((n, i) => `<i class="${i === 12 ? 'f' : i === 18 ? 'w' : open.has(i) ? 'o' : ''}">${i === 12 ? '★' : n}</i>`).join('')
 }
 
 // 全員確定（大画面の虹）: すべてを止める → 確定音 → 虹のヒビ → 「全員確定」 → 虹玉 → 全員のカードが 1 マス開く。
@@ -285,7 +288,6 @@ export async function playAllKakutei(host: HTMLElement, o: StageEventBase & { to
   const newReach = count(o.newReach)
   const newDouble = count(o.newDouble)
   await run(host, 'kakutei', 46, o, async (s) => {
-    const fx = s.particles()
     const cx = 960
     const cy = 450 // ヒビの起点
 
@@ -299,10 +301,12 @@ export async function playAllKakutei(host: HTMLElement, o: StageEventBase & { to
     const shards = makeShards(s, cx, cy)
     const star = s.add('fxe-k-star')
     place(star, cx, cy)
+    // 粒子はここ（光とヒビより手前、文字・虹玉・パネルより後ろ）。火花や紙吹雪が文字にかぶらない
+    const fx = s.particles(true)
     const logo = s.add(
       'fxe-k-logo',
       `<div class="fxe-k-title" data-text="全員確定"><b class="fxe-rbtext">全員確定</b><i>全員確定</i></div>
-       <div class="fxe-k-sub"><span class="fxe-rbtext">✦</span>会場の全員に当たり！<span class="fxe-rbtext">✦</span><em>${fmt(total)} 人</em></div>`,
+       <div class="fxe-k-sub"><span class="fxe-rbtext">✦</span>会場の <em>${fmt(total)} 人</em> 全員に当たり！<span class="fxe-rbtext">✦</span></div>`,
     )
     const ball = s.add(
       'fxe-k-ball',
@@ -311,15 +315,14 @@ export async function playAllKakutei(host: HTMLElement, o: StageEventBase & { to
     )
     const panel = s.add(
       'fxe-k-panel',
-      `<div class="fxe-k-head">全員のカードが <em class="fxe-rbtext">1 マス</em> 開く！</div>
+      `<div class="fxe-k-head">会場 ${fmt(total)} 人 全員のカードが <em class="fxe-rbtext">1 マス</em>開く！</div>
        <div class="fxe-k-row">
          <div class="fxe-k-card">${miniCard()}</div>
          <div class="fxe-k-stats">
            <div class="fxe-k-stat"><span class="fxe-k-sh">▲</span><span class="fxe-k-lb">新しくリーチ</span><span class="fxe-k-num">+<b>0</b><small>人</small></span></div>
            <div class="fxe-k-stat"><span class="fxe-k-sh">◆</span><span class="fxe-k-lb">ダブルリーチ</span><span class="fxe-k-num">+<b>0</b><small>人</small></span></div>
          </div>
-       </div>
-       <div class="fxe-k-foot">会場 ${fmt(total)} 人のカードが、いっせいに 1 マス開きました</div>`,
+       </div>`,
     )
     const stats = [...panel.querySelectorAll<HTMLElement>('.fxe-k-stat')]
 
@@ -355,7 +358,7 @@ export async function playAllKakutei(host: HTMLElement, o: StageEventBase & { to
     await s.until(2750)
     on(logo.querySelector('.fxe-k-sub')!)
 
-    // 4. 虹玉が上から落ちてきて弾ける
+    // 4. 見出しは HUD のすぐ下へ縮めて、虹玉が上から落ちてきて弾ける
     await s.until(4300)
     logo.classList.add('up')
     aura.classList.add('low')
@@ -387,7 +390,7 @@ export async function playAllKakutei(host: HTMLElement, o: StageEventBase & { to
     fx?.burst(960, 560, { count: 320, colors: RAINBOW, speed: 16, shape: 'spark', gravity: 0.1, life: 75 })
     fx?.burst(960, 560, { count: 160, colors: RAINBOW, speed: 10, shape: 'dot', gravity: 0.08, life: 90, size: 9 })
 
-    // 5. 「全員のカードが 1 マス開く！」→ 結果の数字をカウントアップ
+    // 5. 「会場 ○ 人 全員のカードが 1 マス開く！」→ 結果の数字をカウントアップ（パネルは HUD と番号の盤の間に収める）
     await s.until(6250)
     on(panel)
     await s.until(6750)

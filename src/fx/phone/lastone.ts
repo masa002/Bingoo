@@ -118,7 +118,7 @@ function swallow(root: HTMLElement): void {
 function headHtml(prizes: number, contestants: number, shown: boolean): string {
   const cls = shown ? 'fxlp-in on' : 'fxlp-in'
   return `<div class="fxlp-kicker ${cls}">LAST ONE</div>
-    <div class="fxlp-title ${cls}">ラストワン争奪！</div>
+    <div class="fxlp-title ${cls}"><span class="fxlp-ol" data-text="ラストワン争奪！"><b>ラストワン争奪！</b></span></div>
     <div class="fxlp-odds ${cls}">残り<b>${fmt(prizes)}</b>個を<b>${fmt(contestants)}</b>人で</div>
     <div class="fxlp-rule ${cls}">${ballHtml('red')}${ballHtml('gold')}${ballHtml('rainbow')}<span class="fxlp-rule-t">赤・金・虹の玉が出たら当たり！</span></div>`
 }
@@ -126,14 +126,14 @@ function headHtml(prizes: number, contestants: number, shown: boolean): string {
 // 出ている説明の画面（閉じる関数）。ガラポンが始まるとき、残っている説明をここから閉じて引き継ぐ
 const briefs = new WeakMap<Element, () => void>()
 
-// 争奪している人を小さな「？」の玉で並べる（先頭が自分）。多いときは +N にまとめる
+// 争奪している人を小さな「？」の玉で並べる（先頭が自分。「あなた」の札を添える）。多いときは +N にまとめる
 function crowdHtml(n: number): string {
-  const shown = n > 10 ? 9 : n
+  const shown = n > 9 ? 8 : n
   const dots = Array.from(
     { length: shown },
     (_, i) => `<i class="fxlp-dot${i === 0 ? ' me' : ''}" style="animation-delay:${(-Math.random() * 1.6).toFixed(2)}s">?</i>`,
   ).join('')
-  return dots + (n > shown ? `<span class="fxlp-dot-more">+${fmt(n - shown)}</span>` : '')
+  return `<span class="fxlp-you">あなた</span>${dots}${n > shown ? `<span class="fxlp-dot-more">+${fmt(n - shown)}</span>` : ''}`
 }
 
 // ---- 本体 ------------------------------------------------------------------------

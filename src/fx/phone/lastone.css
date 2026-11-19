@@ -116,10 +116,32 @@
   font-weight: 900;
   letter-spacing: 0.04em;
   line-height: 1.25;
-  color: #ffe08a;
-  text-shadow:
-    0 3px 0 #3a2400,
-    0 0 20px rgba(245, 197, 66, 0.45);
+}
+
+/* 見出しの型（ほかのイベントと同じ）: 塗りは金のグラデーション、縁は濃い茶 #2a1a05（後ろに同じ文字を太く描く） */
+.fxlp-ol {
+  position: relative;
+  display: inline-block;
+  font-weight: 900;
+}
+
+.fxlp-ol::before {
+  content: attr(data-text);
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: #2a1a05;
+  -webkit-text-stroke: 7px #2a1a05;
+  filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.35));
+}
+
+.fxlp-ol > b {
+  position: relative;
+  font-weight: 900;
+  background: linear-gradient(180deg, #fff4cc, #f5c542 55%, #d9a520);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .fxlp-title.on {
@@ -187,16 +209,27 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 22px;
+  height: 24px;
+}
+
+/* 「あなた」の印: 水色の札（ほかの画面と同じ形）。すぐ右の玉が自分 */
+.fxlp-you {
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.5;
+  color: #06223a;
+  background: #5ad2ff;
 }
 
 .fxlp-dot {
   display: grid;
   place-items: center;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  font-size: 11px;
+  font-size: 13px;
   font-style: normal;
   font-weight: 900;
   color: #ffe08a;
@@ -213,7 +246,7 @@
 
 .fxlp-dot-more {
   margin-left: 2px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: #8a93b8;
 }
@@ -374,7 +407,7 @@
   align-items: baseline;
   justify-content: space-between;
   margin-bottom: 6px;
-  font-size: 12px;
+  font-size: 13px;
   color: #c9cfe6;
 }
 
@@ -431,7 +464,7 @@
   color: #c9cfe6;
 }
 
-/* ---- 連打の手ごたえ（「ガラッ」の文字と、指の跡）。どちらも 1 秒に 3 回までに間引く ---- */
+/* ---- タップの手ごたえ（「ガラッ」の文字と、指の跡）。どちらも 1 秒に 3 回までに間引く ---- */
 
 .fxlp-pops {
   position: absolute;
@@ -651,7 +684,7 @@
 
 .fxlp-plate small {
   display: block;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 900;
   letter-spacing: 0.24em;
   color: #8a6a44;
@@ -923,9 +956,9 @@
 }
 
 .fxlp-bf-dc .fxlp-token {
-  width: 20px;
-  height: 20px;
-  font-size: 11px;
+  width: 22px;
+  height: 22px;
+  font-size: 13px;
   box-shadow: inset 0 -1px 3px rgba(0, 0, 0, 0.2);
 }
 

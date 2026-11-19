@@ -68,7 +68,7 @@ registerGallery(
   item('few', '少人数（3 人で 1 個）', 1, entrants(3, -1, [1])),
   item('me-win', '自分が当たり（7 人で 2 個）', 2, entrants(7, 2, [2, 5])),
   item('me-lose', '自分が外れ（7 人で 2 個）', 2, entrants(7, 3, [0, 5])),
-  item('many', '多人数（27 人で 3 個。15 人と「ほか○人」）', 3, entrants(27, 20, [4, 13, 22])),
+  item('many', '多人数（27 人で 3 個。11 人と「ほか○人」）', 3, entrants(27, 20, [4, 13, 22])),
   item('crowd', '大人数（120 人で 6 個。自分は外れ）', 6, entrants(120, 57, [8, 31, 44, 70, 96, 118])),
   item('early', '時間の端: 発表 4 秒・全体 9 秒（5 人で 2 個）', 2, entrants(5, 0, [0, 3]), { dropAt: 4000, durationMs: 9000 }),
   item('tight', '時間の端: 発表 8 秒・全体 9 秒（12 人で 1 個）', 1, entrants(12, 6, [9]), { dropAt: 8000, durationMs: 9000 }),

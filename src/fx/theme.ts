@@ -22,12 +22,14 @@ export const RAINBOW = ['#ff5a5a', '#ffb84d', '#fff15a', '#5aff8c', '#5ad2ff', '
 export const GOLD = ['#f5c542', '#ffe08a', '#fff4cc', '#d9a520'] as const
 
 // CSS で虹を描くときのグラデーション（明るさは一定のまま、色だけを hue-rotate で回す）
+// 虹の描き方は 2 つだけ: 玉は円すい（RAINBOW_CSS）、面（帯・文字・札）は横のグラデーション（RAINBOW_FACE_CSS）
 export const RAINBOW_CSS =
   'conic-gradient(from 0deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff, #ff5a5a)'
+export const RAINBOW_FACE_CSS = 'linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff)'
 
 export const RARITY_COLOR: Readonly<Record<Rarity, string>> = {
   C: '#c0c6d6',
-  R: '#3b82f6',
+  R: '#2dd4bf', // 段階の青（静か）と紛れないよう、青緑にする
   SR: '#f5c542',
   UR: '#ff5ad2', // UR は虹で描く。単色が要るときの代表色
 }

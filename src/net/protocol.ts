@@ -61,7 +61,7 @@ export type Msg =
       deckHash: string
       totals: Totals
     }
-  | { type: 'joined'; count: number }
+  | { type: 'joined'; count: number; meJoined: boolean } // meJoined は本人宛て
   // 全員確定（虹玉）。durationMs が大画面の演出の長さ、resultAt に各自の結果を見せる
   | {
       type: 'eventPlay'
