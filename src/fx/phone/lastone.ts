@@ -11,10 +11,15 @@ import { BALL_INFO, GaraponMachine, ballHtml } from './garapon'
 // 結果はくじ（先に決まっている）。外れは「運がなかった」で、ダブルチャンスの玉が 3 個もらえる。
 // 当たりのときは、このあと呼び出し側が景品パックの開封へ進む。
 //
+//   const brief = openLastOneBrief(phone, { prizes: 2, contestants: 7, autoMs: null }) // 説明の画面。司会の「スタート」まで出しておく
+//   brief.close()
 //   await playLastOneGarapon(phone, { dropAt: 6500, durationMs: 11000, color: 'gold', prize: 'ワイヤレスイヤホン', contestants: 7, prizes: 2 })
 //
+// 説明の画面とガラポンの画面は、見出しと抽選器を同じ位置に描いてある。close の直後に playLastOneGarapon を呼ぶと、
+// 説明の文字だけがすっと消えて、見ていた抽選器がそのまま回り出す（見出しの出し直しは省き、すぐ回せるようにする）。
+//
 // 時間の使い方（D = dropAt、T = durationMs。演出上の ms で、speed で縮む）:
-//   0〜      見出し（ラストワン争奪！・残り○個を○人で・色つきの玉で当たり）
+//   0〜      見出し（ラストワン争奪！・残り○個を○人で・色つきの玉で当たり）。説明の画面から続くときは 0.3 秒で回し始める
 //   〜D      タップで回す（放っておいてもゆっくり回る）。D の 3・2・1 秒前に数字を出す（大画面と同じ時刻）
 //   D の 0.7〜1.4 秒前（実時間）から、排出口が D ちょうどに真下へ来るように回転を寄せる（タップは取っ手の手ごたえだけになる）
 //   D        玉が出る（大画面の発表と同時）。当たりは排出口のまわりが玉の色に光る
@@ -109,6 +114,18 @@ function swallow(root: HTMLElement): void {
   }
 }
 
+// 見出し（説明の画面とガラポンの画面で、同じものを同じ位置に出す）。shown なら最初から出しておく
+function headHtml(prizes: number, contestants: number, shown: boolean): string {
+  const cls = shown ? 'fxlp-in on' : 'fxlp-in'
+  return `<div class="fxlp-kicker ${cls}">LAST ONE</div>
+    <div class="fxlp-title ${cls}">ラストワン争奪！</div>
+    <div class="fxlp-odds ${cls}">残り<b>${fmt(prizes)}</b>個を<b>${fmt(contestants)}</b>人で</div>
+    <div class="fxlp-rule ${cls}">${ballHtml('red')}${ballHtml('gold')}${ballHtml('rainbow')}<span class="fxlp-rule-t">赤・金・虹の玉が出たら当たり！</span></div>`
+}
+
+// 出ている説明の画面（閉じる関数）。ガラポンが始まるとき、残っている説明をここから閉じて引き継ぐ
+const briefs = new WeakMap<Element, () => void>()
+
 // 争奪している人を小さな「？」の玉で並べる（先頭が自分）。多いときは +N にまとめる
 function crowdHtml(n: number): string {
   const shown = n > 10 ? 9 : n
@@ -141,6 +158,7 @@ class LastOnePlay {
   private readonly all: boolean // 大画面と同じ発表の音も鳴らす
   private readonly reduced = prefersReducedMotion()
   private readonly attached: boolean
+  private readonly fromBrief: boolean // 説明の画面から続けて始まった（見出しと抽選器は、もう見えている）
   private readonly t0 = performance.now()
   // 時刻（演出上の ms）
   private readonly D: number // 玉が出る
@@ -174,23 +192,22 @@ class LastOnePlay {
     this.all = o.sound === 'all'
     this.T = Math.max(0, num(o.durationMs, 11000))
     this.D = clamp(num(o.dropAt, 6500), 0, this.T)
-    this.S = Math.min(this.D, clamp(this.D * 0.25, 600, 1500))
+    // 説明の画面が残っていれば、閉じて引き継ぐ（説明は上に重なったまま、すっと消える）
+    const brief = host.querySelector(':scope > .fxlp-brief')
+    this.fromBrief = !!brief
+    if (brief) briefs.get(brief)?.()
+    this.S = Math.min(this.D, this.fromBrief ? 300 : clamp(this.D * 0.25, 600, 1500))
     // 寄せる長さは、速度を上げても実際の時間で 0.7 秒以上とる（短いと、胴が急に速く回って見えるため）
     this.A = this.D - Math.min(this.D - this.S, clamp((this.D - this.S) * 0.3, 700, 1400) * Math.max(1, this.tl.speed))
 
     // 前の争奪の画面が残っていれば片付ける
-    host.querySelectorAll(':scope > .fxlp').forEach((n) => n.remove())
+    host.querySelectorAll(':scope > .fxlp:not(.fxlp-brief)').forEach((n) => n.remove())
     this.attached = host.isConnected
     this.root = el(
       'div',
-      'fxlp',
+      this.fromBrief ? 'fxlp fxlp-still on' : 'fxlp',
       `<div class="fxlp-bg"></div>
-      <header class="fxlp-head">
-        <div class="fxlp-kicker fxlp-in">LAST ONE</div>
-        <div class="fxlp-title fxlp-in">ラストワン争奪！</div>
-        <div class="fxlp-odds fxlp-in">残り<b>${fmt(o.prizes)}</b>個を<b>${fmt(o.contestants)}</b>人で</div>
-        <div class="fxlp-rule fxlp-in">${ballHtml('red')}${ballHtml('gold')}${ballHtml('rainbow')}<span class="fxlp-rule-t">赤・金・虹の玉が出たら当たり！</span></div>
-      </header>
+      <header class="fxlp-head">${headHtml(o.prizes, o.contestants, this.fromBrief)}</header>
       <div class="fxlp-crowd fxlp-in">
         <div class="fxlp-dots">${crowdHtml(Math.max(1, Math.round(num(o.contestants, 1))))}</div>
         <div class="fxlp-crowd-text">全員の玉が <b>いっせいに</b> 出る！</div>
@@ -240,12 +257,14 @@ class LastOnePlay {
     void this.root.offsetWidth
     this.root.classList.add('on')
 
-    // 見出し
-    this.show('.fxlp-kicker')
-    this.show('.fxlp-title')
-    if (this.all) this.at(Math.min(120, S * 0.1), () => safe(() => sfx.cutin(3)))
-    this.at(S * 0.2, () => this.show('.fxlp-odds'))
-    this.at(S * 0.4, () => this.show('.fxlp-rule'))
+    // 見出し（説明の画面から続くときは、もう出ているので出し直さない。始まりの音も説明の側で鳴っている）
+    if (!this.fromBrief) {
+      this.show('.fxlp-kicker')
+      this.show('.fxlp-title')
+      if (this.all) this.at(Math.min(120, S * 0.1), () => safe(() => sfx.cutin(3)))
+      this.at(S * 0.2, () => this.show('.fxlp-odds'))
+      this.at(S * 0.4, () => this.show('.fxlp-rule'))
+    }
     this.at(S * 0.6, () => this.show('.fxlp-crowd'))
     // 3・2・1（大画面と同じ時刻に出す）
     for (const k of [3, 2, 1]) {
@@ -621,4 +640,129 @@ class LastOnePlay {
       easing: 'ease-out',
     })
   }
+}
+
+// ---- 説明の画面 ------------------------------------------------------------------
+
+// 説明の画面（スマホ。争奪に入る人にだけ出す）: 残りの景品をガラポンで争うこと、このあとタップで回すこと、
+// 赤・金・虹の玉なら当たりであること、外れてもダブルチャンスの玉がもらえることを出して、close が呼ばれるまで待つ。
+// 抽選器は止まったまま見せる。この間のタップは何もしない（「合図を待っています」が、押すたびに小さく弾む）。
+// close のあとに playLastOneGarapon を呼ぶと、見出しと抽選器はそのままで、説明の文字だけが消えて回り始める。
+// 呼ばれなければ（新しいゲームを始めたときなど）、0.3 秒で消えて片付く
+export interface LastOneBrief {
+  speed?: number
+  prizes: number // 残りの景品の数
+  contestants: number // 争奪している人数
+  autoMs: number | null // 自動で始まるまでの時間（司会の「スタート」を待つときは null）
+}
+
+const BRIEF_OUT = 320 // 説明の画面が消える長さ（演出上の ms）
+
+export function openLastOneBrief(host: HTMLElement, o: LastOneBrief): { close(): void } {
+  const speed = num(o.speed, 1)
+  const tl = new Timeline(speed > 0 ? speed : 1)
+  const reduced = prefersReducedMotion()
+  const auto = typeof o.autoMs === 'number' && o.autoMs > 0 ? o.autoMs : null
+  // 前の説明が残っていれば片付ける
+  host.querySelectorAll(':scope > .fxlp-brief').forEach((n) => {
+    briefs.get(n)?.()
+    n.remove()
+  })
+
+  const tokens = Array.from({ length: DC_BALLS }, () => '<i class="fxlp-token on">?</i>').join('')
+  const root = el(
+    'div',
+    'fxlp fxlp-brief',
+    `<div class="fxlp-bg"></div>
+    <header class="fxlp-head">${headHtml(o.prizes, o.contestants, false)}</header>
+    <div class="fxlp-bf-you fxlp-in">
+      <b>あなたは ラストワン争奪に参加！</b>
+      <span>このあと、画面を<em>タップ</em>して<br>ガラポンを回そう</span>
+    </div>
+    <div class="fxlp-stage"></div>
+    <footer class="fxlp-bf-foot fxlp-in">
+      <div class="fxlp-bf-wait"><i></i><i></i><i></i><span>合図を待っています</span></div>
+      <div class="fxlp-bf-sub"></div>
+      ${auto && !reduced ? '<div class="fxlp-bf-bar"><b></b></div>' : ''}
+      <div class="fxlp-bf-dc">外れても、ダブルチャンスの玉が<b>${DC_BALLS}</b>個もらえます<span>${tokens}</span></div>
+    </footer>`,
+  )
+  root.style.setProperty('--fxlp-k', String(tl.ms(1)))
+  // 抽選器は止まったまま見せる（ガラポンの画面と同じ位置・同じ向き）
+  root.querySelector('.fxlp-stage')!.append(new GaraponMachine({ size: MACHINE }).el)
+  const wait = root.querySelector<HTMLElement>('.fxlp-bf-wait')!
+  const sub = root.querySelector<HTMLElement>('.fxlp-bf-sub')!
+
+  // 始まるまでの案内。自動で始まるときは、残り秒数と残り時間の帯を出す
+  const t0 = performance.now()
+  let closed = false
+  let hintUntil = 0
+  const idle = (): string => {
+    if (!auto) return 'スタートまで、そのままお待ちください'
+    const left = Math.ceil((auto - (performance.now() - t0) * tl.speed) / 1000)
+    return left > 0 ? `あと<b>${left}</b>秒で スタート` : 'まもなくスタート'
+  }
+  const renderSub = (): void => {
+    if (closed || performance.now() < hintUntil) return
+    const html = idle()
+    if (sub.innerHTML !== html) sub.innerHTML = html
+  }
+  renderSub()
+  if (auto) {
+    for (let k = Math.floor(auto / 1000); k >= 0; k--) tl.at(auto - k * 1000 + 20, renderSub) // 秒が変わるたびに書き直す
+    const bar = root.querySelector<HTMLElement>('.fxlp-bf-bar b') // 動きを減らす設定では、帯は出さず秒数だけ
+    bar?.animate([{ transform: 'scaleX(1)' }, { transform: 'scaleX(0)' }], { duration: tl.ms(auto), easing: 'linear', fill: 'forwards' })
+  }
+
+  // この間のタップは回さない。押したことは伝わるように、「合図を待っています」を小さく弾ませて、ひと言出す
+  let lastNudge = 0
+  swallow(root)
+  root.addEventListener('pointerdown', (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    safe(() => engine.unlock()) // 触ってもらえたら、このあとの音が鳴るようにしておく
+    const now = performance.now()
+    if (closed || now - lastNudge < 400) return // 1 秒に 3 回までに間引く
+    lastNudge = now
+    hintUntil = now + tl.ms(1600)
+    sub.textContent = 'まだ回りません。合図のあとにタップ！'
+    tl.at(1650, renderSub)
+    if (reduced) return
+    wait.classList.remove('nudge')
+    void wait.offsetWidth
+    wait.classList.add('nudge')
+  })
+
+  host.append(root)
+  void root.offsetWidth
+  root.classList.add('on')
+  const show = (sel: string): void => root.querySelector(sel)?.classList.add('on')
+  show('.fxlp-kicker')
+  show('.fxlp-title')
+  tl.at(250, () => show('.fxlp-odds'))
+  tl.at(450, () => show('.fxlp-rule'))
+  tl.at(700, () => show('.fxlp-bf-you'))
+  tl.at(1000, () => show('.fxlp-bf-foot'))
+  vibrate(20)
+
+  const close = (): void => {
+    if (closed) return
+    closed = true
+    briefs.delete(root)
+    // 下で始まったガラポンにタップが届くように、消えていく間は触れないようにする
+    root.style.pointerEvents = 'none'
+    if (reduced || !root.isConnected) {
+      tl.cancel()
+      root.remove()
+      return
+    }
+    root.style.setProperty('--fxlp-out', `${tl.ms(BRIEF_OUT)}ms`)
+    root.classList.add('out')
+    tl.at(BRIEF_OUT + 40, () => {
+      tl.cancel()
+      root.remove()
+    })
+  }
+  briefs.set(root, close)
+  return { close }
 }

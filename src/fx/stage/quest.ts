@@ -5,22 +5,29 @@ import { Timeline, el, escapeHtml, prefersReducedMotion, replay } from '../runti
 import { STAGE_H, STAGE_W } from '../theme'
 
 // 緊急クエスト「モグラ撃退」の大画面（1920×1080 全体に重ねる。イベントの層 z-index 40、粒子の canvas は 60）。
-//   start: 警報「緊急クエスト発生！」（introMs。スマホと同時）→ 叩く時間（playMs）のカウントダウン。
-//          会場全員がスマホでモグラを叩いている様子と、叩いた数の合計（setTotal で 0.5 秒ごとに届く）を見せる。
-//          叩く時間が終わったら「終了！」で止め、result() を待つ（待つ間は「集計中」）
+//   brief:  警報「緊急クエスト発生！」のあと、説明の画面（何が起きるか・何をすればいいかの 3 つの手順）を出して、start を待つ。
+//           司会が口頭で説明する時間なので、待っている間は動きを控えた落ち着いた画面にする（何十秒置いてもよい）
+//   start:  「3・2・1」のカウントダウン（introMs。スマホと同時）→ 叩く時間（playMs）。
+//           会場全員がスマホでモグラを叩いている様子と、叩いた数の合計（setTotal で 0.5 秒ごとに届く）を見せる。
+//           叩く時間が終わったら「終了！」で止め、result() を待つ（待つ間は「集計中」）。brief なしで呼んでも動く
 //   result: 結果（守った人・やられた人・リーチが消えた人、撃退数の合計、撃退王）を見せ、片付けてから解決する（約 6 秒）
-// 狙われるのはリーチの人。やられる割合は先に決まっていて、叩いた数が会場全体の下位に入った人がやられる。
+// スマホでは全員にボスモグラを見せるが、マスを埋められるのはリーチの人だけ。やられる割合は先に決まっていて、
+// 叩いた数が会場全体の下位に入った人がやられる。
 //
 //   const q = new MoleQuestStage(stageRoot, { speed })
-//   q.start({ introMs: 2600, playMs: 10000, targets: 312, players: 1000 })
+//   q.brief({ playMs: 10000, targets: 312, players: 1000, autoMs: null }) // 司会の「スタート」まで出しておく
+//   q.start({ introMs: 3600, playMs: 10000, targets: 312, players: 1000 })
 //   q.setTotal(5321)
 //   await q.result({ total: 18234, targets: 312, defended: 204, lost: 108, lostReach: 97, top: [...] })
 //   q.destroy()
 //
 // 時間の使い方（演出上の ms。speed で縮む）:
-//   0〜introMs        警報。0 で暗転と帯、0.12 秒で「緊急クエスト発生！」、警報の「ウォン」3 回（0.42・0.92・1.42 秒）に合わせて脈打つ。
-//                     0.92 秒で見出しが上へ退き、ボスモグラがせり上がる →「モグラ襲来！」「リーチを守れ！」と狙われた人数 → READY
-//   introMs           「叩け！！」。カウントダウン・会場の合計・モグラの畑に切り替わる
+//   brief()           0 で暗転と帯と警報の音、0.12 秒で「緊急クエスト発生！」、警報の「ウォン」3 回（0.42・0.92・1.42 秒）に合わせて脈打つ。
+//                     0.92 秒で見出しが上へ退き、ボスモグラがせり上がる → 1.42 秒「モグラ襲来！」→ 2.1 秒で説明の画面に落ち着く
+//                     （左に「カードを守れ！」と大ピンチのリーチの人数、右に手順 ①②③ が 2.3 秒から順に出る）→ 3.2 秒「まもなくスタート」。
+//                     autoMs が数字なら、brief() から autoMs でいっぱいになるバーを出す。あとは start() が来るまで動かない
+//   start()           説明を片付けて「3・2・1」。数字は叩き始めの 3・2・1 秒前に替わる（introMs が 3600 なら 0.6・1.6・2.6 秒）
+//   introMs           「スタート！」。残り時間・会場の合計・モグラの畑に切り替わる
 //   終わりの 3/2/1 秒  画面の真ん中に大きな 3・2・1
 //   introMs+playMs    「終了！」。0.9 秒たっても result() が来なければ「集計中…」
 //   result()          見出しと守った人・やられた人 → 1.3 秒で questTally を鳴らして撃退数を数え上げ（1.5 秒の「ドゥルルル…」に合わせて回し、
@@ -29,14 +36,22 @@ import { STAGE_H, STAGE_W } from '../theme'
 // 区切り（叩き始め・3/2/1・終了）は Timeline で決める。終了の時刻は叩き始めの時点の速度で決まるので、
 // 叩いている途中で速度を変えても、カウントダウンの表示と「終了！」はずれない（スマホと権威も同じ決め方をする）。
 // モグラの畑と数字の回転は requestAnimationFrame で描く（畑は速度 ×2 までに抑え、穴ごとの動きを 1 秒に 3 回以下に保つ）。
-// 音は警報・叩き始め・残り 3/2/1・終了・結果の数え上げだけを鳴らす（モグラと叩く音はスマホが鳴らす）。
+// 説明の画面で待っている間は、毎フレームの処理を回さない（CSS のゆっくりした動きだけ）。
+// 音は警報（brief）・カウントダウンの 3/2/1・叩き始め・残り 3/2/1・終了・結果の数え上げだけを鳴らす（モグラと叩く音はスマホが鳴らす）。
 // 警報の赤は点滅させない（赤は動かない背景とふちにだけ使い、脈打つ光は琥珀色にする）
 
 export interface MoleQuestStageStart {
-  introMs: number // 警報の長さ（スマホとそろえる）
+  introMs: number // 「3・2・1」のカウントダウンの長さ（スマホとそろえる）
   playMs: number // 叩ける時間
   targets: number // 本当に狙われた人数（リーチの人。スマホでは全員にボスモグラを見せる）
   players: number // 参加人数
+}
+
+export interface MoleQuestStageBrief {
+  playMs: number // 叩ける時間（説明に「10 秒間」と出す）
+  targets: number // 本当に狙われた人数（リーチの人）
+  players: number // 参加人数
+  autoMs: number | null // 自動で始まるまでの時間（司会の「スタート」を待つときは null）
 }
 
 export interface MoleQuestStageResult {
@@ -841,7 +856,7 @@ class MoleField {
 
 // ---- 本体 ------------------------------------------------------------------------
 
-type Phase = 'idle' | 'alarm' | 'play' | 'end' | 'result' | 'done'
+type Phase = 'idle' | 'alarm' | 'brief' | 'count' | 'play' | 'end' | 'result' | 'done'
 type Mood = 'perfect' | 'clear' | 'bad'
 
 interface Entry {
@@ -863,11 +878,14 @@ interface Refs {
   banner: HTMLElement
   kicker: HTMLElement
   title: HTMLElement
-  ready: HTMLElement
-  readyBar: HTMLElement
   raid: HTMLElement
   brief: HTMLElement
   briefNum: HTMLElement
+  steps: HTMLElement[]
+  hold: HTMLElement
+  holdBar: HTMLElement
+  pre: HTMLElement
+  preNum: HTMLElement
   boss: HTMLElement
   bossBubble: HTMLElement
   field: HTMLElement
@@ -953,17 +971,39 @@ export class MoleQuestStage {
     this.timeVars()
   }
 
-  start(o: MoleQuestStageStart): void {
+  // 説明の画面: 警報のあと、何が起きるか・何をすればいいかを出して、start が呼ばれるまで待つ。
+  // autoMs が数字なら、その時間で始まることが分かるバーを出す（null なら司会の合図を待つ）
+  brief(o: MoleQuestStageBrief): void {
     if (this.dead) return
     this.gen++
     this.inResult = false
     this.reset()
-    const introMs = Math.max(0, Number.isFinite(o.introMs) ? o.introMs : 2600)
     this.playMs = Math.max(0, Number.isFinite(o.playMs) ? o.playMs : 10000)
     this.targets = count(o.targets)
     this.players = count(o.players)
     this.build()
     this.phase = 'alarm'
+    const autoMs = typeof o.autoMs === 'number' && Number.isFinite(o.autoMs) && o.autoMs > 0 ? o.autoMs : null
+    void this.runBrief(new Seq(this.flow, this.alive), autoMs)
+  }
+
+  // 「3・2・1」→ 叩く時間。説明の画面（brief）が出ていれば、そこから切り替える。出ていなければ、ここで組み立てる
+  start(o: MoleQuestStageStart): void {
+    if (this.dead) return
+    this.gen++
+    this.inResult = false
+    const introMs = Math.max(0, Number.isFinite(o.introMs) ? o.introMs : 3600)
+    const fromBrief = this.r !== null && (this.phase === 'alarm' || this.phase === 'brief')
+    if (fromBrief) {
+      this.flow.cancel()
+      this.flow = new Timeline(this.speed)
+    } else this.reset()
+    this.playMs = Math.max(0, Number.isFinite(o.playMs) ? o.playMs : 10000)
+    this.targets = count(o.targets)
+    this.players = count(o.players)
+    if (fromBrief) this.r!.timeNum.textContent = String(Math.ceil(this.playMs / 1000))
+    else this.build()
+    this.phase = 'count'
     this.loop()
     void this.runStart(new Seq(this.flow, this.alive), introMs)
   }
@@ -997,7 +1037,7 @@ export class MoleQuestStage {
     if (this.dead || this.inResult) return
     this.inResult = true
     const gen = ++this.gen
-    const live = this.phase === 'alarm' || this.phase === 'play'
+    const live = this.phase === 'alarm' || this.phase === 'brief' || this.phase === 'count' || this.phase === 'play'
     this.flow.cancel()
     this.flow = new Timeline(this.speed)
     if (!this.r || this.phase === 'done') {
@@ -1036,14 +1076,11 @@ export class MoleQuestStage {
     this.duck(false)
   }
 
-  // ---- 警報 → 叩く時間 → 終了 ---------------------------------------------------
+  // ---- 警報 → 説明の画面 ---------------------------------------------------------
 
-  private async runStart(s: Seq, introMs: number): Promise<void> {
+  private async runBrief(s: Seq, autoMs: number | null): Promise<void> {
     const r = this.r!
     try {
-      // 警報の長さが 2.6 秒より短いときは、警報の中の区切りを縮める
-      const k = clamp(introMs / 2600, 0, 1)
-      const at = (t: number): number => t * k
       const fx = this.particles()
 
       // 1. 暗転・赤い縁・警告の帯（「ドドン！」）
@@ -1053,32 +1090,60 @@ export class MoleQuestStage {
       for (const b of r.bands) on(b)
       for (const b of r.beams) on(b)
       // 2. 「緊急クエスト発生！」の帯が開き、文字がたたきつけられる（0.12 秒の「ジャン！」）
-      await s.until(at(60))
+      await s.until(60)
       on(r.banner)
-      await s.until(at(120))
+      await s.until(120)
       on(r.title)
-      s.at(at(250), () => fx?.burst(960, 480, { count: 120, colors: AMBER, speed: 13, shape: 'spark', gravity: 0.05, life: 46 }))
-      // 警報の「ウォン」3 回に合わせて、EMERGENCY QUEST が琥珀色に脈打つ
-      for (const t of [420, 920, 1420]) s.at(at(t), () => this.wo())
-      // 3. 見出しが上へ退き、ボスモグラがせり上がる
-      await s.until(at(920))
+      s.at(250, () => fx?.burst(960, 480, { count: 120, colors: AMBER, speed: 13, shape: 'spark', gravity: 0.05, life: 46 }))
+      // 警報の「ウォン」3 回に合わせて、EMERGENCY QUEST が琥珀色に脈打つ（脈はこの 3 回だけ）
+      for (const t of [420, 920, 1420]) s.at(t, () => this.wo())
+      // 3. 見出しが上へ退き、ボスモグラがせり上がる →「モグラ襲来！」
+      await s.until(920)
       r.banner.classList.add('up')
-      await s.until(at(1100))
+      await s.until(1100)
       on(r.boss)
       fx?.burst(960, 1010, { count: 50, colors: SOIL, speed: 9, gravity: 0.45, life: 45, shape: 'rect', size: 10 })
-      // 4. 「モグラ襲来！」と「リーチを守れ！」、狙われた人数
-      await s.until(at(1420))
+      await s.until(1420)
       on(r.raid)
-      await s.until(at(1550))
+      await s.until(1520)
+      on(r.bossBubble)
+
+      // 4. 説明の画面に落ち着く（警報の音が終わるころ）。ボスは左へ下がり、手順が ①②③ の順に出る
+      await s.until(2100)
+      this.phase = 'brief'
+      this.el.dataset.phase = 'brief'
+      this.duck(false)
       on(r.brief)
       this.countUp(r.briefNum, this.targets, 600)
-      await s.until(at(1700))
-      on(r.bossBubble)
-      // 5. READY（叩き始めまでのバー）
-      const readyAt = Math.min(at(1900), Math.max(0, introMs - 500))
-      await s.until(readyAt)
-      r.readyBar.style.transitionDuration = `${this.flow.ms(introMs - readyAt)}ms`
-      on(r.ready)
+      for (const [i, step] of r.steps.entries()) {
+        await s.until(2300 + i * 280)
+        on(step)
+      }
+      // 5. 「まもなくスタート」。自動で始まるときは、brief() から autoMs でいっぱいになるバーを出す。あとは start() を待つだけ
+      await s.until(3200)
+      if (autoMs !== null) {
+        r.hold.classList.add('auto')
+        r.holdBar.style.transitionDuration = `${this.flow.ms(Math.max(0, autoMs - 3200))}ms`
+      }
+      on(r.hold)
+    } catch (err) {
+      if (err !== CANCELLED) throw err
+    }
+  }
+
+  // ---- 3・2・1 → 叩く時間 → 終了 ---------------------------------------------------
+
+  private async runStart(s: Seq, introMs: number): Promise<void> {
+    const r = this.r!
+    try {
+      // 説明を片付けて、画面の真ん中に大きなカウントダウン（数字は叩き始めの 3・2・1 秒前に替わる。スマホと同じ時刻）
+      this.el.dataset.phase = 'count'
+      this.duck(true)
+      for (const b of r.bands) on(b)
+      for (const b of r.beams) on(b)
+      r.boss.classList.add('dive')
+      on(r.pre)
+      for (const n of [3, 2, 1]) if (introMs >= n * 1000) s.at(introMs - n * 1000, () => this.preCount(n))
 
       // 叩き始め
       await s.until(introMs)
@@ -1093,7 +1158,18 @@ export class MoleQuestStage {
     }
   }
 
-  // 「叩け！！」: 警報の文字を片付けて、カウントダウン・会場の合計・モグラの畑に切り替える
+  // 叩き始めまでの 3・2・1（消さずに数字だけを替えるので、速度を上げても点滅にならない）
+  private preCount(n: number): void {
+    const r = this.r
+    if (!r || this.phase !== 'count') return
+    sfx.questTick(n)
+    r.preNum.dataset.text = String(n)
+    r.preNum.firstElementChild!.textContent = String(n)
+    on(r.preNum)
+    replay(r.preNum, 'punch')
+  }
+
+  // 「スタート！」: カウントダウンを片付けて、残り時間・会場の合計・モグラの畑に切り替える
   private go(): void {
     const r = this.r!
     this.phase = 'play'
@@ -1145,7 +1221,7 @@ export class MoleQuestStage {
   // 「終了！」（試合終了のゴングの 3 打目に合わせて文字が着地する）。0.9 秒たっても結果が来なければ「集計中…」
   private end(): void {
     const r = this.r
-    if (!r || (this.phase !== 'play' && this.phase !== 'alarm')) return
+    if (!r || this.phase === 'idle' || this.phase === 'end' || this.phase === 'result' || this.phase === 'done') return
     this.phase = 'end'
     this.el.dataset.phase = 'end'
     this.el.classList.remove('hurry')
@@ -1375,6 +1451,7 @@ export class MoleQuestStage {
     this.el.dataset.phase = 'idle'
     const players = fmt(this.players)
     const targets = fmt(this.targets)
+    const secs = Math.max(1, Math.round(this.playMs / 1000))
     const top = '▲ EMERGENCY QUEST ▲　緊急クエスト「モグラ撃退」　◆ スマホでモグラを叩いて カードを守れ！ ◆　'.repeat(3)
     const bot = `◆ リーチの人 ${targets} 人が大ピンチ ◆　会場みんなで叩いて守れ！　▲ WARNING ▲　`.repeat(4)
     // 狙われた人数は桁が多いほど小さく
@@ -1391,7 +1468,6 @@ export class MoleQuestStage {
           <div class="fxqs-chev l"><i></i><i></i><i></i></div><div class="fxqs-chev r"><i></i><i></i><i></i></div>
           <div class="fxqs-kicker">${WARN}<span>EMERGENCY QUEST</span>${WARN}</div>
           <div class="fxqs-title fxqs-ol" data-text="緊急クエスト発生！"><b>緊急クエスト発生！</b></div>
-          <div class="fxqs-ready"><span>READY</span><i><b></b></i></div>
         </div>
         <div class="fxqs-raid"><div class="fxqs-raid-in"><div class="fxqs-ol" data-text="モグラ襲来！"><b>モグラ襲来！</b></div><small>ドドドド…</small></div></div>
         <div class="fxqs-brief">
@@ -1399,6 +1475,16 @@ export class MoleQuestStage {
           <div class="fxqs-brief-b fxqs-ol" data-text="カードを守れ！"><b>カードを守れ！</b></div>
           <div class="fxqs-brief-t">${RETICLE}<span>大ピンチのリーチ</span><b>0</b><small>人</small></div>
           <p class="fxqs-brief-p">参加 ${players} 人</p>
+        </div>
+        <ol class="fxqs-steps">
+          <li class="fxqs-step"><i>1</i><div><b>スマホを見る</b><span>ボスモグラが あなたのカードを狙っています</span></div></li>
+          <li class="fxqs-step"><i>2</i><div><b>出てきたモグラを 指でタップ！<em>${secs} 秒間</em></b><span>何度でも叩けます。たくさん叩こう</span></div></li>
+          <li class="fxqs-step"><i>3</i><div><b>たくさん叩いて カードを守ろう</b><span>叩いた数が少ないと、リーチの人は マスを埋められます</span></div></li>
+        </ol>
+        <div class="fxqs-hold">
+          <div class="fxqs-hold-a"><b>まもなくスタート</b><i>・</i><i>・</i><i>・</i></div>
+          <p class="fxqs-hold-b"><span class="m">司会の合図で始まります。</span>スマホを手に持って お待ちください</p>
+          <div class="fxqs-hold-bar"><b></b></div>
         </div>
         <div class="fxqs-hud">
           <div class="fxqs-p fxqs-time">${ringSvg()}<div class="fxqs-time-in"><small>残り</small><b>${Math.ceil(this.playMs / 1000)}</b><small>秒</small></div></div>
@@ -1417,7 +1503,8 @@ export class MoleQuestStage {
         <div class="fxqs-plus"></div>
         <div class="fxqs-cd"><div class="fxqs-ol" data-text="3"><b>3</b></div></div>
         <div class="fxqs-end"><small>TIME UP</small><div class="fxqs-ol" data-text="終了！"><b>終了！</b></div><p class="fxqs-wait">集計中<i>・</i><i>・</i><i>・</i></p></div>
-        <div class="fxqs-go"><small>START</small><div class="fxqs-ol" data-text="叩け！"><b>叩け！</b></div></div>
+        <div class="fxqs-pre"><small>スマホを見て！</small><div class="fxqs-ol" data-text="3"><b>3</b></div><p>出てきたモグラを タップ！</p></div>
+        <div class="fxqs-go"><small>モグラを叩け！</small><div class="fxqs-ol" data-text="スタート！"><b>スタート！</b></div></div>
         <div class="fxqs-res"></div>
         <div class="fxqs-band top"><div class="fxqs-band-in"><div class="fxqs-marq"><span>${top}</span><span>${top}</span></div></div></div>
         <div class="fxqs-band bot"><div class="fxqs-band-in"><div class="fxqs-marq rev"><span>${bot}</span><span>${bot}</span></div></div></div>
@@ -1430,11 +1517,14 @@ export class MoleQuestStage {
       banner: $('.fxqs-banner'),
       kicker: $('.fxqs-kicker'),
       title: $('.fxqs-title'),
-      ready: $('.fxqs-ready'),
-      readyBar: $('.fxqs-ready b'),
       raid: $('.fxqs-raid'),
       brief: $('.fxqs-brief'),
       briefNum: $('.fxqs-brief-t b'),
+      steps: [...this.el.querySelectorAll<HTMLElement>('.fxqs-step')],
+      hold: $('.fxqs-hold'),
+      holdBar: $('.fxqs-hold-bar b'),
+      pre: $('.fxqs-pre'),
+      preNum: $('.fxqs-pre .fxqs-ol'),
       boss: $('.fxqs-boss'),
       bossBubble: $('.fxqs-boss .fxqs-bubble'),
       field: $('.fxqs-field'),
@@ -1505,6 +1595,8 @@ export class MoleQuestStage {
     st.setProperty('--plus', `${Math.max(700, ms(1000))}ms`)
     st.setProperty('--punch', `${Math.max(220, ms(380))}ms`)
     st.setProperty('--dots', `${Math.max(900, ms(1200))}ms`)
+    // 説明の画面で待つ間の、ボスのゆっくりしたゆれ
+    st.setProperty('--calm', `${Math.max(2400, ms(2400))}ms`)
     // 最後に消えるとき（暗転が明けて画面全体が明るくなるので、急にしない）
     st.setProperty('--out', `${Math.max(400, ms(500))}ms`)
     this.canvas?.style.setProperty('--out', st.getPropertyValue('--out'))

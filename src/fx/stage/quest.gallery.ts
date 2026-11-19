@@ -4,10 +4,12 @@ import { MoleQuestStage, type MoleQuestStageResult } from './quest'
 
 // 緊急クエスト「モグラ撃退」の大画面のギャラリー。叩いた数の合計（setTotal）は本番と同じく 0.5 秒ごとに届け、
 // 結果（result）は叩く時間が終わった 0.8 秒後に呼ぶ。
+// 「説明の画面」の項目は brief から始めて、司会の「スタート」の代わりに数秒待ってから start へ進む
+// （ほかの項目は brief なしで start から。3・2・1 のカウントダウンから始まる）。
 // 後ろに大画面の配置（HUD・抽選機・結果・会場・番号の盤）を薄く描いて、重ねたときの見え方も確かめられるようにする
 
 const G = '大画面: 緊急クエスト'
-const INTRO = 2600
+const INTRO = 3600 // 「3・2・1」のカウントダウン
 const PLAY = 10000
 
 function backdrop(host: HTMLElement): HTMLElement {
@@ -43,7 +45,10 @@ interface Case {
   lostReach: number
   top: Top
   speeds?: readonly (readonly [at: number, times: number])[] // 叩き始めからの ms と、そこからの速度の倍率
-  resultAt?: number // 始まりから result を呼ぶまでの ms（既定は叩く時間の終わりの 0.8 秒後）
+  resultAt?: number // start から result を呼ぶまでの ms（既定は叩く時間の終わりの 0.8 秒後）
+  // 説明の画面から始める。autoMs は自動で始まるまでの時間（司会を待つなら null）、
+  // waitMs は start を呼ぶまでの時間（null なら呼ばずに、説明の画面のまま置いておく）
+  brief?: { autoMs: number | null; waitMs: number | null }
 }
 
 const p = (name: string, score: number, isMe = false): Top[number] => ({ name, score, isMe })
@@ -65,6 +70,12 @@ function totals(final: number, steps: number): number[] {
 
 async function run(host: HTMLElement, tl: Timeline, c: Case): Promise<void> {
   const q = new MoleQuestStage(backdrop(host), { speed: tl.speed })
+  if (c.brief) {
+    q.brief({ playMs: PLAY, targets: c.targets, players: c.players, autoMs: c.brief.autoMs })
+    // waitMs が null なら、ほかの項目を選ぶまで説明の画面のまま（長く置いても崩れないことを確かめる）
+    await tl.wait(c.brief.waitMs ?? 3600000)
+    if (tl.cancelled || c.brief.waitMs === null) return q.destroy()
+  }
   q.start({ introMs: INTRO, playMs: PLAY, targets: c.targets, players: c.players })
   totals(c.total, PLAY / 500).forEach((v, i) => tl.at(INTRO + (i + 1) * 500, () => q.setTotal(v)))
   for (const [at, times] of c.speeds ?? []) tl.at(INTRO + at, () => q.setSpeed(tl.speed * times))
@@ -86,6 +97,10 @@ const NORMAL: Omit<Case, 'id' | 'label'> = {
 }
 
 const CASES: readonly Case[] = [
+  { id: 'brief', label: '説明の画面 → 司会のスタート（7 秒後）→ 3・2・1 → 結果まで', ...NORMAL, brief: { autoMs: null, waitMs: 7000 } },
+  { id: 'brief-auto', label: '説明の画面（自動進行。8 秒でバーがいっぱいになって始まる）', ...NORMAL, brief: { autoMs: 8000, waitMs: 8000 } },
+  { id: 'brief-hold', label: '説明の画面のまま置く（スタートを押さない）', ...NORMAL, brief: { autoMs: null, waitMs: null } },
+  { id: 'brief-early', label: '警報の途中でスタート（1.5 秒後）', ...NORMAL, brief: { autoMs: null, waitMs: 1500 } },
   { id: 'normal', label: 'ふつう（1,000 人・狙われた 312 人）', ...NORMAL },
   {
     id: 'almost',

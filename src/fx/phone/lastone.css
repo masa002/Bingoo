@@ -747,6 +747,188 @@
   pointer-events: none;
 }
 
+/* ---- 説明の画面（ガラポンが始まる前。司会の「スタート」まで出しておく） ----
+   見出しと抽選器はガラポンの画面と同じ位置にあり、ガラポンが始まると、この画面だけが上ですっと消える。
+   長く待つこともあるので、動くのは「合図を待っています」の 3 つの点だけ（速度によらず 1.8 秒周期） */
+
+.fxlp-brief {
+  z-index: 43;
+}
+
+/* 説明の画面から続けて始まったガラポン: 見出しはもう見えているので、弾ませ直さない */
+.fxlp-still .fxlp-title.on {
+  animation: none;
+}
+
+.fxlp-bf-you {
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  top: 184px;
+  padding: 14px 12px 13px;
+  border-radius: 18px;
+  text-align: center;
+  background: linear-gradient(180deg, rgba(90, 210, 255, 0.16), rgba(90, 210, 255, 0.06));
+  box-shadow: inset 0 0 0 2px rgba(90, 210, 255, 0.55);
+}
+
+.fxlp-bf-you b {
+  display: block;
+  font-size: 21px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  color: #9be3ff;
+}
+
+.fxlp-bf-you span {
+  display: block;
+  margin-top: 6px;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: #f6efe4;
+}
+
+.fxlp-bf-you em {
+  margin: 0 2px;
+  font-style: normal;
+  font-weight: 900;
+  color: #ffe08a;
+}
+
+.fxlp-bf-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 34px;
+  padding: 0 26px;
+  text-align: center;
+}
+
+/* 「合図を待っています」: まだ始まっていない・押しても回らないことを、丸い札で伝える */
+.fxlp-bf-wait {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 22px 9px 18px;
+  border-radius: 999px;
+  font-size: 20px;
+  font-weight: 900;
+  color: #fff4e0;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 2px rgba(255, 226, 184, 0.45);
+}
+
+.fxlp-bf-wait span {
+  margin-left: 6px;
+}
+
+.fxlp-bf-wait i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ffe2b8;
+  opacity: 0.3;
+  animation: fxlp-bf-dot 1.8s ease-in-out infinite;
+}
+
+.fxlp-bf-wait i:nth-child(2) {
+  animation-delay: 0.3s;
+}
+
+.fxlp-bf-wait i:nth-child(3) {
+  animation-delay: 0.6s;
+}
+
+@keyframes fxlp-bf-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+
+/* タップされたら小さく弾む（1 秒に 3 回までに間引いてある） */
+.fxlp-bf-wait.nudge {
+  animation: fxlp-bf-nudge 300ms ease-out;
+}
+
+@keyframes fxlp-bf-nudge {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.07);
+  }
+}
+
+.fxlp-bf-sub {
+  min-height: 24px;
+  margin-top: 8px;
+  font-size: 15px;
+  color: #c9cfe6;
+}
+
+.fxlp-bf-sub b {
+  margin: 0 3px;
+  font-size: 20px;
+  font-weight: 900;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 自動で始まるときの、残り時間の帯（右から左へ縮む） */
+.fxlp-bf-bar {
+  height: 6px;
+  margin: 6px 40px 0;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.fxlp-bf-bar b {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, #b8722f, #f0a64e, #ffd98a);
+}
+
+.fxlp-bf-dc {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  margin-top: 12px;
+  font-size: 13px;
+  white-space: nowrap;
+  color: #c9d6ff;
+}
+
+.fxlp-bf-dc b {
+  margin: 0 2px;
+  font-size: 17px;
+  font-weight: 900;
+  color: #fff;
+}
+
+.fxlp-bf-dc span {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 6px;
+}
+
+.fxlp-bf-dc .fxlp-token {
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
+  box-shadow: inset 0 -1px 3px rgba(0, 0, 0, 0.2);
+}
+
 /* 動きを減らす設定: 動きを止めて、色と文字だけで伝える */
 @media (prefers-reduced-motion: reduce) {
   .fxlp,

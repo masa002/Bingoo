@@ -7,30 +7,35 @@ import { MOLE_SVG, boxIn, play, ring, type CardView } from './card'
 import './quest.css' // aori.css より後に読み込む（縁取り文字の色と大きさを上書きするため）
 
 // 緊急クエスト「モグラ撃退」のスマホ側（390×844 のスマホ画面に重ねる）。
-//   1. play: 警報（introMs。大画面と同時に始まる）→ 叩く時間（playMs）。モグラはカードのマスから顔を出し、タップで叩く。
-//      target のときは、ボスモグラが cell（自分のリーチのマス）を狙っていることを見せ、守る気持ちにさせる
-//      （登場してマスに潜り、叩く時間の間ずっと、影・光る目・ひび・照準を見せる。叩くたびにボスがひるむ）。
+//   1. brief: 説明の画面を出して待つ（司会が説明して「スタート」を押すまで。長いと 60 秒）。落ち着いて読めるように、動きは少なくする。
+//      何が起きたか（緊急クエスト「モグラ撃退」）、どこが狙われているか（ボスモグラが cell に現れて潜り、影・光る目・照準が残る）、
+//      何をするか（指がモグラをトンと押す見本と「出てきたモグラを 指でタップ！」）、どれくらいか（10 秒間）、どうなるか（たくさん叩いて、カードを守ろう）、
+//      まだ始まっていないこと（「まもなくスタート」。autoMs が数字なら、そこまでの残りを帯で見せる）。この間のタップは数えない
+//   2. play: 「スタート」で呼ぶ。カウントダウン「3・2・1」（introMs。大画面と同時）→ 叩く時間（playMs）。モグラはカードのマスから顔を出し、タップで叩く。
+//      brief のあとなら説明の画面から続ける。brief なしで呼ばれたときは、警報とボスの登場をカウントダウンの間に詰めて見せる。
+//      target のときは、叩く時間の間ずっと、ボスモグラの影・光る目・ひび・照準を見せる（叩くたびにボスがひるむ）。
 //      狙われていない人も叩ける（叩いた数は会場の合計と撃退王に入る。失うものはない）。
 //      叩く時間が終わったら、叩いた数で解決する（呼び出し側がそれを権威へ送る）
-//   2. result: 権威が結果を決めたら呼ぶ。
+//   3. result: 権威が結果を決めたら呼ぶ。
 //      lost なら「頑張ったけどダメだった」演出のあと、card.moleFill(cell) でマスを埋めてから解決する。
 //      守りきった人は防衛成功、狙われていない人は自分の撃退数と順位を見せる
 // 誰がやられるかは権威が決める。やられる割合は先に決まっていて、叩いた数が会場全体の下位に入った人がやられる。
 // だから need（あと何匹叩けば守れたか）は本当の数字で、そのまま見せてよい。
 //
 //   const q = new MoleQuest(phone, { speed })        // sound: 'personal'（既定）は自分の音だけ、'all' は警報・合図も鳴らす
-//   const score = await q.play(card, { introMs: 2600, playMs: 10000, target: true, cell: 12, label: 'N38' })
+//   q.brief(card, { playMs: 10000, target: true, cell: 12, label: 'N38', autoMs: null })   // 説明の画面で待つ
+//   const score = await q.play(card, { introMs: 3600, playMs: 10000, target: true, cell: 12, label: 'N38' })
 //   send({ type: 'questScore', score })
 //   await q.result({ score, lost: true, need: 4, total: 18234, rank: 412, players: 1000 })
 //   card.setMarks(mask, { filled: [12], … })         // 埋めたあとの状態は呼び出し側で描き直す
 //
-// 層は host 全体（inset 0、z-index 21）。カードの外を暗くし、カードのマスの位置にモグラを重ねる（位置は play の始めに測る）。
+// 層は host 全体（inset 0、z-index 21）。カードの外を暗くし、カードのマスの位置にモグラを重ねる（位置は brief の始めに測る。brief がなければ play の始め）。
 // 上の時計は y 36〜102、下の点数と結果はカードの下（カードの下端 +12px）から。
-// 警報と叩く時間の間は、画面のどこを押しても pointerdown を受ける（伝播は止めない）。叩く時間が終わったら、タップを下へ通す。
-// cancel / destroy で途中でも片付く（待っている play は、その時点の数で解決する）。
+// 説明・カウントダウン・叩く時間の間は、画面のどこを押しても pointerdown を受ける（伝播は止めない）。叩く時間が終わったら、タップを下へ通す。
+// cancel / destroy・新しい brief で途中でも片付く（待っている play は、その時点の数で解決する）。
 //
 // 遊び方の案内（急に始まるので、初めての人でも 1 秒で分かるように）:
-//   警報の間: 下に「出てきたモグラを 指でタップ！」と、指がモグラをトンと押す見本を出す。「よーい…」にも同じ文を添える
+//   説明とカウントダウンの間: 下に「出てきたモグラを 指でタップ！」と、指がモグラをトンと押す見本を出す。「3・2・1」にも同じ文を添える
 //   叩く時間: 合図は「タップで 叩け！」。最初の 1 匹を叩くまで、顔を出したモグラに指・輪・「タップ」の印を付ける（叩いたら消す）
 //   約 2.5 秒たっても 1 回も押していなければ「モグラをタップ！」を真ん中に出し、そのあとも押すまで数秒おきに控えめにくり返す
 //
@@ -40,11 +45,19 @@ import './quest.css' // aori.css より後に読み込む（縁取り文字の�
 // 速度を上げても、顔を出している長さは実時間で 380ms より短くしない（叩けるように）
 
 export interface MoleQuestStart {
-  introMs: number // 警報の長さ（大画面とそろえる）
+  introMs: number // カウントダウン「3・2・1」の長さ（大画面とそろえる。3600 なら 0.6 秒後から 1 秒ごと）
   playMs: number // 叩ける時間
   target: boolean // ボスモグラが自分のカードを狙っている（リーチでない人にも見せる。実際に埋められるのはリーチの人だけ）
   cell: number | null // ボスモグラが狙う、card のマスの番号（0 から。狙われていなければ null）
   label: string // そのマスの番号（「N38」。狙われていなければ空）
+}
+
+export interface MoleQuestBrief {
+  playMs: number // 叩ける時間（説明に「10 秒間」と出す）
+  target: boolean
+  cell: number | null // ボスモグラが狙う、card のマスの番号
+  label: string
+  autoMs: number | null // 自動で始まるまでの時間（司会の「スタート」を待つときは null）
 }
 
 export interface MoleQuestResult {
@@ -56,7 +69,7 @@ export interface MoleQuestResult {
   players: number // 参加人数
 }
 
-type Phase = 'idle' | 'intro' | 'play' | 'over' | 'result'
+type Phase = 'idle' | 'brief' | 'intro' | 'play' | 'over' | 'result'
 type HoleState = 'idle' | 'up' | 'down' | 'hit'
 
 interface Box {
@@ -115,6 +128,7 @@ interface Parts {
   combo: HTMLElement
   mission: HTMLElement
   howto: HTMLElement
+  wait: HTMLElement
   res: HTMLElement
   banner: HTMLElement
   fx: HTMLElement
@@ -199,6 +213,12 @@ const FINGER_SVG = `<svg viewBox="0 0 48 60" aria-hidden="true">
   <path d="M29 26 V33 M36 28 V34" stroke="#1a1405" stroke-width="2.4" stroke-linecap="round"/>
 </svg>`
 
+// 「緊急クエスト発生！」の帯
+const ALARM_HTML = `<div class="fxq-ban is-alarm"><i class="fxq-tape"></i><div class="fxq-ban-body">
+  <svg class="fxq-warn" viewBox="0 0 64 56" aria-hidden="true"><path d="M32 5 L60 51 L4 51 Z" fill="#ffc21a" stroke="#1a1405" stroke-width="4" stroke-linejoin="round"/><rect x="29" y="18" width="6" height="19" rx="3" fill="#1a1405"/><circle cx="32" cy="44" r="3.6" fill="#1a1405"/></svg>
+  <div class="fxq-ban-main">${txt('緊急クエスト発生！')}</div><div class="fxq-ban-sub">${txt('モグラ撃退')}</div>
+</div><i class="fxq-tape"></i></div>`
+
 // ボスが掘り進むひび（マスの中の 0〜100 の座標）。[形, 描き始める進み具合, 描き終わる進み具合]
 const CRACKS: readonly (readonly [string, number, number])[] = [
   ['M50 60 L41 48 L45 37 L35 25 L39 11', 0, 0.55],
@@ -264,6 +284,8 @@ export class MoleQuest {
   private tapped = false // 叩く時間に 1 回でも押した
   private nudgeAt = 0 // 次に「モグラをタップ！」と促す時刻（実時間）
   private nudges = 0
+  private briefed = false // 説明の画面（brief）から続けて始まった
+  private countShown = 0 // いま出しているカウントダウンの数字（3・2・1）
   private raf = 0
   private onScore: ((score: number) => void) | null = null
   private readonly gates = new Map<string, number>()
@@ -309,22 +331,63 @@ export class MoleQuest {
     return Math.max(min, ms / this.speed)
   }
 
-  async play(card: CardView, o: MoleQuestStart): Promise<number> {
-    if (this.dead) return 0
+  // 説明の画面: 何が起きたか・どこが狙われているか・何をすればいいかを出して、play が呼ばれるまで待つ。
+  // 長く待つこともあるので、始めにひと通り見せたあとは、見本の指とボスの目くらいしか動かさない。この間のタップは数えない
+  brief(card: CardView, o: MoleQuestBrief): void {
+    if (this.dead) return
     this.reset()
     const gen = this.gen
     const tl = this.tl
-    this.card = card
+    const p = this.setup(card, o)
+    this.phase = 'brief'
+    this.el.dataset.phase = 'brief'
+    this.el.classList.add('is-live', 'is-alarm')
+    const ok = () => gen === this.gen && this.phase === 'brief'
+    this.cue(() => sfx.questAlarm())
+    void play(p.shade, [{ opacity: 0 }, { opacity: 1 }], 280, tl, { fill: 'forwards' })
+    void play(p.edge, [{ opacity: 0 }, { opacity: 1 }], 420, tl, { fill: 'forwards' })
+    tl.at(2600, () => ok() && this.el.classList.remove('is-alarm')) // 縁の脈動は始めだけ（待つ間は止める）
+    void this.showBanner(ALARM_HTML, 900)
+    this.setMission('intro')
+    // まだ始まっていないことを見せる。自動で始まるときは、そこまでの残りを帯で見せる
+    if (o.autoMs !== null && o.autoMs > 0) {
+      p.wait.innerHTML = '<b>まもなくスタート</b><small>このあと自動で始まります</small><i class="fxq-wait-bar"><i></i></i>'
+      void play(p.wait.querySelector('.fxq-wait-bar i')!, [{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], o.autoMs, tl, { easing: 'linear', fill: 'forwards' })
+    } else {
+      p.wait.innerHTML = '<b>まもなくスタート</b><small>司会の合図を待っています<em class="fxq-dots"><i>.</i><i>.</i><i>.</i></em></small>'
+    }
+    tl.at(500, () => {
+      if (!ok()) return
+      this.reveal(p.floor, 0)
+      this.reveal(p.panel, 26)
+      this.reveal(p.hud, -24)
+    })
+    // 警報の帯が消えてから、ボスが狙うマスに現れて潜る（狙われていない人には、モグラの群れがちらっと顔を出す）
+    tl.at(1500, () => {
+      if (!ok()) return
+      if (this.boss) this.bossIntro(tl, 1500)
+      else this.teaser(900)
+    })
+  }
+
+  async play(card: CardView, o: MoleQuestStart): Promise<number> {
+    if (this.dead) return 0
+    // 説明の画面が出ていれば、そのまま続ける（マスの位置・ボスはそのまま使う）。なければ、ここで組み立てる
+    const briefed = this.phase === 'brief' && this.card === card && this.parts !== null
+    if (!briefed) {
+      this.reset()
+      this.setup(card, o)
+    }
+    const gen = this.gen
+    const tl = this.tl
+    this.briefed = briefed
     this.introMs = Math.max(0, o.introMs)
-    this.playMs = Math.max(0, o.playMs)
-    this.still = prefersReducedMotion()
-    const m = this.measure(card)
-    const cell = o.cell
-    this.cell = o.target && cell !== null && Number.isInteger(cell) && cell >= 0 && cell < m.boxes.length ? cell : null
-    this.target = o.target
-    this.label = o.target ? o.label : ''
+    if (briefed) {
+      // 叩く時間の長さは、始まるときの値に合わせ直す
+      this.playMs = Math.max(0, o.playMs)
+      if (this.parts) this.parts.sec.textContent = String(Math.ceil(this.playMs / 1000))
+    }
     const done = new Promise<number>((resolve) => (this.onScore = resolve))
-    this.parts = this.build(m)
     this.e0 = 0
     this.t0 = performance.now()
     this.phase = 'intro'
@@ -339,7 +402,7 @@ export class MoleQuest {
   async result(r: MoleQuestResult): Promise<void> {
     if (this.dead || this.phase === 'result') return
     if (this.phase === 'idle') this.bare()
-    if (this.phase === 'intro' || this.phase === 'play') this.finish() // 叩く時間の途中で結果が来たら、そこで終える
+    if (this.phase === 'brief' || this.phase === 'intro' || this.phase === 'play') this.finish() // 叩く時間の途中で結果が来たら、そこで終える
     this.phase = 'result'
     this.el.dataset.phase = 'result'
     const gen = this.gen
@@ -356,6 +419,19 @@ export class MoleQuest {
     if (!alive()) return
     await play(this.el, [{ opacity: 1 }, { opacity: 0 }], 360, tl, { fill: 'forwards' })
     if (gen === this.gen) this.reset()
+  }
+
+  // 始める前の準備: マスの位置を測り、狙われたマスを決めて、層を組み立てる（brief と、brief なしの play で使う）
+  private setup(card: CardView, o: { playMs: number; target: boolean; cell: number | null; label: string }): Parts {
+    this.card = card
+    this.playMs = Math.max(0, o.playMs)
+    this.still = prefersReducedMotion()
+    const m = this.measure(card)
+    const cell = o.cell
+    this.cell = o.target && cell !== null && Number.isInteger(cell) && cell >= 0 && cell < m.boxes.length ? cell : null
+    this.target = o.target
+    this.label = o.target ? o.label : ''
+    return (this.parts = this.build(m))
   }
 
   // 途中でも片付ける（待っている play は、その時点の数で解決する）
@@ -419,7 +495,11 @@ export class MoleQuest {
         <div class="fxq-mission"></div>
         <div class="fxq-howto">
           <div class="fxq-demo"><i class="fxq-demo-pit"></i><div class="fxq-demo-clip"><div class="fxq-demo-mole">${MOLE_SVG}</div></div><i class="fxq-demo-ring"></i><i class="fxq-finger">${FINGER_SVG}</i></div>
-          <div class="fxq-howto-txt"><b>出てきたモグラを<br>指でタップ！</b><small>このあとすぐ、カードのマスから顔を出す</small></div>
+          <div class="fxq-howto-txt"><b>出てきたモグラを<br>指でタップ！</b><small>カードのマスから顔を出します</small></div>
+        </div>
+        <div class="fxq-brief">
+          <div class="fxq-facts"><span class="fxq-fact"><b>${Math.round(this.playMs / 1000)}</b>秒間</span><span class="fxq-fact-txt">たくさん叩いて、<br>${this.target ? 'カードを守ろう' : 'モグラを追い返そう'}</span></div>
+          <div class="fxq-wait"></div>
         </div>
       </div>
       <div class="fxq-resbox"></div>
@@ -484,6 +564,7 @@ export class MoleQuest {
       combo: $('.fxq-combo'),
       mission: $('.fxq-mission'),
       howto: $('.fxq-howto'),
+      wait: $('.fxq-wait'),
       res: $('.fxq-resbox'),
       banner: $('.fxq-banner'),
       fx: $('.fxq-fx'),
@@ -551,6 +632,7 @@ export class MoleQuest {
   private pump(): void {
     const real = performance.now()
     if (this.phase === 'intro' && this.now() >= this.introMs) this.go()
+    if (this.phase === 'intro') this.countdown(this.now())
     if (this.phase === 'play') {
       const t = this.now()
       const k = this.playMs > 0 ? clamp((t - this.introMs) / this.playMs, 0, 1) : 1
@@ -570,43 +652,75 @@ export class MoleQuest {
 
   // ---- 警報 -------------------------------------------------------------------
 
+  // カウントダウンの間。数字「3・2・1」は pump が時刻を見て出す（速度を切り替えてもずれないように）
   private intro(tl: Timeline, gen: number): void {
     const p = this.parts!
     const I = this.introMs
     const ok = () => gen === this.gen && this.phase === 'intro'
+    this.reveal(p.floor, 0)
+    this.reveal(p.panel, 0)
+    this.reveal(p.hud, 0)
+    if (this.briefed) {
+      // 説明の画面から: 下の欄が「撃退 0 匹」に切り替わる（見本は、最初の 1 匹を叩くまで残す）
+      this.el.classList.remove('is-alarm')
+      const row = p.panel.querySelector('.fxq-row')
+      if (row) void play(row, [{ opacity: 0 }, { opacity: 1 }], 260, tl)
+      return
+    }
+    // 説明なしで始まった: 警報とボスの登場を、カウントダウンの間に詰めて見せる
     this.cue(() => sfx.questAlarm())
     this.el.classList.add('is-alarm') // 縁の光がゆっくり脈打つ
     void play(p.shade, [{ opacity: 0 }, { opacity: 1 }], 280, tl, { fill: 'forwards' })
     void play(p.edge, [{ opacity: 0 }, { opacity: 1 }], 420, tl, { fill: 'forwards' })
-    const alarm = `<div class="fxq-ban is-alarm"><i class="fxq-tape"></i><div class="fxq-ban-body">
-      <svg class="fxq-warn" viewBox="0 0 64 56" aria-hidden="true"><path d="M32 5 L60 51 L4 51 Z" fill="#ffc21a" stroke="#1a1405" stroke-width="4" stroke-linejoin="round"/><rect x="29" y="18" width="6" height="19" rx="3" fill="#1a1405"/><circle cx="32" cy="44" r="3.6" fill="#1a1405"/></svg>
-      <div class="fxq-ban-main">${txt('緊急クエスト発生！')}</div><div class="fxq-ban-sub">${txt('モグラ撃退')}</div>
-    </div><i class="fxq-tape"></i></div>`
-    if (I < 1200) {
-      // 警報が短いときは、文字だけ見せてすぐ始める
-      void this.showBanner(alarm, Math.max(100, I - 560))
-      this.setMission('intro')
-      this.reveal(p.floor, 0)
-      this.reveal(p.panel, 0)
-      this.reveal(p.hud, 0)
+    this.setMission('intro')
+    const pre = I - 3 * this.step() // 「3」が出るまで
+    if (pre >= 500) void this.showBanner(ALARM_HTML, pre - 500)
+    if (I < 2000) {
+      // 短いときは、ボスの影と照準だけ出す
       if (this.boss) this.arm(0)
       return
     }
-    void this.showBanner(alarm, I * 0.4 - 500)
-    tl.at(I * 0.3, () => {
+    tl.at(I * 0.08, () => {
       if (!ok()) return
-      this.setMission('intro')
-      this.reveal(p.floor, 0)
-      this.reveal(p.panel, 26)
-    })
-    // ボスが出てきて、狙うマスに潜る（狙われていない人には、モグラの群れがちらっと顔を出す）
-    tl.at(I * 0.36, () => {
-      if (!ok()) return
-      if (this.boss) this.bossIntro(tl, I * 0.4)
+      if (this.boss) this.bossIntro(tl, I * 0.45)
       else this.teaser(I * 0.3)
     })
-    tl.at(I * 0.78, () => ok() && this.reveal(p.hud, -24))
-    tl.at(I * 0.84, () => ok() && void this.showBanner(`<div class="fxq-ban is-ready">${txt('よーい…')}<div class="fxq-ban-note">出てきたモグラを 指でタップ！</div></div>`, -1))
+  }
+
+  // カウントダウンの 1 つの長さ（introMs が 3600 なら 1 秒。始まりの 0.6 つ分は「3」の前の間）
+  private step(): number {
+    return this.introMs / 3.6
+  }
+
+  // 「3・2・1」を真ん中に出す（1 秒に 1 回。下に「出てきたモグラを 指でタップ！」を添える）。短すぎるときは出さない
+  private countdown(t: number): void {
+    const p = this.parts
+    const step = this.step()
+    const left = this.introMs - t
+    if (!p || step < 300 || left <= 0 || left > step * 3) return
+    const n = Math.ceil(left / step)
+    if (n === this.countShown) return
+    this.countShown = n
+    this.cue(() => sfx.questTick(n))
+    let num = p.banner.querySelector<HTMLElement>('.fxq-cd-num')
+    if (!num) {
+      ++this.bannerGen // 前の文字の片付けが、この数字を消さないように
+      p.banner.innerHTML = '<div class="fxq-ban is-count"><div class="fxq-cd-num"></div><div class="fxq-ban-note">出てきたモグラを 指でタップ！</div></div>'
+      num = p.banner.querySelector<HTMLElement>('.fxq-cd-num')!
+    }
+    num.innerHTML = txt(String(n))
+    this.anim(
+      num,
+      this.still
+        ? [{ opacity: 0.3 }, { opacity: 1 }]
+        : [
+            { transform: 'scale(1.6)', opacity: 0 },
+            { transform: 'scale(0.94)', opacity: 1, offset: 0.55 },
+            { transform: 'scale(1)', opacity: 1 },
+          ],
+      340,
+      { min: 180, easing: 'cubic-bezier(.2,.9,.3,1)' },
+    )
   }
 
   // ボスが狙うマスから出てきて、ひと言いってから潜る（until は潜り始めるまでの演出上の ms）。潜ったあとは影・ひび・照準が残る。
@@ -623,7 +737,7 @@ export class MoleQuest {
     })
     tl.at(Math.max(until, burst + 300), () => {
       void this.bossDive(tl, 240).then(() => {
-        if (gen === this.gen && (this.phase === 'intro' || this.phase === 'play')) this.arm(320)
+        if (gen === this.gen && (this.phase === 'brief' || this.phase === 'intro' || this.phase === 'play')) this.arm(320)
       })
     })
   }
@@ -653,17 +767,22 @@ export class MoleQuest {
     }
     list.forEach((h, j) =>
       this.tl.at(j * 70, () => {
-        if (this.phase !== 'intro' || h.state !== 'idle') return
+        if (!this.waiting() || h.state !== 'idle') return
         this.pitTo(h, true, 120)
         this.moleUp(h, 160)
         if (this.gate('pop', 70)) sfx.molePop()
         this.tl.at(stay, () => {
-          if (this.phase !== 'intro' || h.state !== 'idle') return
+          if (!this.waiting() || h.state !== 'idle') return
           this.moleDown(h, 160)
           this.tl.at(170, () => h.state === 'idle' && this.pitTo(h, false, 120))
         })
       }),
     )
+  }
+
+  // 叩く時間の前（説明の画面か、カウントダウン）
+  private waiting(): boolean {
+    return this.phase === 'brief' || this.phase === 'intro'
   }
 
   // ---- 叩く時間 ---------------------------------------------------------------
@@ -692,7 +811,7 @@ export class MoleQuest {
 
   // 叩く時間の終わり。叩いた数で play を解決し、タップを下へ通す
   private finish(): void {
-    if (this.phase !== 'intro' && this.phase !== 'play') return
+    if (this.phase !== 'brief' && this.phase !== 'intro' && this.phase !== 'play') return
     const real = performance.now()
     this.phase = 'over'
     this.el.dataset.phase = 'over'
@@ -839,13 +958,14 @@ export class MoleQuest {
   // ---- タップ -----------------------------------------------------------------
 
   private readonly onDown = (e: PointerEvent): void => {
-    if (this.phase !== 'intro' && this.phase !== 'play') return
+    if (this.phase !== 'brief' && this.phase !== 'intro' && this.phase !== 'play') return
     // 長押しのメニューや文字の選択を出さない（伝播は止めない。音のロック解除は document の pointerdown で受けている）
     if (e.cancelable) e.preventDefault()
     if (e.button > 0) return // 右クリックなどは数えない
     const pt = this.local(e)
     this.pump() // 押した瞬間の状態にそろえる（時間切れなら、ここで終わる）
-    if (this.phase === 'intro') {
+    if (this.phase === 'brief' || this.phase === 'intro') {
+      // 説明とカウントダウンの間のタップは数えない（押した跡だけ見せる）
       if (this.gate('early', 300)) ring(this.parts!.fx, pt.x, pt.y, 40, 'rgba(255,255,255,0.5)', this.tl, 320)
       return
     }
@@ -1535,6 +1655,8 @@ export class MoleQuest {
     this.tapped = false
     this.nudgeAt = 0
     this.nudges = 0
+    this.briefed = false
+    this.countShown = 0
     this.gates.clear()
     done?.(score)
   }

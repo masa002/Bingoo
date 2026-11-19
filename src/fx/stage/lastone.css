@@ -761,6 +761,284 @@
   }
 }
 
+/* ---- 説明の画面（ガラポンが始まる前。司会の「スタート」まで出しておく） ----
+   見出しと抽選器はガラポンの画面と同じ位置にあり、ガラポンが始まると、この画面だけが上ですっと消える。
+   会場の後ろの席からも読めるよう、文字は大きく。長く待つこともあるので、動くのは「まもなくスタート」の 3 つの点と、
+   ゆっくり回る光の筋だけ（どちらも速度によらず一定） */
+
+.fxls-brief {
+  z-index: 45;
+}
+
+/* 説明の画面から続けて始まったガラポン: 見出しはもう見えているので、出し直さない */
+.fxls-still .fxls-kicker.on,
+.fxls-still .fxls-title.on {
+  animation: none;
+}
+
+/* 上から順に、そっと 1 回だけ出す */
+.fxls-bf-in {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity calc(500ms * var(--k)) ease-out,
+    transform calc(500ms * var(--k)) ease-out;
+}
+
+.fxls-bf-in.on {
+  opacity: 1;
+  transform: none;
+}
+
+/* 抽選器の下: まだ始まっていないことを伝える */
+.fxls-bf-soon {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 34px 12px 28px;
+  border-radius: 999px;
+  font-size: 44px;
+  font-weight: 900;
+  white-space: nowrap;
+  color: #fff4e0;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 3px rgba(255, 226, 184, 0.5);
+}
+
+.fxls-bf-soon span {
+  margin-left: 10px;
+}
+
+.fxls-bf-soon i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ffe2b8;
+  opacity: 0.3;
+  animation: fxls-bf-dot 1.8s ease-in-out infinite;
+}
+
+.fxls-bf-soon i:nth-child(2) {
+  animation-delay: 0.3s;
+}
+
+.fxls-bf-soon i:nth-child(3) {
+  animation-delay: 0.6s;
+}
+
+@keyframes fxls-bf-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+
+.fxls-bf-when {
+  min-height: 48px;
+  margin-top: 14px;
+  font-size: 32px;
+  font-weight: 800;
+  color: #c9cfe6;
+}
+
+.fxls-bf-when b {
+  margin: 0 8px;
+  font-size: 46px;
+  font-weight: 900;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 自動で始まるときの、残り時間の帯（右から左へ縮む） */
+.fxls-bf-bar {
+  height: 10px;
+  margin: 10px 110px 0;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.fxls-bf-bar b {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, #b8722f, #f0a64e, #ffd98a);
+}
+
+/* 右: 争奪する人の名前と、これからすること */
+.fxls-bf-main {
+  position: absolute;
+  left: 620px;
+  top: 290px;
+  width: 1240px;
+  height: 756px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.fxls-bf-names {
+  flex: none;
+  padding: 16px 26px 20px;
+  border: 3px solid rgba(245, 197, 66, 0.35);
+  border-radius: 26px;
+  background: linear-gradient(180deg, rgba(28, 37, 84, 0.92), rgba(13, 19, 49, 0.92));
+}
+
+.fxls-bf-names h3 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #c9d2ff;
+}
+
+.fxls-bf-names h3 b {
+  margin: 0 6px 0 18px;
+  font-size: 40px;
+  font-weight: 900;
+  letter-spacing: 0;
+  color: #ffe08a;
+}
+
+.fxls-bf-names ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 14px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fxls-bf-names li {
+  display: flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 6px 24px;
+  overflow: hidden;
+  border-radius: 999px;
+  font-size: 38px;
+  font-weight: 800;
+  line-height: 1.3;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.16);
+}
+
+.fxls-bf-names li.me {
+  padding-left: 10px;
+  background: rgba(90, 210, 255, 0.14);
+  box-shadow: inset 0 0 0 3px #5ad2ff;
+}
+
+.fxls-bf-names li i {
+  flex: none;
+  margin-right: 14px;
+  padding: 2px 14px;
+  border-radius: 999px;
+  font-size: 24px;
+  font-style: normal;
+  font-weight: 900;
+  color: #04121f;
+  background: #5ad2ff;
+}
+
+.fxls-bf-names li.more {
+  color: #c9d2ff;
+  background: none;
+  box-shadow: inset 0 0 0 2px rgba(201, 210, 255, 0.4);
+}
+
+.fxls-bf-steps {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fxls-bf-steps li {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  min-height: 0;
+  padding: 0 30px 0 24px;
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.1);
+}
+
+.fxls-bf-steps li > i {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  font-size: 44px;
+  font-style: normal;
+  font-weight: 900;
+  color: #2a1a00;
+  background: linear-gradient(180deg, #fff4cc, #f5c542);
+  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.35);
+}
+
+.fxls-bf-steps b {
+  display: block;
+  font-size: 46px;
+  font-weight: 900;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.fxls-bf-steps em {
+  margin: 0 4px;
+  font-style: normal;
+  color: #ffe08a;
+}
+
+.fxls-bf-steps b > span {
+  margin-left: 10px;
+}
+
+.fxls-bf-steps .fxg-ball {
+  --d: 50px;
+  margin-right: 6px;
+  vertical-align: -9px;
+}
+
+.fxls-bf-steps small {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: 32px;
+  font-weight: 800;
+  white-space: nowrap;
+  color: #c9d6ff;
+}
+
+.fxls-bf-steps .fxls-token {
+  width: 40px;
+  height: 40px;
+  font-size: 22px;
+}
+
+.fxls-bf-steps .fxls-token:first-of-type {
+  margin-left: 10px;
+}
+
 /* 動きを減らす設定: 動きを止めて、色と文字だけで伝える（暗転だけは、急に暗くならないようになめらかに変える） */
 .fxls-rm *:not(.fxls-dim),
 .fxls-rm *::before,

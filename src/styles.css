@@ -797,6 +797,12 @@ input {
   color: #6b7299;
 }
 
+/* 説明の画面を出している間は、「次へ」が「スタート」になる（押すものが変わったと分かるように色を変える） */
+.hc-next.start {
+  background: linear-gradient(135deg, #f5c542, #ff8a3d);
+  color: #1a1400;
+}
+
 .hc-push.ready {
   background: #fff;
   color: #d4142e;

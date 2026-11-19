@@ -1,5 +1,5 @@
 import { registerGallery, type GalleryItem } from '../gallery'
-import { playLastOneGarapon, type LastOneStageOptions } from './lastone'
+import { openLastOneBrief, playLastOneGarapon, type LastOneStageOptions } from './lastone'
 
 // ラストワン争奪のガラポン（大画面）のギャラリー。後ろに大画面の配置を薄く描いて、重ねたときの見え方も確かめる。
 // 呼び出し側の予定（玉 6.5 秒・全体 11 秒）を基本にする（スマホのギャラリーと同じ時刻で 3・2・1 と発表が来る）
@@ -46,7 +46,25 @@ const item = (id: string, label: string, prizes: number, list: LastOneStageOptio
   play: (host, tl) => playLastOneGarapon(backdrop(host), { speed: tl.speed, prizes, entrants: list, ...time }),
 })
 
+// 説明の画面を wait ms 出してから閉じて、ガラポンへ進む（本番では、司会の「スタート」で閉じる）
+const flow = (id: string, label: string, wait: number, autoMs: number | null, prizes: number, list: LastOneStageOptions['entrants']): GalleryItem => ({
+  id: `lastone-stage-${id}`,
+  group: G,
+  label,
+  screen: 'stage',
+  play: async (host, tl) => {
+    const brief = openLastOneBrief(backdrop(host), { speed: tl.speed, prizes, entrants: list, autoMs })
+    await tl.wait(wait)
+    brief.close()
+    if (tl.cancelled) return
+    await playLastOneGarapon(host, { speed: tl.speed, prizes, entrants: list, dropAt: 6500, durationMs: 11000 })
+  },
+})
+
 registerGallery(
+  flow('brief', '説明（6 秒。司会の合図を待つ）→ ガラポン（7 人で 2 個・自分が当たり）', 6000, null, 2, entrants(7, 2, [2, 5])),
+  flow('brief-auto', '説明（自動で 8 秒後に開始）→ ガラポン（3 人で 1 個）', 8000, 8000, 1, entrants(3, -1, [1])),
+  flow('brief-many', '説明（多人数 27 人で 3 個。9 人と「ほか○人」）→ ガラポン', 6000, null, 3, entrants(27, 20, [4, 13, 22])),
   item('few', '少人数（3 人で 1 個）', 1, entrants(3, -1, [1])),
   item('me-win', '自分が当たり（7 人で 2 個）', 2, entrants(7, 2, [2, 5])),
   item('me-lose', '自分が外れ（7 人で 2 個）', 2, entrants(7, 3, [0, 5])),

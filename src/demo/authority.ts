@@ -37,9 +37,12 @@ export type EventKind = 'wild' | 'mole' | 'moleMe'
 
 // ペースの調整役のモグラ（緊急クエスト）は、1 ゲームにこの回数まで
 const MAX_MOLES = 5
-// 緊急クエスト「モグラ撃退」の時間割（ms）。警報 → 叩く時間 → 結果（スマホの結果は、やられた人で約 6.3 秒かかる）。
+// 参加者の操作が要るイベントの前に出す、説明の画面。司会が説明し終えて「スタート」を押すまで待つ
+// （いきなり始めると、何をすればいいか分からないうちに終わってしまう）。自動進行のときは auto で進み、押し忘れても max で進む
+const BRIEF = { auto: 10000, max: 60000 } // 説明が出そろうまで約 3 秒かかるので、読む時間を 7 秒ほど残す
+// 緊急クエスト「モグラ撃退」の時間割（ms）。説明 → 3・2・1（intro）→ 叩く時間 → 結果（スマホの結果は、やられた人で約 6.3 秒かかる）。
 // maxScore は 1 人が叩ける数の上限（10 秒で出るモグラは約 31 匹。届いた数はこの範囲に丸める）
-const QUEST = { intro: 2600, play: 10000, grace: 800, result: 7000, maxScore: 40 }
+const QUEST = { intro: 3600, play: 10000, grace: 800, result: 7000, maxScore: 40 }
 // ラストワン争奪のガラポン。dropAt で全員のスマホの玉が出て、大画面が当たりを発表する
 const LAST_ONE = { dropAt: 6500, durationMs: 11000 }
 
@@ -80,6 +83,7 @@ export class DemoAuthority {
   private questScore: ((score: number) => void) | null = null
   private pendingEvent: EventKind | null = null
   private pushNow: (() => void) | null = null
+  private gate: (() => void) | null = null // 説明の画面で、司会の「スタート」を待っている
   private choiceNow: ((kind: 'receive' | 'challenge') => void) | null = null
   private entryClose: (() => void) | null = null
 
@@ -111,6 +115,7 @@ export class DemoAuthority {
     this.forcedKind = 'any'
     this.pendingEvent = null
     this.pushNow = null
+    this.gate = null
     this.choiceNow = null
     this.entryClose = null
     this.lastEventAt = -10
@@ -158,9 +163,23 @@ export class DemoAuthority {
     this.pushNow?.()
   }
 
+  // 説明の画面を出していて、司会の「スタート」を待っている
+  get holding(): boolean {
+    return this.gate !== null
+  }
+
+  private async hold(): Promise<void> {
+    const pressed = new Promise<void>((r) => (this.gate = r))
+    this.onChange()
+    await Promise.race([pressed, this.clock.wait(this.auto ? BRIEF.auto : BRIEF.max)])
+    this.gate = null
+    this.onChange()
+  }
+
   // 主催の「次へ」。ゲーム中は抽選（またはイベント）、終わったらダブルチャンスへ進む
   async next(): Promise<void> {
     if (!this.game) return
+    if (this.gate) return this.gate() // 説明の画面からの「スタート」
     if (this.phase === 'dc-entry') return this.entryClose?.()
     if (this.busy || this.phase === 'dc-spin' || this.phase === 'done') return
     if (this.phase === 'over') return this.doubleChance()
@@ -260,6 +279,18 @@ export class DemoAuthority {
     }
     // 本番では、リーチでない人に見せるマスは、各自のスマホが自分のカードから選べばよい
     const mine0 = aim.has(0) ? { cell: aim.get(0)!, label: labelOf(g.me.cells[aim.get(0)!]) } : this.bluffCell()
+    // 先に説明の画面を出して、司会の「スタート」を待つ
+    this.hub.publish({
+      type: 'questBrief',
+      kind: 'mole',
+      playMs: QUEST.play,
+      targets: aim.size,
+      players: g.size,
+      autoMs: this.auto ? BRIEF.auto : null,
+      me: { target: true, cell: mine0.cell, label: mine0.label },
+    })
+    await this.hold()
+    if (gen !== this.generation) return
     this.hub.publish({
       type: 'questStart',
       kind: 'mole',
@@ -490,7 +521,20 @@ export class DemoAuthority {
     // チャレンジ成功の人はラストワン争奪の演出中に選び終えることもあるので、配る前から受け取れるようにしておく
     const mine = entries.find((e) => e.isMe)
     const choice = mine?.rarity ? new Promise<'receive' | 'challenge'>((r) => (this.choiceNow = r)) : null
-    // ラストワン争奪は、同じ回に上がった人がそれぞれスマホでガラポンを回す（結果はくじで、上の並びで決まっている）
+    // ラストワン争奪は、同じ回に上がった人がそれぞれスマホでガラポンを回す（結果はくじで、上の並びで決まっている）。
+    // 先に説明の画面を出して、司会の「スタート」を待つ
+    if (lastOne) {
+      const pool = entries.filter((e) => e.kind === 'normal')
+      this.hub.publish({
+        type: 'lastOneBrief',
+        prizes: pool.filter((e) => e.rarity).length,
+        entrants: pool.map((e) => ({ name: e.name, isMe: e.isMe })),
+        meIn: pool.some((e) => e.isMe),
+        autoMs: this.auto ? BRIEF.auto : null,
+      })
+      await this.hold()
+      if (gen !== this.generation) return
+    }
     this.hub.publish({ type: 'prizeTime', entries, lastOne: lastOne ? LAST_ONE : null, final })
     if (lastOne) {
       await this.clock.wait(LAST_ONE.durationMs)

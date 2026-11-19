@@ -97,7 +97,7 @@ export class HostView {
     this.$('.hc-push').addEventListener('click', () => this.push())
     this.$<HTMLInputElement>('.hc-auto').addEventListener('change', (e) => {
       this.auth.auto = (e.target as HTMLInputElement).checked
-      if (this.auth.auto && !this.auth.busy && this.auth.phase !== 'over') this.next()
+      if (this.auth.auto && (this.auth.holding || (!this.auth.busy && this.auth.phase !== 'over'))) this.next()
     })
     this.$<HTMLInputElement>('.hc-sound').addEventListener('change', (e) => {
       engine.enabled = (e.target as HTMLInputElement).checked
@@ -183,6 +183,12 @@ export class HostView {
       case 'eventPlay':
         this.status('🌈 全員確定（虹玉）！')
         break
+      case 'questBrief':
+        this.status(`緊急クエスト「モグラ撃退」の説明中 — 説明が終わったら「スタート」（${m.autoMs ? `自動進行: ${m.autoMs / 1000} 秒で開始` : '押さなくても 60 秒で開始'}）`)
+        break
+      case 'lastOneBrief':
+        this.status(`ラストワン争奪の説明中 — 景品 ${m.prizes} 個を ${m.entrants.length} 人で。説明が終わったら「スタート」（${m.autoMs ? `自動進行: ${m.autoMs / 1000} 秒で開始` : '押さなくても 60 秒で開始'}）`)
+        break
       case 'questStart':
         this.status(`緊急クエスト「モグラ撃退」— 全員がスマホで叩く。大ピンチのリーチ ${m.targets.toLocaleString('ja-JP')} 人`)
         break
@@ -245,8 +251,11 @@ export class HostView {
     const busy = auth.busy
     const phase = auth.phase
     const next = this.$<HTMLButtonElement>('.hc-next')
-    next.textContent = phase === 'over' ? 'ダブルチャンスへ ▶' : phase === 'dc-entry' ? 'エントリー締め切り ▶' : '次へ ▶'
-    next.disabled = (busy && phase !== 'dc-entry') || phase === 'dc-spin' || phase === 'done'
+    // 説明の画面を出している間は、同じボタンが「スタート」になる
+    const holding = auth.holding
+    next.textContent = holding ? 'スタート ▶' : phase === 'over' ? 'ダブルチャンスへ ▶' : phase === 'dc-entry' ? 'エントリー締め切り ▶' : '次へ ▶'
+    next.disabled = !holding && ((busy && phase !== 'dc-entry') || phase === 'dc-spin' || phase === 'done')
+    next.classList.toggle('start', holding)
     this.$<HTMLButtonElement>('.hc-push').disabled = !this.pushReady
     this.$('.hc-push').classList.toggle('ready', this.pushReady)
     const playing = phase === 'reception' || phase === 'playing'

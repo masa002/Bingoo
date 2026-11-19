@@ -6,7 +6,7 @@ import type { Clock } from '../demo/clock'
 import { playBingo, playReach, playWildResult, type AoriOutcome } from '../fx/phone/aori'
 import { CardView } from '../fx/phone/card'
 import { askEntry, playGarapon } from '../fx/phone/garapon'
-import { playLastOneGarapon } from '../fx/phone/lastone'
+import { openLastOneBrief, playLastOneGarapon } from '../fx/phone/lastone'
 import { askChoice, playChallengeResult, playChallengeStart, playPackOpen } from '../fx/phone/prize'
 import { MoleQuest } from '../fx/phone/quest'
 import { HandSpin } from '../fx/phone/spin'
@@ -69,6 +69,8 @@ export class PhoneView {
   private generation = 0
   private drawNo = 0 // いまの抽選
   private celebration: Promise<void> = Promise.resolve() // 当たりの演出が終わるまで（景品パックはその後に出す）
+  private lastOneBrief: { close(): void } | null = null
+  private lastOneOn = false // ラストワン争奪の説明の画面を出してよい間（ガラポンが始まったら出さない）
 
   constructor(
     host: HTMLElement,
@@ -117,9 +119,18 @@ export class PhoneView {
       case 'numberRevealed':
         void this.onRevealed(m)
         return
+      case 'questBrief':
+        if (!this.joined) this.join(false)
+        this.syncSpeed()
+        // モグラは、いま見えているカード（上位チャレンジ中は 3×3）のマスから顔を出す
+        this.quest.brief(this.challenge?.view ?? this.card, { playMs: m.playMs, target: m.me.target, cell: m.me.cell, label: m.me.label, autoMs: m.autoMs })
+        return
       case 'questStart':
         if (!this.joined) this.join(false)
         void this.onQuestStart(m)
+        return
+      case 'lastOneBrief':
+        void this.onLastOneBrief(m)
         return
       case 'questResult':
         void this.onQuestResult(m)
@@ -127,6 +138,7 @@ export class PhoneView {
       case 'bulkDrawn':
         return this.onBulk(m.numbers)
       case 'prizeTime': {
+        this.closeLastOneBrief()
         const mine = m.entries.find((e) => e.isMe)
         if (mine) void this.onMyPrize(mine, m.lastOne ? { ...m.lastOne, entries: m.entries } : null)
         return
@@ -164,6 +176,7 @@ export class PhoneView {
     this.generation++
     this.spin.cancel()
     this.quest.cancel()
+    this.closeLastOneBrief()
     this.drawNo = 0
     this.celebration = Promise.resolve()
     // 前のゲームで残った景品・ガラポンの画面を片付ける
@@ -406,6 +419,27 @@ export class PhoneView {
     this.renderHistory()
     this.$('.ph-latest b').textContent = labelOf(numbers[numbers.length - 1])
     this.toast(`早送り: ${numbers.length} 個（あなたのカードに ${mine} 個）`)
+  }
+
+  // ---- ラストワン争奪の説明 ---------------------------------------------------
+
+  // 争奪に入る人には、ビンゴの演出が終わってから説明の画面を出す。入らない人には、ひと言だけ知らせる
+  private async onLastOneBrief(m: MsgOf<'lastOneBrief'>): Promise<void> {
+    if (!m.meIn) {
+      this.toast(`景品が足りないので、同時に上がった ${fmt(m.entrants.length)} 人がガラポンで争います`)
+      return
+    }
+    const gen = this.generation
+    this.lastOneOn = true
+    await this.celebration
+    if (gen !== this.generation || !this.lastOneOn) return
+    this.lastOneBrief = openLastOneBrief(this.root, { speed: this.speed, prizes: m.prizes, contestants: m.entrants.length, autoMs: m.autoMs })
+  }
+
+  private closeLastOneBrief(): void {
+    this.lastOneOn = false
+    this.lastOneBrief?.close()
+    this.lastOneBrief = null
   }
 
   // ---- 景品と上位チャレンジ -------------------------------------------------

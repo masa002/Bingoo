@@ -8,6 +8,7 @@ import { MoleQuest, type MoleQuestResult } from './quest'
 // 見ている人が画面をタップしたら、自動の叩き手は止まり、そこからは自分で遊べる。
 // 「初めての人」だけは自動の叩き手を付けず、誰も押さないときの遊び方の案内（見本・タップの印・促し）を見る。
 // 大画面がないので、音は警報・合図も含めてすべて鳴らす（sound: 'all'）。
+// 始めの 2 つは本番と同じ流れ（説明の画面 brief で待ってから play）。ほかは説明なしで play を呼ぶ（カウントダウンの間に警報とボスを見せる）。
 // 結果のあとは、組み込み側の呼び方の見本として、埋められたマスとリーチの札を描き直す
 
 const G = 'スマホ: 緊急クエスト（自動で叩く。タップで交代）'
@@ -38,9 +39,35 @@ interface Spec {
   lost: boolean
   need: number
   skill: Skill | null // null は自動の叩き手なし（誰も押さないと、遊び方の案内がどう出るかを見る）
+  briefMs?: number // 先に説明の画面（brief）を出して、この時間だけ待ってから始める
+  auto?: boolean // 説明の画面で、自動で始まるまでの帯を出す（なければ「司会の合図を待っています」）
 }
 
 const SPECS: Spec[] = [
+  {
+    // 本番の流れ: 説明の画面で待つ（ここでは 6 秒）→「3・2・1」→ 叩く時間 → 結果
+    id: 'brief',
+    label: '説明の画面で待つ（司会の合図待ち・6 秒）→ 3・2・1 → 叩く',
+    mask: DIAG4,
+    waiting: [24],
+    cell: 18,
+    lost: false,
+    need: 0,
+    skill: KEEN,
+    briefMs: 6000,
+  },
+  {
+    id: 'brief-auto',
+    label: '説明の画面（自動で始まる帯・5 秒／狙われていない）→ 3・2・1 → 叩く',
+    mask: bits(1, 12, 19),
+    waiting: [],
+    cell: null,
+    lost: false,
+    need: 0,
+    skill: MID,
+    briefMs: 5000,
+    auto: true,
+  },
   {
     id: 'lost',
     label: '狙われて、やられる（あと 4 匹で守れた）',
@@ -219,8 +246,13 @@ function item(spec: Spec): GalleryItem {
       watch(host, tl, q, m.card)
       if (!(await hold(tl, 500))) return
       const cell = spec.cell
+      if (spec.briefMs) {
+        // 説明の画面。司会が「スタート」を押すまで（ここでは決めた時間だけ）待つ
+        q.brief(m.card, { playMs: 10000, target: cell !== null, cell, label: cell === null ? '' : label(CARD5[cell]), autoMs: spec.auto ? spec.briefMs : null })
+        if (!(await hold(tl, spec.briefMs))) return
+      }
       const playing = q.play(m.card, {
-        introMs: 2600,
+        introMs: 3600,
         playMs: 10000,
         target: cell !== null,
         cell,

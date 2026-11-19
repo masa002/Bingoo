@@ -4,7 +4,8 @@
    速度を上げても安全な長さにとどめてある（quest.ts で決める）。
    警報の赤は点滅させない: 赤は動かない背景・縁取り・ふちにだけ使い、脈打つ光は琥珀色にする。
    縞（警告の帯）は動かさず、面積は画面の 1/3 よりずっと小さくしてある。
-   場面は data-phase（alarm / play / end / result）で切り替える。
+   場面は data-phase（alarm / brief / count / play / end / result）で切り替える。
+   説明の画面（brief）は読む時間なので、流れる文字・探照灯・矢印の光を止め、ゆっくりした動きだけを残す。
    入場のアニメーションは fill-mode を backwards にして、終わった後の見た目はクラスの値で持つ */
 
 .fxqs {
@@ -16,6 +17,7 @@
   --plus: 1000ms;
   --punch: 380ms;
   --dots: 1200ms;
+  --calm: 2400ms;
   --out: 500ms;
   --amber: #ffc53d;
   position: absolute;
@@ -55,7 +57,7 @@
 }
 
 /* 動きを減らす設定: 動きを止めて、色と文字だけで伝える（暗転と赤い縁だけは、急に変わらないようになめらかに） */
-.fxqs-rm *:not(.fxqs-dim):not(.fxqs-vig),
+.fxqs-rm *:not(.fxqs-dim):not(.fxqs-vig):not(.fxqs-hold-bar b),
 .fxqs-rm *::before,
 .fxqs-rm *::after {
   animation: none !important;
@@ -77,6 +79,8 @@
 }
 
 .fxqs[data-phase='alarm'] .fxqs-dim,
+.fxqs[data-phase='brief'] .fxqs-dim,
+.fxqs[data-phase='count'] .fxqs-dim,
 .fxqs[data-phase='play'] .fxqs-dim,
 .fxqs[data-phase='end'] .fxqs-dim {
   opacity: 0.8;
@@ -99,6 +103,14 @@
 
 .fxqs[data-phase='alarm'] .fxqs-vig {
   opacity: 1;
+}
+
+.fxqs[data-phase='brief'] .fxqs-vig {
+  opacity: 0.4;
+}
+
+.fxqs[data-phase='count'] .fxqs-vig {
+  opacity: 0.7;
 }
 
 .fxqs[data-phase='play'] .fxqs-vig {
@@ -258,6 +270,7 @@
   opacity: 0.25;
 }
 
+.fxqs[data-phase='brief'] .fxqs-beam.on,
 .fxqs[data-phase='result'] .fxqs-beam.on {
   opacity: 0;
 }
@@ -307,7 +320,7 @@
     opacity calc(var(--u) * 0.25) ease;
 }
 
-.fxqs:not([data-phase='alarm']) .fxqs-banner.on {
+.fxqs:not([data-phase='alarm']):not([data-phase='brief']) .fxqs-banner.on {
   opacity: 0;
 }
 
@@ -490,51 +503,7 @@
   }
 }
 
-/* 叩き始めまでのバー */
-.fxqs-ready {
-  position: absolute;
-  left: 50%;
-  bottom: 22px;
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  transform: translateX(-50%);
-  font-size: 30px;
-  font-weight: 900;
-  letter-spacing: 0.3em;
-  color: #ffe9b0;
-  opacity: 0;
-  transition: opacity calc(var(--u) * 0.2) ease;
-}
-
-.fxqs-ready.on {
-  opacity: 1;
-}
-
-.fxqs-ready i {
-  display: block;
-  width: 520px;
-  height: 14px;
-  overflow: hidden;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.16);
-}
-
-.fxqs-ready b {
-  display: block;
-  width: 0;
-  height: 100%;
-  border-radius: 7px;
-  background: linear-gradient(90deg, #ff9f1a, #ffe08a);
-  transition-property: width;
-  transition-timing-function: linear;
-}
-
-.fxqs-ready.on b {
-  width: 100%;
-}
-
-/* ==== 「モグラ襲来！」（左）と「リーチを守れ！」（右） ===================================== */
+/* ==== 「モグラ襲来！」（警報）と、説明の画面 ===================================== */
 
 .fxqs-raid {
   position: absolute;
@@ -596,16 +565,17 @@
   }
 }
 
+/* 説明の画面の左の列（「カードを守れ！」と、大ピンチのリーチの人数） */
 .fxqs-brief {
   position: absolute;
-  left: 1210px;
-  top: 400px;
-  width: 660px;
+  left: 36px;
+  top: 326px;
+  width: 630px;
   display: flex;
   flex-direction: column;
   align-items: center;
   opacity: 0;
-  transform: translateX(80px);
+  transform: translateX(-80px);
   transition:
     opacity calc(var(--u) * 0.25) ease,
     transform calc(var(--u) * 0.32) cubic-bezier(0.2, 1.2, 0.4, 1);
@@ -616,7 +586,7 @@
   transform: none;
 }
 
-.fxqs:not([data-phase='alarm']) .fxqs-brief.on {
+.fxqs:not([data-phase='brief']) .fxqs-brief.on {
   opacity: 0;
 }
 
@@ -628,7 +598,7 @@
 
 .fxqs-brief-b {
   margin-top: 4px;
-  font-size: 90px;
+  font-size: 84px;
   line-height: 1.14;
   white-space: nowrap;
   color: var(--amber);
@@ -1374,7 +1344,7 @@
   }
 }
 
-/* ==== 残り 3・2・1（消さずに数字だけを替える）・「終了！」・「叩け！！」 ======================== */
+/* ==== 残り 3・2・1（消さずに数字だけを替える）・「終了！」・「スタート！」 ======================== */
 
 .fxqs-cd {
   position: absolute;
@@ -1558,10 +1528,10 @@
 
 .fxqs-go small {
   display: block;
-  padding-left: 0.5em;
-  font-size: 56px;
+  padding-left: 0.12em;
+  font-size: 64px;
   font-weight: 900;
-  letter-spacing: 0.5em;
+  letter-spacing: 0.12em;
   color: var(--amber);
   text-shadow: 0 0 20px rgba(255, 170, 40, 0.7);
 }
@@ -2088,4 +2058,258 @@
 .fxqs-king-me.on {
   opacity: 1;
   transform: translateX(-50%);
+}
+
+/* ==== 説明の画面（brief。司会が説明する間、ずっと出しておく） ================================= */
+
+/* 見出しは少し小さくして上へ（手順とのあいだを空ける） */
+.fxqs[data-phase='brief'] .fxqs-banner.on.up {
+  transform: translateY(-284px) scale(0.52);
+}
+
+/* 読む時間なので、流れる文字と矢印の光は止める */
+.fxqs[data-phase='brief'] .fxqs-marq {
+  animation-play-state: paused;
+}
+
+.fxqs[data-phase='brief'] .fxqs-chev i {
+  animation: none;
+  opacity: 0.55;
+}
+
+/* ボスは左の列へ下がって、ゆっくり体をゆらすだけ */
+.fxqs[data-phase='brief'] .fxqs-boss.on {
+  transform: translate(-610px, 78px) scale(0.68);
+  transition: transform calc(var(--u) * 0.6) cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.fxqs[data-phase='brief'] .fxqs-boss.on .fxqs-boss-svg {
+  animation-duration: var(--calm);
+}
+
+.fxqs[data-phase='brief'] .fxqs-boss.on .fxqs-paw {
+  animation: none;
+}
+
+/* 手順 ①②③（会場の後ろからも読める大きさ） */
+.fxqs-steps {
+  position: absolute;
+  left: 690px;
+  top: 318px;
+  width: 1180px;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  list-style: none;
+}
+
+.fxqs-step {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  height: 172px;
+  padding: 0 32px 0 28px;
+  border-radius: 26px;
+  background: linear-gradient(180deg, rgba(30, 12, 24, 0.94), rgba(12, 10, 28, 0.94));
+  box-shadow:
+    inset 0 0 0 3px rgba(255, 197, 61, 0.55),
+    0 10px 30px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  transform: translateX(60px);
+  transition:
+    opacity calc(var(--u) * 0.25) ease,
+    transform calc(var(--u) * 0.35) cubic-bezier(0.2, 1.1, 0.4, 1);
+}
+
+.fxqs-step.on {
+  opacity: 1;
+  transform: none;
+}
+
+.fxqs:not([data-phase='brief']) .fxqs-step.on {
+  opacity: 0;
+}
+
+.fxqs-step > i {
+  flex: none;
+  width: 108px;
+  height: 108px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #ffe08a, #ffb02e);
+  color: #2a1205;
+  font-size: 74px;
+  font-style: normal;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.35);
+}
+
+.fxqs-step b {
+  display: block;
+  font-size: 62px;
+  font-weight: 900;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-shadow: 0 4px 0 rgba(0, 0, 0, 0.45);
+}
+
+.fxqs-step span {
+  display: block;
+  margin-top: 4px;
+  font-size: 36px;
+  font-weight: 800;
+  line-height: 1.25;
+  white-space: nowrap;
+  color: #d5dcff;
+}
+
+.fxqs-step em {
+  margin-left: 14px;
+  font-style: normal;
+  font-weight: 900;
+  color: var(--amber);
+}
+
+/* 「まもなくスタート」（司会の合図を待っている。自動で始まるときは、進むバーを添える） */
+.fxqs-hold {
+  position: absolute;
+  left: 690px;
+  top: 878px;
+  width: 1180px;
+  opacity: 0;
+  transition: opacity calc(var(--u) * 0.4) ease;
+}
+
+.fxqs-hold.on {
+  opacity: 1;
+}
+
+.fxqs:not([data-phase='brief']) .fxqs-hold.on {
+  opacity: 0;
+}
+
+.fxqs-hold-a {
+  display: inline-flex;
+  align-items: center;
+  font-size: 52px;
+  font-weight: 900;
+  line-height: 1.2;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  color: var(--amber);
+  text-shadow: 0 4px 0 rgba(0, 0, 0, 0.45);
+}
+
+.fxqs-hold-a i {
+  font-style: normal;
+  animation: fxqs-dot var(--dots) ease-in-out infinite;
+}
+
+.fxqs-hold-a i:nth-of-type(2) {
+  animation-delay: calc(var(--dots) * 0.2);
+}
+
+.fxqs-hold-a i:nth-of-type(3) {
+  animation-delay: calc(var(--dots) * 0.4);
+}
+
+.fxqs-hold-b {
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.3;
+  white-space: nowrap;
+  color: #d5dcff;
+}
+
+.fxqs-hold.auto .fxqs-hold-b .m {
+  display: none;
+}
+
+.fxqs-hold-bar {
+  display: none;
+  position: absolute;
+  left: 640px;
+  right: 0;
+  top: 24px;
+  height: 16px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.fxqs-hold.auto .fxqs-hold-bar {
+  display: block;
+}
+
+.fxqs-hold-bar b {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #ff9f1a, #ffe08a);
+  transition-property: width;
+  transition-timing-function: linear;
+}
+
+.fxqs-hold.on .fxqs-hold-bar b {
+  width: 100%;
+}
+
+/* ==== 叩き始めまでの「3・2・1」（count。消さずに数字だけを替える） ============================ */
+
+.fxqs-pre {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 196px;
+  text-align: center;
+  opacity: 0;
+  transition: opacity calc(var(--u) * 0.25) ease;
+}
+
+.fxqs-pre.on {
+  opacity: 1;
+}
+
+.fxqs:not([data-phase='count']) .fxqs-pre.on {
+  opacity: 0;
+  transition-duration: calc(var(--u) * 0.12);
+}
+
+.fxqs-pre small {
+  display: block;
+  font-size: 84px;
+  font-weight: 900;
+  line-height: 1.2;
+  text-shadow: 0 6px 0 rgba(0, 0, 0, 0.5);
+}
+
+.fxqs-pre .fxqs-ol {
+  font-size: 440px;
+  line-height: 1.02;
+  color: #ffd27a;
+  --olc: #2a1205;
+  --olw: 38px;
+  opacity: 0;
+}
+
+.fxqs-pre .fxqs-ol.on {
+  opacity: 1;
+}
+
+.fxqs-pre .fxqs-ol.punch {
+  animation: fxqs-punch var(--punch) cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+.fxqs-pre p {
+  font-size: 60px;
+  font-weight: 900;
+  line-height: 1.2;
+  color: var(--amber);
+  text-shadow: 0 5px 0 rgba(0, 0, 0, 0.5);
 }

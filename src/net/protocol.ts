@@ -107,12 +107,24 @@ export type Msg =
   | { type: 'choices'; challengers: { name: string; isMe: boolean }[]; totals: Totals }
   | { type: 'challengeDeal'; idx: number; cells: number[]; target: Rarity } // 本人宛て
   | { type: 'challengeEnd'; idx: number } // 決着しないままゲームが終わった（本人宛て）
+  // 参加者の操作が要るイベントは、いきなり始めない。先に説明の画面（何が起きるか・何をすればいいか）を出して、
+  // 司会の「スタート」を待つ。autoMs は、自動進行のときに説明を出しておく時間（手動のときは null）
+  | {
+      type: 'questBrief'
+      kind: 'mole'
+      playMs: number
+      targets: number
+      players: number
+      autoMs: number | null
+      me: { target: boolean; cell: number | null; label: string } // 本人宛て
+    }
+  | { type: 'lastOneBrief'; prizes: number; entrants: { name: string; isMe: boolean }[]; meIn: boolean; autoMs: number | null }
   // 緊急クエスト「モグラ撃退」。狙われるのはリーチの人。やられる割合は先に決まっていて、
   // 叩いた数が会場全体の下位（その割合）に入った人がやられる（持っているものを失うのは、自分が挑んだ結果としてだけにする）
   | {
       type: 'questStart'
       kind: 'mole'
-      introMs: number // 警報（大画面とスマホで同時）
+      introMs: number // 「3・2・1」のカウントダウン（大画面とスマホで同時。説明は questBrief で済んでいる）
       playMs: number // 叩く時間
       targets: number // 狙われたリーチの人数
       players: number

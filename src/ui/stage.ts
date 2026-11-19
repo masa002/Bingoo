@@ -7,7 +7,7 @@ import { Particles, RAINBOW } from '../fx/particles'
 import { DoubleChanceStage } from '../fx/stage/doublechance'
 import { DrawMachine } from '../fx/stage/draw'
 import { playAllKakutei, playFinalBall } from '../fx/stage/events'
-import { playLastOneGarapon } from '../fx/stage/lastone'
+import { openLastOneBrief, playLastOneGarapon } from '../fx/stage/lastone'
 import { MoleQuestStage } from '../fx/stage/quest'
 import type { LocalHub } from '../net/hub'
 import type { Msg, MsgOf, PrizeEntry, Totals } from '../net/protocol'
@@ -54,6 +54,7 @@ export class StageView {
   private dc: DoubleChanceStage | null = null
   private quest: MoleQuestStage | null = null
   private lastOne: AbortController | null = null
+  private lastOneBrief: { close(): void } | null = null
   private timers: number[] = []
   private cancelBeats: () => void = () => {}
   private drawn = new Set<number>()
@@ -104,8 +105,14 @@ export class StageView {
         return
       case 'numberRevealed':
         return this.onRevealed(m)
+      case 'questBrief':
+        return this.onQuestBrief(m)
       case 'questStart':
         return this.onQuestStart(m)
+      case 'lastOneBrief':
+        this.lastOneBrief?.close()
+        this.lastOneBrief = openLastOneBrief(this.root, { speed: this.clock.speed, prizes: m.prizes, entrants: m.entrants, autoMs: m.autoMs })
+        return
       case 'questProgress':
         this.quest?.setTotal(m.total)
         return
@@ -161,6 +168,8 @@ export class StageView {
     this.quest = null
     this.lastOne?.abort()
     this.lastOne = null
+    this.lastOneBrief?.close()
+    this.lastOneBrief = null
     this.machine.setSpeed(this.clock.speed)
     this.machine.reset()
     this.drawn = new Set(m.drawn)
@@ -248,13 +257,21 @@ export class StageView {
     })
   }
 
-  // 緊急クエスト「モグラ撃退」。会場全員がスマホで叩いている様子と合計、結果を見せる
-  private onQuestStart(m: MsgOf<'questStart'>): void {
+  // 緊急クエスト「モグラ撃退」。まず説明の画面を出して、司会の「スタート」を待つ
+  private onQuestBrief(m: MsgOf<'questBrief'>): void {
     this.hideOverlay()
     this.cancelAll()
     this.clearResult()
     this.quest?.destroy()
     this.quest = new MoleQuestStage(this.root, { speed: this.clock.speed })
+    this.quest.brief({ playMs: m.playMs, targets: m.targets, players: m.players, autoMs: m.autoMs })
+  }
+
+  // 「3・2・1」のあと、会場全員がスマホで叩いている様子と合計、結果を見せる
+  private onQuestStart(m: MsgOf<'questStart'>): void {
+    this.hideOverlay()
+    this.quest ??= new MoleQuestStage(this.root, { speed: this.clock.speed })
+    this.quest.setSpeed(this.clock.speed)
     this.quest.start({ introMs: m.introMs, playMs: m.playMs, targets: m.targets, players: m.players })
   }
 
@@ -355,6 +372,8 @@ export class StageView {
     if (m.entries.length > 12) list.append(h('li', 'more', `ほか ${fmt(m.entries.length - 12)} 人`))
     if (m.lastOne) {
       const pool = m.entries.filter((e) => e.kind === 'normal')
+      this.lastOneBrief?.close()
+      this.lastOneBrief = null
       this.lastOne?.abort()
       this.lastOne = new AbortController()
       void playLastOneGarapon(this.root, {

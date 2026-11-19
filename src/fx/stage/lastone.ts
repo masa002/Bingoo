@@ -11,11 +11,17 @@ import type { StageEventBase } from './events'
 // dropAt で当たりの人を一斉に発表する（スマホで玉が出るのと同時）。外れの人は「運がなかった」（ダブルチャンスの玉 3 個）。
 // durationMs で片付けてから解決する。
 //
+//   const brief = openLastOneBrief(stageRoot, { prizes: 2, entrants, autoMs: null }) // 説明の画面。司会の「スタート」まで出しておく
+//   brief.close()
 //   await playLastOneGarapon(stageRoot, { dropAt: 6500, durationMs: 11000, prizes: 2, entrants })
+//
+// 説明の画面とガラポンの画面は、見出しと抽選器を同じ位置に描いてある。close の直後に playLastOneGarapon を呼ぶと、
+// 説明の文字だけがすっと消えて、見ていた抽選器から名前の札が配られ、そのまま回り出す（見出しの出し直しと始まりの音は省く）。
 //
 // 時間の使い方（D = dropAt、T = durationMs。演出上の ms で、speed で縮む）:
 //   0〜        見出し（ラストワン争奪！・残り○個を○人で）→ 大きな抽選器 → 名前の札が抽選器から配られる
 //   D の 3 割  「全員スマホでガラポン！」。札の「？」の玉がゆれ、会場のあちこちから「ガラガラ」
+//              （説明の画面から続くときは、見出しと抽選器はもう出ているので、0.6 秒でここへ来る）
 //   D-3〜1 秒  3・2・1（スマホと同じ時刻）
 //   D          一斉に発表。当たりの札は金に光り（王冠と ★ ラストワン賞）、外れの札は白い玉になって暗くなる
 //   D+0.7 秒   「はずれた人には ダブルチャンスの玉 3 個」
@@ -107,6 +113,9 @@ interface Entrant {
   win: boolean
 }
 
+// 出ている説明の画面（閉じる関数と、出した時刻）。ガラポンが始まるとき、残っている説明をここから閉じて引き継ぐ
+const briefs = new WeakMap<Element, { close(): void; at: number }>()
+
 // 並べるのは max 人まで。自分と当たる人を先に入れて、元の順番のまま並べる
 function pick(all: readonly Entrant[], max: number): Entrant[] {
   if (all.length <= max) return [...all]
@@ -153,6 +162,7 @@ class LastOneShow {
   private readonly body: HTMLElement // 揺らす層（暗転は揺らさない）
   private readonly rm = prefersReducedMotion()
   private readonly attached: boolean
+  private readonly fromBrief: boolean // 説明の画面から続けて始まった（見出しと抽選器は、もう見えている）
   private readonly t0 = performance.now()
   // 時刻（演出上の ms）
   private readonly D: number // 一斉に発表する
@@ -183,7 +193,12 @@ class LastOneShow {
     this.tl = new Timeline(speed > 0 ? speed : 1)
     this.T = Math.max(0, num(o.durationMs, 11000))
     this.D = clamp(num(o.dropAt, 6500), 0, this.T)
-    this.I = Math.min(this.D, clamp(this.D * 0.3, 1200, 2200))
+    // 説明の画面が残っていれば、閉じて引き継ぐ（説明は上に重なったまま、すっと消える）
+    const brief = host.querySelector(':scope > .fxls-brief')
+    const briefAt = brief ? (briefs.get(brief)?.at ?? null) : null
+    this.fromBrief = !!brief
+    if (brief) briefs.get(brief)?.close()
+    this.I = Math.min(this.D, this.fromBrief ? 600 : clamp(this.D * 0.3, 1200, 2200))
     this.all = (o.entrants ?? []).map((e) => ({ name: String(e.name ?? ''), isMe: !!e.isMe, win: !!e.win }))
     this.shown = pick(this.all, this.all.length > CELLS ? CELLS - 1 : CELLS)
     const picked = new Set(this.shown)
@@ -192,7 +207,7 @@ class LastOneShow {
 
     const balls = `${ballHtml('red')}${ballHtml('gold')}${ballHtml('rainbow')}`
     const tokens = Array.from({ length: DC_BALLS }, () => '<i class="fxls-token">?</i>').join('')
-    this.root = el('div', `fxls${this.rm ? ' fxls-rm' : ''}`)
+    this.root = el('div', `fxls${this.rm ? ' fxls-rm' : ''}${this.fromBrief ? ' fxls-still' : ''}`)
     this.root.style.setProperty('--k', String(this.tl.ms(1)))
     this.root.dataset.phase = 'intro'
     this.dim = el('div', 'fxls-dim')
@@ -224,6 +239,8 @@ class LastOneShow {
       <div class="fxls-pops"></div>`,
     )
     this.root.append(this.dim, this.body, el('div', 'fxls-glow'))
+    // 光の筋は、説明の画面で回っていた向きから続ける
+    if (briefAt !== null) this.$('.fxls-rays').style.animationDelay = `${(-(performance.now() - briefAt) / 1000).toFixed(2)}s`
 
     // 名前の札（「？」の玉は、発表の瞬間に王冠か白い玉に替わる）
     const g = layout(this.shown.length + (this.hidden.length ? 1 : 0))
@@ -299,20 +316,29 @@ class LastOneShow {
     const { D, T, I } = this
     const fx = this.fx
 
-    // 幕開け: 暗転 → 「ラストワン争奪！」 → 抽選器 → 名前の札が抽選器から配られる
-    this.dimTo(0.93, 450)
-    this.on('.fxls-kicker')
-    await this.until(150)
-    this.on('.fxls-title')
-    safe(() => sfx.cutin(3))
-    fx?.burst(960, 170, { count: 110, colors: GOLD, speed: 11, shape: 'spark', gravity: 0.1, life: 55 })
-    await this.until(450)
-    this.on('.fxls-sub')
-    await this.until(600)
-    this.on('.fxls-warm')
-    this.on('.fxls-rays')
-    this.on('.fxls-mwrap')
-    await this.until(750)
+    if (this.fromBrief) {
+      // 説明の画面から続くとき: 暗転・見出し・抽選器は、もう見えているものをそのまま置く（出し直さない）。
+      // 上で説明の文字が消えていく間に、抽選器から名前の札を配る
+      this.dim.style.opacity = '0.93'
+      for (const sel of ['.fxls-kicker', '.fxls-title', '.fxls-warm', '.fxls-rays', '.fxls-mwrap']) this.instant(sel)
+      this.on('.fxls-sub')
+      await this.until(150)
+    } else {
+      // 幕開け: 暗転 → 「ラストワン争奪！」 → 抽選器 → 名前の札が抽選器から配られる
+      this.dimTo(0.93, 450)
+      this.on('.fxls-kicker')
+      await this.until(150)
+      this.on('.fxls-title')
+      safe(() => sfx.cutin(3))
+      fx?.burst(960, 170, { count: 110, colors: GOLD, speed: 11, shape: 'spark', gravity: 0.1, life: 55 })
+      await this.until(450)
+      this.on('.fxls-sub')
+      await this.until(600)
+      this.on('.fxls-warm')
+      this.on('.fxls-rays')
+      this.on('.fxls-mwrap')
+      await this.until(750)
+    }
     for (const c of this.cards) this.onEl(c)
     if (this.more) this.onEl(this.more)
     this.on('.fxls-rule')
@@ -408,6 +434,16 @@ class LastOneShow {
   private on(selector: string): void {
     const node = this.root.querySelector(selector)
     if (node) this.onEl(node)
+  }
+
+  // 動かさずに、出た状態にする（説明の画面で見えていたものを、そのまま置くとき）
+  private instant(selector: string): void {
+    const node = this.root.querySelector<HTMLElement>(selector)
+    if (!node) return
+    node.style.transition = 'none'
+    node.classList.add('on')
+    void node.getBoundingClientRect()
+    node.style.transition = ''
   }
 
   // 暗転（明るさを下げるだけなので、動きを減らす設定でもなめらかに変える）
@@ -560,4 +596,146 @@ class LastOneShow {
       if (more?.classList.contains('lose')) more.classList.add('out')
     })
   }
+}
+
+// ---- 説明の画面 ------------------------------------------------------------------
+
+// 説明の画面（大画面）: 景品が足りないので、同時に上がった人がガラポンで争うこと、名前のある人はスマホを見ること、
+// 合図のあとにタップして回すこと、赤・金・虹の玉なら当たりで、外れてもダブルチャンスの玉がもらえることを出して、
+// close が呼ばれるまで待つ。会場の後ろの席からも読めるよう、文字は大きく、動きは控えめにする（長く待つこともある）。
+// 音は、始まりの合図を 1 回だけ。出している間は BGM を下げ、close で戻す。
+// close のあとに playLastOneGarapon を呼ぶと、見出しと抽選器はそのままで、説明の文字だけが消えて札が配られる。
+// 呼ばれなければ（新しいゲームを始めたときなど）、0.35 秒で消えて片付く
+export interface LastOneStageBrief extends StageEventBase {
+  prizes: number // 残りの景品の数
+  entrants: { name: string; isMe: boolean }[]
+  autoMs: number | null // 自動で始まるまでの時間（司会の「スタート」を待つときは null）
+}
+
+const BRIEF_NAMES = 10 // 説明の画面に並べる名前の枠（超えたら 9 人と「ほか○人」）
+const BRIEF_OUT = 350 // 説明の画面が消える長さ（演出上の ms）
+
+export function openLastOneBrief(host: HTMLElement, o: LastOneStageBrief): { close(): void } {
+  const speed = num(o.speed, 1)
+  const tl = new Timeline(speed > 0 ? speed : 1)
+  const rm = prefersReducedMotion()
+  const auto = typeof o.autoMs === 'number' && o.autoMs > 0 ? o.autoMs : null
+  // 前の説明が残っていれば片付ける
+  host.querySelectorAll(':scope > .fxls-brief').forEach((n) => {
+    briefs.get(n)?.close()
+    n.remove()
+  })
+
+  const all: Entrant[] = (o.entrants ?? []).map((e) => ({ name: String(e.name ?? ''), isMe: !!e.isMe, win: false }))
+  const shown = pick(all, all.length > BRIEF_NAMES ? BRIEF_NAMES - 1 : BRIEF_NAMES)
+  const chips =
+    shown.map((e) => `<li${e.isMe ? ' class="me"' : ''}>${e.isMe ? '<i>あなた</i>' : ''}${escapeHtml(e.name)}</li>`).join('') +
+    (all.length > shown.length ? `<li class="more">ほか ${fmt(all.length - shown.length)} 人</li>` : '')
+  const balls = `${ballHtml('red')}${ballHtml('gold')}${ballHtml('rainbow')}`
+  const tokens = Array.from({ length: DC_BALLS }, () => '<i class="fxls-token">?</i>').join('')
+
+  const root = el('div', `fxls fxls-brief${rm ? ' fxls-rm' : ''}`)
+  root.style.setProperty('--k', String(tl.ms(1)))
+  const dim = el('div', 'fxls-dim')
+  const body = el(
+    'div',
+    'fxls-body',
+    `<div class="fxls-warm"></div>
+    <div class="fxls-rays"></div>
+    <div class="fxls-mwrap"></div>
+    <div class="fxls-status fxls-bf-in">
+      <div class="fxls-bf-soon"><i></i><i></i><i></i><span>まもなくスタート</span></div>
+      <div class="fxls-bf-when">${auto ? '' : '司会の合図で 始まります'}</div>
+      ${auto && !rm ? '<div class="fxls-bf-bar"><b></b></div>' : ''}
+    </div>
+    <header class="fxls-head">
+      <div class="fxls-kicker">上のランクまで 景品が尽きた！</div>
+      <div class="fxls-title fxls-ol" data-text="ラストワン争奪！"><b>ラストワン争奪！</b></div>
+      <div class="fxls-line">
+        <div class="fxls-sub">景品は残り<b>${fmt(o.prizes)}</b>個。同時にビンゴした<b>${fmt(all.length)}</b>人で、ガラポン勝負！</div>
+      </div>
+    </header>
+    <div class="fxls-bf-main">
+      <section class="fxls-bf-names fxls-bf-in">
+        <h3>争奪する人<b>${fmt(all.length)}</b>人</h3>
+        <ul>${chips}</ul>
+      </section>
+      <ol class="fxls-bf-steps">
+        <li class="fxls-bf-in"><i>1</i><div><b>名前のある人は、<em>スマホ</em>を見てください</b></div></li>
+        <li class="fxls-bf-in"><i>2</i><div><b>合図のあと、画面を<em>タップ</em>して ガラポンを回します</b></div></li>
+        <li class="fxls-bf-in"><i>3</i><div><b>${balls}<span>赤・金・虹の玉が出たら <em>当たり！</em></span></b>
+          <small>外れた人には、ダブルチャンスの玉 ${DC_BALLS} 個${tokens}</small></div></li>
+      </ol>
+    </div>`,
+  )
+  root.append(dim, body)
+  // 抽選器は止まったまま見せる（ガラポンの画面と同じ位置・同じ向き）
+  body.querySelector('.fxls-mwrap')!.append(new GaraponMachine({ size: MACHINE.size }).el)
+  host.append(root)
+
+  const on = (node: Element | null): void => {
+    if (!node) return
+    void node.getBoundingClientRect()
+    node.classList.add('on')
+  }
+  const $ = (sel: string): HTMLElement | null => root.querySelector<HTMLElement>(sel)
+  const t0 = performance.now()
+  let closed = false
+
+  // 幕開け（落ち着いて読めるよう、上から順に 1 回ずつ出すだけ）。音は、始まりの合図を 1 回
+  safe(() => bgm.duck(true))
+  void dim.getBoundingClientRect()
+  dim.style.transition = `opacity ${tl.ms(450)}ms ease`
+  dim.style.opacity = '0.93'
+  on($('.fxls-kicker'))
+  tl.at(150, () => {
+    if (closed) return
+    on($('.fxls-title'))
+    safe(() => sfx.cutin(3))
+  })
+  tl.at(450, () => on($('.fxls-sub')))
+  tl.at(600, () => {
+    on($('.fxls-warm'))
+    on($('.fxls-rays'))
+    on($('.fxls-mwrap'))
+  })
+  tl.at(900, () => on($('.fxls-bf-names')))
+  root.querySelectorAll('.fxls-bf-steps > li').forEach((li, i) => tl.at(1300 + i * 450, () => on(li)))
+  tl.at(1000, () => on($('.fxls-status')))
+
+  // 自動で始まるときは、残り秒数と残り時間の帯を出す（動きを減らす設定では、帯は出さず秒数だけ）
+  if (auto) {
+    const when = $('.fxls-bf-when')!
+    const render = (): void => {
+      if (closed) return
+      const left = Math.ceil((auto - (performance.now() - t0) * tl.speed) / 1000)
+      const html = left > 0 ? `あと<b>${left}</b>秒で 始まります` : 'まもなく 始まります'
+      if (when.innerHTML !== html) when.innerHTML = html
+    }
+    render()
+    for (let k = Math.floor(auto / 1000); k >= 0; k--) tl.at(auto - k * 1000 + 20, render) // 秒が変わるたびに書き直す
+    const bar = $('.fxls-bf-bar b')
+    if (bar) bar.animate([{ transform: 'scaleX(1)' }, { transform: 'scaleX(0)' }], { duration: tl.ms(auto), easing: 'linear', fill: 'forwards' })
+  }
+
+  const close = (): void => {
+    if (closed) return
+    closed = true
+    briefs.delete(root)
+    safe(() => bgm.duck(false))
+    if (!root.isConnected) {
+      tl.cancel()
+      root.remove()
+      return
+    }
+    // 明るさを変えるだけなので、動きを減らす設定でもなめらかに消す
+    root.style.transition = `opacity ${tl.ms(BRIEF_OUT)}ms ease`
+    root.style.opacity = '0'
+    tl.at(BRIEF_OUT + 40, () => {
+      tl.cancel()
+      root.remove()
+    })
+  }
+  briefs.set(root, { close, at: t0 })
+  return { close }
 }

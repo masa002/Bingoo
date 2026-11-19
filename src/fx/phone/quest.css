@@ -871,6 +871,117 @@
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
 }
 
+/* ---- 説明の画面（brief） ------------------------------------------------------ */
+/* 下の欄を上から、狙われているマス（mission）・見本（howto）・長さと目的（facts）・まだ始まっていないこと（wait）の順に並べる。
+   点数の行は、カウントダウンに入ってから出す */
+
+.fxq[data-phase='brief'] .fxq-row {
+  display: none;
+}
+
+.fxq[data-phase='brief'] .fxq-mission {
+  margin-top: 0;
+}
+
+/* 4 つを画面の下端までに収めるため、説明の画面の間だけ見本を少し詰める */
+.fxq[data-phase='brief'] .fxq-howto {
+  margin-top: 8px;
+  padding: 8px 14px;
+}
+
+.fxq[data-phase='brief'] .fxq-demo {
+  width: 74px;
+  height: 74px;
+}
+
+.fxq .fxq-brief {
+  display: none;
+}
+
+.fxq[data-phase='brief'] .fxq-brief {
+  display: block;
+}
+
+.fxq .fxq-facts {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 8px;
+  padding: 8px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.12);
+}
+
+.fxq .fxq-fact {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding-right: 14px;
+  border-right: 1.5px solid rgba(255, 255, 255, 0.2);
+  font-size: 16px;
+  font-weight: 900;
+  color: #ffe9b0;
+}
+
+.fxq .fxq-fact b {
+  font-size: 38px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.5);
+}
+
+.fxq .fxq-fact-txt {
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1.3;
+}
+
+/* まだ始まっていないこと（水色・文字で伝える。点滅はさせない） */
+.fxq .fxq-wait {
+  margin-top: 8px;
+  padding: 7px 14px 8px;
+  border-radius: 14px;
+  text-align: center;
+  background: rgba(90, 210, 255, 0.14);
+  box-shadow: inset 0 0 0 1.5px rgba(90, 210, 255, 0.55);
+}
+
+.fxq .fxq-wait b {
+  display: block;
+  font-size: 17px;
+  font-weight: 900;
+  color: #d6f5ff;
+}
+
+.fxq .fxq-wait small {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #c9d1f5;
+}
+
+/* 自動で始まるときの、残りの帯（左から伸びきったら始まる） */
+.fxq .fxq-wait-bar {
+  display: block;
+  height: 5px;
+  margin-top: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.fxq .fxq-wait-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  background: #5ad2ff;
+}
+
 /* ---- 結果の札（下の点数と同じ場所） ------------------------------------------- */
 
 .fxq .fxq-resbox {
@@ -1199,12 +1310,6 @@
   letter-spacing: 6px;
 }
 
-.fxq .fxq-ban.is-ready .fxa-txt {
-  --stroke: #10183f;
-  --fill: linear-gradient(180deg, #ffffff, #c9d6ff);
-  font-size: 34px;
-}
-
 .fxq .fxq-ban.is-go .fxa-txt {
   --stroke: #3b1d06;
   --fill: linear-gradient(180deg, #ffffff 0%, #fff15a 40%, #ff9a1a 100%);
@@ -1212,12 +1317,25 @@
   font-style: italic;
 }
 
-/* 「よーい…」の下に、何をするかを 1 行で添える */
-.fxq .fxq-ban.is-ready .fxq-ban-note {
+/* カウントダウン「3・2・1」。下に、何をするかを 1 行で添える */
+.fxq .fxq-ban.is-count .fxq-cd-num {
+  line-height: 1;
+}
+
+.fxq .fxq-ban.is-count .fxq-cd-num .fxa-txt {
+  --stroke: #1a1405;
+  --sw: 0.14em;
+  --fill: linear-gradient(180deg, #ffffff 0%, #fff15a 45%, #ff9a1a 100%);
+  font-size: 132px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fxq .fxq-ban.is-count .fxq-ban-note {
   display: block;
   width: max-content;
-  margin: 8px auto 0;
+  margin: 6px auto 0;
   color: #ffe08a;
+  background: rgba(5, 8, 20, 0.85);
   box-shadow: inset 0 0 0 1.5px rgba(255, 194, 26, 0.7);
 }
 
