@@ -1484,6 +1484,51 @@ button:disabled {
   margin-left: 8px;
 }
 
+/* 音の切りかえ（本番のスマホだけ）。「？」の左に置く。押せる範囲は高さ 44px */
+.phone.live .ph-head {
+  margin-right: 128px;
+}
+
+.ph-sound {
+  position: absolute;
+  top: 28px;
+  right: 50px;
+  z-index: 9;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: #8f9ac9;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.ph-sound.on {
+  color: #ffe08a;
+}
+
+/* 最初の画面の「音ありで はじめる」（主ボタンの下に、控えめに） */
+.ph-join-sound {
+  margin-top: -8px;
+  width: 100%;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1.5px solid #6f7bb5;
+  border-radius: 14px;
+  background: rgba(20, 28, 64, 0.6);
+  color: #e8ecff;
+  font-size: 17px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
 /* 大画面: 「会場のようす」（デモ用。仮想の参加者を点で描く）は出さない */
 .stage.live .st-venue {
   display: none;

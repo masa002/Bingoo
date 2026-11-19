@@ -1,3 +1,4 @@
+import { engine, sfx } from '../audio'
 import { FREE_MASK, bingoCells, deriveCard, labelOf, lineState, popcount, waitingCells } from '../core/card'
 import { CH_FREE, CH_LINES, challengeBingo } from '../core/game'
 import { MY_TIER_WORD, TIER_QUIET } from '../core/show'
@@ -48,6 +49,32 @@ export interface PhoneOptions {
   // 枠とにせもののステータスバーを出さない・音は自分のスマホから全部鳴らす・参加はもう済んでいる（最初の画面は「はじめる」）・
   // つなぎ直したら snapshot.live からいまの状態に戻る・モグラ撃退の途中経過を送る
   live?: boolean
+}
+
+// 本番のスマホの音の切りかえ（右上のボタン）。最初は音なし: 会場では大画面から鳴るので、1,000 台が一斉に鳴るとうるさい。
+// 会場の外から参加する人は大画面の音が聞こえないので、自分で入れられるようにする。選んだものはスマホに残す
+const SOUND_KEY = 'bingoo:sound'
+const SPEAKER = (on: boolean) =>
+  `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/>${
+    on
+      ? '<path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+      : '<path d="M16.5 9.5l5 5M21.5 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+  }</svg>`
+
+function loadSound(): boolean {
+  try {
+    return localStorage.getItem(SOUND_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function saveSound(on: boolean): void {
+  try {
+    localStorage.setItem(SOUND_KEY, on ? '1' : '0')
+  } catch {
+    // 残せなくても、この画面の間は効く
+  }
 }
 
 // 本番で、受付中に「はじめる」を押した人に出しておく知らせ（ゲームが動き出したら消す）
@@ -103,6 +130,7 @@ export class PhoneView {
   private dcEligible = true
   private readonly live: boolean
   private begun = false // 本番: 「はじめる」を押した（つなぎ直しで、参加の画面をもう一度出さない）
+  private soundOn = false // 本番: 自分のスマホから音を出す
   private waitNote = false // 本番: 「始まるまで…」の知らせを出している
 
   constructor(
@@ -126,7 +154,34 @@ export class PhoneView {
     this.spin = new HandSpin(this.root, { speed: clock.speed, sound })
     this.quest = new MoleQuest(this.root, { speed: clock.speed, sound })
     this.$('.ph-help').addEventListener('click', () => this.showGuide())
+    if (this.live) this.setupSound()
     hub.subscribe((m) => this.on(m))
+  }
+
+  // 本番: 音の切りかえのボタン。ブラウザは、画面に触れたあとでないと音を出させないので、
+  // 音ありを選んでいる人は、最初に触れたときに音の仕組みを起こす（読み込み直したあとも、どこかに触れれば鳴る）
+  private setupSound(): void {
+    const btn = h('button', 'ph-sound')
+    btn.type = 'button'
+    this.$('.ph-help').before(btn)
+    btn.addEventListener('click', () => this.setSound(!this.soundOn))
+    document.addEventListener('pointerdown', () => this.soundOn && engine.unlock(), { capture: true })
+    this.setSound(loadSound(), false)
+  }
+
+  private setSound(on: boolean, tap = true): void {
+    this.soundOn = on
+    engine.enabled = on
+    if (on) engine.unlock()
+    if (tap) {
+      saveSound(on)
+      if (on) sfx.uiTap() // 入れたら、すぐ小さく鳴らして、聞こえるか分かるようにする
+    }
+    const btn = this.$<HTMLButtonElement>('.ph-sound')
+    btn.innerHTML = `${SPEAKER(on)}<span>${on ? '音あり' : '音なし'}</span>`
+    btn.classList.toggle('on', on)
+    btn.setAttribute('aria-pressed', String(on))
+    btn.setAttribute('aria-label', on ? '音を消す' : '音を出す')
   }
 
   private $<T extends HTMLElement = HTMLElement>(selector: string): T {
@@ -274,15 +329,27 @@ export class PhoneView {
         <div class="ph-logo">BINGOO</div>
         <p>ビンゴ大会へようこそ！</p>
         <button class="ph-join-btn">${this.live ? 'はじめる' : '参加する'}</button>
-        ${this.live ? '' : `<small>このデモでは、あなた以外の ${fmt(m.size - 1)} 人はコンピューターです</small>`}
+        ${
+          this.live
+            ? this.soundOn
+              ? ''
+              : `<button class="ph-join-sound">${SPEAKER(true)}音ありで はじめる</button>
+        <small>会場の外から参加するなら、音ありがおすすめ。あとで右上のボタンでも切りかえられます</small>`
+            : `<small>このデモでは、あなた以外の ${fmt(m.size - 1)} 人はコンピューターです</small>`
+        }
         ${GUIDE_HTML}
       </div>`)
-    q(this.root, '.ph-join-btn').addEventListener('click', () => {
+    const start = () => {
       if (this.joined) return // 閉じたあとの画面に残ったボタンが押されても、何もしない
       this.join()
       if (!this.live) return
       this.begun = true
       this.setWaitNote()
+    }
+    q(this.root, '.ph-join-btn').addEventListener('click', start)
+    this.root.querySelector('.ph-join-sound')?.addEventListener('click', () => {
+      this.setSound(true)
+      start()
     })
   }
 

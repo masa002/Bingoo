@@ -39,8 +39,7 @@ export function mountPlayer(app: HTMLElement, params: URLSearchParams): void {
   const base = apiBase()
   const api = createApi(base)
   document.title = 'Bingoo'
-  // スマホは音を出さない（fx/GUIDE.md の決まり。会場で 1,000 台が鳴ると、大画面の音が聞こえなくなる）。
-  // 音の仕組みは、最初の操作のあとに engine.unlock() を呼ばないかぎり鳴らないので、ここでは呼ばない
+  // 音は、最初は出さない（会場で 1,000 台が鳴ると、大画面の音が聞こえなくなる）。本人が右上のボタンで入れたときだけ鳴る（ui/phone.ts）
   void open()
 
   async function open(): Promise<void> {
