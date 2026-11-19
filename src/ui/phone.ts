@@ -1,5 +1,6 @@
 import { FREE_MASK, bingoCells, deriveCard, labelOf, lineState, popcount, waitingCells } from '../core/card'
 import { CH_FREE, CH_LINES, challengeBingo } from '../core/game'
+import { MY_TIER_WORD } from '../core/show'
 import type { Rarity } from '../core/prizes'
 import type { Clock } from '../demo/clock'
 import { playBingo, playReach, playWildResult, type AoriOutcome } from '../fx/phone/aori'
@@ -12,7 +13,7 @@ import { HandSpin } from '../fx/phone/spin'
 import type { BallColor } from '../fx/theme'
 import type { LocalHub } from '../net/hub'
 import type { Msg, MsgOf, PhoneCommand, PrizeEntry } from '../net/protocol'
-import { esc, fit, fmt, h, q, replay } from './dom'
+import { esc, fit, fmt, h, q, replay, tierGuide } from './dom'
 
 // 参加者のスマホ（390×844 で組んで縮小表示する）。カード・手元の抽選演出・緊急クエスト・景品・ガラポンの演出は fx/ の部品。
 // 自分のカードはシードとカード番号から手元で作り、届いた番号で自分で塗る（本番と同じ）。
@@ -193,6 +194,12 @@ export class PhoneView {
         <p>社内ビンゴ大会へようこそ</p>
         <button class="ph-join-btn">参加する</button>
         <small>デモでは、あなた以外の ${fmt(m.size - 1)} 人は仮想の参加者です</small>
+        <div class="ph-guide">
+          <h4>スマホの演出の見方</h4>
+          <p>色は「この番号が、あなたのカードに当たりそうか」です。熱い色でも外れることがあります。</p>
+          <ol class="tier-guide">${tierGuide(MY_TIER_WORD, '静か')}</ol>
+          <p>始まった瞬間に「ポヒュン！」と光ったら、当たり確定です。</p>
+        </div>
       </div>`)
     q(this.root, '.ph-join-btn').addEventListener('click', () => this.join())
   }
@@ -305,6 +312,7 @@ export class PhoneView {
       revealAt: m.timing.reveal,
       venueTier: m.tier,
       venueVariant: m.style, // 大画面と同じ型の着地に合わせる
+      sure: m.personal.sure, // 先バレ: 始まった瞬間に、当たり確定を知らせる
     })
   }
 
@@ -431,7 +439,7 @@ export class PhoneView {
       await playPackOpen(this.root, {
         speed: this.speed,
         rarity: e.rarity,
-        prize: e.prize ?? 'ダブルチャンス券（ガラポン 3 回）',
+        prize: e.prize ?? '',
         glow: e.glow,
         upgrade: e.upgrade,
         rankUp: e.rankUp,

@@ -1,5 +1,6 @@
 /* 手元の抽選演出（spin.ts）。接頭辞は fxs-。層は z-index 12（スマホのあおり 10〜19 の中）。入力は受けない（pointer-events: none）。
-   中の重なり: 暗転 1、縁の光・虹 2、後光 3、カットイン 6、群予告のカード 7、本体 8、粒子・段階の文字・単発の部品 9、全面の光 10。
+   中の重なり: 暗転 1、縁の光・虹 2、後光 3、カットイン 6、群予告のカード 7、本体 8、粒子・段階の文字・単発の部品 9、全面の光 10、
+   復活の前の暗転（プチュン）11、「復活！」の文字 12。
    位置は CSS 変数で変えられる（host か、その上の要素に置く）: --fxs-top（本体の上端、530px）、--fxs-center（文字を叩きつける高さ、318px）。
    1 回きりの動きの長さは --fxs-k（= 1 / 速度）を掛ける。くり返す動き（呼吸・虹の色・後光）は、速度を上げても安全な下限を守る */
 
@@ -236,39 +237,56 @@
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
 }
 
+/* 段階の言葉（自分のカードの話）は 1 行で出す。長い言葉は、JS が画面の幅に収まる大きさに縮める */
 .fxs-emblem .fxa-txt {
   --stroke: #fff;
   --fill: linear-gradient(180deg, #fff, #dfe6ff);
-  font-size: 58px;
+  font-size: 46px;
 }
 
 .fxs-emblem[data-t='1'] .fxa-txt {
   --stroke: #fff;
   --fill: linear-gradient(180deg, #eafff0 10%, #5aff8c 50%, #15803d 100%);
-  font-size: 60px;
+  font-size: 52px;
   font-style: italic;
+}
+
+.fxs-emblem[data-t='2'] .fxa-txt {
+  --stroke: #fff6d6;
+  --fill: linear-gradient(180deg, #fff2a8 0%, #ffb03a 35%, #ff4d2e 70%, #c4161c 100%);
 }
 
 .fxs-emblem[data-t='3'] .fxa-txt {
   --stroke: #3b2600;
   --fill: linear-gradient(180deg, #fffbe6 0%, #ffe08a 30%, #f5c542 50%, #b8860b 75%, #ffe08a 100%);
-  font-size: 58px;
-}
-
-.fxs-emblem[data-t='3'] .fxa-txt + .fxa-txt {
-  margin-top: -4px;
-  font-size: 36px;
-  letter-spacing: 5px;
 }
 
 .fxs-emblem[data-t='4'] .fxa-txt {
   --stroke: #fff;
   --fill: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
-  font-size: 88px;
+  font-size: 62px;
 }
 
 .fxs-emblem[data-t='4'] .fxa-txt b {
   animation: fxs-hue var(--fxs-hue-ms, 12000ms) linear infinite;
+}
+
+/* 「昇格！」の札（オリパのお約束: 途中で色が上がった）。段階の言葉の上に添える */
+.fxs-up {
+  margin-bottom: 6px;
+  padding: 3px 16px 4px;
+  border-radius: 999px;
+  font-style: normal;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: #1a1400;
+  background: linear-gradient(180deg, #fffbe6, #ffe08a 55%, #f5c542);
+  box-shadow:
+    0 0 0 2px #fff,
+    0 4px 10px rgba(0, 0, 0, 0.45);
 }
 
 /* ---- カットイン（大画面のカットインと同じ時刻。色と言葉は自分の段階） --------- */
@@ -334,28 +352,35 @@
   top: 82%;
 }
 
+/* 言葉は 1 行。大きさは .fxs-cut-txt の font-size で決め、長い言葉は JS が画面の幅に収まるまで縮める */
 .fxs-cut-txt {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 50px;
+}
+
+.fxs-cut-txt .fxs-up {
+  margin-bottom: 2px;
+  font-size: 17px;
 }
 
 .fxs-cut-txt .fxa-txt {
   --stroke: #5a0a0a;
   --fill: linear-gradient(180deg, #ffffff 25%, #ffe08a 70%, #ffb03a 100%);
-  font-size: 70px;
-  letter-spacing: 2px;
+  font-size: 1em;
 }
 
 .fxs-cut[data-t='1'] .fxs-cut-txt .fxa-txt {
   --stroke: #0b3d1e;
   --fill: linear-gradient(180deg, #ffffff 25%, #eafff0 70%, #b9f7cf 100%);
-  font-size: 62px;
   font-style: italic;
 }
 
 .fxs-cut[data-t='3'] .fxs-cut-txt .fxa-txt {
   --stroke: #3b2600;
   --fill: linear-gradient(180deg, #fffbe6 0%, #ffe08a 40%, #b8860b 100%);
-  font-size: 40px;
 }
 
 /* ---- 本体（y 530〜830） ------------------------------------------------------ */
@@ -436,28 +461,120 @@
   filter: saturate(0.3) brightness(0.85);
 }
 
-/* 上の段: 自分の段階のランプ・大画面のステップ・会場の段階 */
+/* 上の段: 主役は「あなたの期待度」（見出し＋ 4 段の目盛り＋言葉のランプ）。大画面の段階は、右上の小さな 1 行 */
 .fxs-head {
   position: relative;
   flex: none;
   display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fxs-cap {
+  display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  height: 28px;
+  gap: 7px;
+  height: 14px;
+  font-size: 11px;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.fxs-cap > b {
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: #dfe6ff;
+}
+
+/* 期待度の目盛り（緑・赤・金・虹の 4 段。色だけでなく、点いた数とランプの形・言葉でも伝える） */
+.fxs-meter {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.fxs-meter i {
+  --pc: #22c55e;
+  display: block;
+  width: 15px;
+  height: 8px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  transition:
+    background calc(300ms * var(--fxs-k)),
+    box-shadow calc(300ms * var(--fxs-k));
+}
+
+.fxs-meter i[data-t='2'] {
+  --pc: #ef4444;
+}
+
+.fxs-meter i[data-t='3'] {
+  --pc: #f5c542;
+}
+
+.fxs-meter i.on {
+  background: var(--pc);
+  box-shadow:
+    0 0 7px var(--pc),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.fxs-meter i.on[data-t='4'] {
+  background: linear-gradient(90deg, #ff5a5a, #fff15a, #5aff8c, #5ad2ff, #a85aff);
+  box-shadow: 0 0 7px rgba(255, 255, 255, 0.7);
+}
+
+/* 会場（大画面）の段階。小さな 1 行にまとめる（「会場: ◆ ビンゴが出るかも！」） */
+.fxs-venue {
+  --vc: #6ea2ff;
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 700;
+  color: #9aa5cc;
+}
+
+.fxs-venue i {
+  margin-right: 3px;
+  font-style: normal;
+  color: var(--vc);
+}
+
+.fxs-venue b {
+  font-weight: 800;
+  color: #c9d1f0;
+}
+
+.fxs-venue[data-t='1'] {
+  --vc: #22c55e;
+}
+
+.fxs-venue[data-t='2'] {
+  --vc: #ff6b6b;
+}
+
+.fxs-venue[data-t='3'] {
+  --vc: #f5c542;
+}
+
+.fxs-venue[data-t='4'] {
+  --vc: #ff8ae0;
 }
 
 .fxs-lamp {
   --lc: #3b82f6;
   --ll: #9cc3ff;
   --ld: #1e3f86;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  height: 28px;
+  justify-content: center;
+  gap: 8px;
+  height: 30px;
   padding: 0 14px 0 4px;
-  border-radius: 14px;
-  font-size: 14px;
+  border-radius: 15px;
+  font-size: 16px;
   font-weight: 900;
   letter-spacing: 1px;
   white-space: nowrap;
@@ -466,7 +583,6 @@
   box-shadow:
     0 0 12px color-mix(in srgb, var(--lc) 55%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  transform-origin: 30% 50%;
 }
 
 .fxs-lamp i {
@@ -509,103 +625,6 @@
   background: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
   box-shadow: 0 0 14px rgba(255, 255, 255, 0.5);
   animation: fxs-hue var(--fxs-hue-ms, 12000ms) linear infinite;
-}
-
-/* 大画面の STEP UP（5 段）。点く色は自分の段階で頭打ち */
-.fxs-steps {
-  display: inline-flex;
-  align-items: flex-end;
-  gap: 3px;
-  height: 18px;
-}
-
-.fxs-steps i {
-  --pc: #3b82f6;
-  display: block;
-  width: 8px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.12);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
-}
-
-.fxs-steps i:nth-child(1) {
-  height: 8px;
-}
-
-.fxs-steps i:nth-child(2) {
-  height: 10px;
-}
-
-.fxs-steps i:nth-child(3) {
-  height: 12px;
-}
-
-.fxs-steps i:nth-child(4) {
-  height: 15px;
-}
-
-.fxs-steps i:nth-child(5) {
-  height: 18px;
-}
-
-.fxs-steps i.on {
-  background: var(--pc);
-  box-shadow:
-    0 0 8px var(--pc),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
-}
-
-.fxs-steps i[data-t='1'] {
-  --pc: #22c55e;
-}
-
-.fxs-steps i[data-t='2'] {
-  --pc: #ef4444;
-}
-
-.fxs-steps i[data-t='3'] {
-  --pc: #f5c542;
-}
-
-/* 会場（大画面）の段階。色だけでなく形も出す */
-.fxs-venue {
-  --vc: #3b82f6;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 24px;
-  padding: 0 9px;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 800;
-  white-space: nowrap;
-  color: #c9d1f0;
-  background: rgba(8, 10, 24, 0.75);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
-}
-
-.fxs-venue i {
-  font-style: normal;
-  font-size: 14px;
-  line-height: 1;
-  color: var(--vc);
-  text-shadow: 0 0 6px var(--vc);
-}
-
-.fxs-venue[data-t='1'] {
-  --vc: #22c55e;
-}
-
-.fxs-venue[data-t='2'] {
-  --vc: #ef4444;
-}
-
-.fxs-venue[data-t='3'] {
-  --vc: #f5c542;
-}
-
-.fxs-venue[data-t='4'] {
-  --vc: #ff8ae0;
 }
 
 /* ---- リールの窓 ------------------------------------------------------------ */
@@ -859,7 +878,7 @@
   }
 }
 
-/* 疑似連の「NEXT ×2」 */
+/* 疑似連（止まりかけて、また回る）の「まだ止まらない！ 2 回目」 */
 .fxs-next {
   position: absolute;
   left: 50%;
@@ -880,22 +899,40 @@
 }
 
 .fxs-next b {
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 900;
-  letter-spacing: 3px;
-}
-
-.fxs-next i {
-  font-style: normal;
-  font-size: 16px;
-  color: var(--cl);
 }
 
 .fxs-next em {
   font-style: normal;
-  font-size: 24px;
+  font-size: 17px;
   font-weight: 900;
   color: #ffe08a;
+}
+
+/* 先バレの回の印（窓の右上に、結果が出るまで残す） */
+.fxs-tag {
+  position: absolute;
+  right: 8px;
+  top: 7px;
+  z-index: 4;
+  display: none;
+  padding: 2px 10px 3px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  color: #fff;
+  background: linear-gradient(180deg, #ff7a3d, #d92a1c);
+  box-shadow:
+    0 0 0 1.5px #fff,
+    0 3px 8px rgba(0, 0, 0, 0.45);
+  transform: rotate(4deg);
+}
+
+.fxs.is-sure .fxs-tag {
+  display: block;
 }
 
 .fxs-glass {
@@ -1031,6 +1068,92 @@
     0 0 28px rgba(255, 236, 170, 0.95);
 }
 
+/* ---- オリパの合図（先バレ・復活） ------------------------------------------- */
+
+/* 先バレ「当たり確定！」（カードの中心に叩きつける） */
+.fxs-sure,
+.fxs-revive {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--fxs-center, 318px);
+  height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fxs-sure-in,
+.fxs-revive-in {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  white-space: nowrap;
+  opacity: 0;
+}
+
+.fxs-sure-in::before {
+  content: '';
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  top: -12%;
+  bottom: -12%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(4, 6, 16, 0.8), rgba(4, 6, 16, 0) 70%);
+}
+
+.fxs-sure .fxa-txt {
+  --stroke: #5a0a0a;
+  --fill: linear-gradient(180deg, #ffffff 20%, #ffe08a 60%, #ff8a3d 100%);
+  font-size: 62px;
+}
+
+.fxs-sure small {
+  margin-top: 6px;
+  padding: 3px 14px 4px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 900;
+  background: rgba(8, 10, 24, 0.85);
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.8);
+}
+
+/* 先バレの光: 窓のまわりにだけ 1 回差す（全面は光らせない。点滅もさせない） */
+.fxs-pohyun {
+  position: absolute;
+  border-radius: 16px;
+  opacity: 0;
+  box-shadow:
+    0 0 0 3px rgba(255, 244, 204, 0.95),
+    0 0 26px 8px rgba(255, 122, 61, 0.75),
+    inset 0 0 30px rgba(255, 170, 90, 0.5);
+}
+
+/* 復活の前の暗転（プチュン）。1 回だけ、ゆっくり落として、ゆっくり戻す */
+.fxs-dark {
+  position: absolute;
+  inset: 0;
+  z-index: 11;
+  opacity: 0;
+  background: #02030a;
+}
+
+.fxs-revive {
+  z-index: 12;
+}
+
+.fxs-revive .fxa-txt {
+  --stroke: #3b2600;
+  --fill: linear-gradient(180deg, #fffbe6 0%, #ffe08a 35%, #f5c542 60%, #ff8a3d 100%);
+  font-size: 84px;
+  letter-spacing: 4px;
+}
+
 /* ---- 結果 ------------------------------------------------------------------ */
 
 /* 当たりの言葉（窓のすぐ上に飛び出す） */
@@ -1042,6 +1165,7 @@
   align-items: center;
   white-space: nowrap;
   transform: translate(-50%, -100%);
+  transform-origin: 50% 100%;
 }
 
 .fxs-hero .fxa-txt {

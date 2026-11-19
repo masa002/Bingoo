@@ -1,14 +1,16 @@
 import { Rng } from '../../core/rng'
-import { makePlan, schedule, timing, type Beat, type BeatKind, type Plan, type Tier } from '../../core/show'
+import { makePlan, schedule, timing, type Beat, type BeatKind, type MachineStyle, type Plan, type Tier } from '../../core/show'
 import { registerGallery, type GalleryItem } from '../gallery'
+import { MACHINE_STYLES } from '../landing'
 import type { Timeline } from '../runtime'
-import { DRAW_VARIANTS, DrawMachine, type DrawVariant } from './draw'
+import { TIER_WORD } from '../theme'
+import { DrawMachine } from './draw'
 
 // 大画面の抽選機の見本（URL に ?gallery を付けて開く）。
 // 段階ごとの通し（core/show.ts の makePlan → schedule で毎回ちがう計画）と、要素ごとの見本を並べる
 
 const GROUP = '大画面: 抽選機'
-const VARIANT_NAME: Readonly<Record<DrawVariant, string>> = {
+const VARIANT_NAME: Readonly<Record<MachineStyle, string>> = {
   reel: 'スロットリール型',
   stack: 'カードめくり型',
   flap: 'パタパタ型',
@@ -94,7 +96,7 @@ function sample(
   label: string,
   beats: Beat[],
   plan: Plan,
-  o: { revealAt: number; tier: Tier; push?: number; variant?: DrawVariant },
+  o: { revealAt: number; tier: Tier; push?: number; variant?: MachineStyle },
 ): GalleryItem {
   return item(id, label, async (host, tl) => {
     const m = new DrawMachine(host, { speed: tl.speed, variant: o.variant })
@@ -103,7 +105,7 @@ function sample(
   })
 }
 
-const TIER_LABEL = ['青（静か）', '緑（CHANCE）', '赤（激アツ）', '金（BINGO CHANCE・PUSH 待ちのあと公開）'] as const
+const TIER_LABEL = ['青（静か）', `緑（${TIER_WORD[1]}）`, `赤（${TIER_WORD[2]}）`, `金（${TIER_WORD[3]}・PUSH 待ちのあと公開）`] as const
 
 registerGallery(
   // ---- 段階ごとの通し（毎回ちがう計画と型） ----
@@ -116,7 +118,7 @@ registerGallery(
   ),
 
   // ---- 型ごと（赤の計画で、型を固定） ----
-  ...DRAW_VARIANTS.map((variant) =>
+  ...MACHINE_STYLES.map((variant) =>
     item(`variant-${variant}`, `型: ${VARIANT_NAME[variant]}（赤の計画）`, async (host, tl) => {
       const m = new DrawMachine(host, { speed: tl.speed, variant })
       await drawOnce(tl, m, 2, seedRng(variant))
@@ -127,7 +129,7 @@ registerGallery(
   // ---- 要素ごとの見本 ----
   sample(
     'steps',
-    'ステップアップ 5 段（青 → 金）',
+    'ビンゴ期待度の目盛り 5 段（★ が増える。青 → 金）',
     [
       beat(0, 'appear', 0),
       beat(300, 'spin', 0),
@@ -143,7 +145,7 @@ registerGallery(
   ),
   sample(
     'pseudo',
-    '疑似連 3 回（止まりかけ → NEXT ×2・×3・×4）',
+    '疑似連 3 回（止まりかけ →「まだ止まらない！」2・3・4 回目）',
     [
       beat(0, 'appear', 0),
       beat(300, 'spin', 0),
@@ -174,7 +176,7 @@ registerGallery(
   ),
   sample(
     'cutin',
-    'カットイン 3 色（緑 CHANCE・赤 激アツ・金 BINGO CHANCE）',
+    `カットイン 3 色（緑「${TIER_WORD[1]}」・赤「${TIER_WORD[2]}」・金「${TIER_WORD[3]}」）`,
     [
       beat(0, 'appear', 0),
       beat(300, 'spin', 0),

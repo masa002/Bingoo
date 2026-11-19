@@ -2,13 +2,14 @@ import { bgm } from './bgm'
 import { engine } from './engine'
 import { drawSfx } from './sfx-draw'
 import { eventSfx } from './sfx-events'
+import { oripaSfx } from './sfx-oripa'
 import { questSfx } from './sfx-quest'
 import { spinSfx } from './sfx-spin'
-import type { DrawSfx, EventSfx, QuestSfx, SpinSfx } from './types'
+import type { DrawSfx, EventSfx, OripaSfx, QuestSfx, SpinSfx } from './types'
 
-export type Sfx = DrawSfx & EventSfx & SpinSfx & QuestSfx
+export type Sfx = DrawSfx & EventSfx & SpinSfx & QuestSfx & OripaSfx
 
 // 演出のコードはこの sfx と bgm だけを呼ぶ。実装は this に頼らない関数で書く（ここで合成するため）
-export const sfx: Sfx = { ...drawSfx, ...eventSfx, ...spinSfx, ...questSfx }
+export const sfx: Sfx = { ...drawSfx, ...eventSfx, ...spinSfx, ...questSfx, ...oripaSfx }
 export { bgm, engine }
 export type { BgmScene, GaraponVoice } from './types'

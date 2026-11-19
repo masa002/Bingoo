@@ -1,5 +1,6 @@
 import { bgm, engine, sfx, type BgmScene } from '../audio'
 import { LETTERS } from '../core/card'
+import { TIER_WORD } from '../core/show'
 import type { Player } from '../core/game'
 import type { Clock } from '../demo/clock'
 import { Particles, RAINBOW } from '../fx/particles'
@@ -10,7 +11,7 @@ import { playLastOneGarapon } from '../fx/stage/lastone'
 import { MoleQuestStage } from '../fx/stage/quest'
 import type { LocalHub } from '../net/hub'
 import type { Msg, MsgOf, PrizeEntry, Totals } from '../net/protocol'
-import { countUp, esc, fit, fmt, h, q } from './dom'
+import { countUp, esc, fit, fmt, h, q, tierGuide } from './dom'
 
 // 会場の大画面（1920×1080 で組んで縮小表示する）。抽選機・イベント・ダブルチャンスの演出は fx/ の部品で、
 // この画面は HUD・結果・会場ビュー・番号の盤と、メッセージから部品への振り分けを受け持つ。音（PA）はこの画面だけが鳴らす
@@ -177,6 +178,12 @@ export class StageView {
         <div class="rcp-count"><b>0</b> / ${fmt(m.size)} 人</div>
         <p>右のスマホ枠の「参加する」を押してください</p>
         <p class="muted">主催の「次へ」で受付を締め切り、抽選を始めます</p>
+        <div class="rcp-guide">
+          <h3>演出の見方</h3>
+          <p>色が熱いほど、その番号でビンゴやリーチが出やすくなります（外れることもあります）。大画面は会場の誰かの話、スマホはあなたのカードの話です。</p>
+          <ol class="tier-guide">${tierGuide(TIER_WORD, '静か')}</ol>
+          <p>虹は、出た画面の持ち主が必ず当たります。</p>
+        </div>
       </div>`)
   }
 

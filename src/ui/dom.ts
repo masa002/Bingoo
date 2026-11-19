@@ -1,3 +1,5 @@
+import { TIER_NAME, TIER_SHAPE } from '../core/show'
+
 export function h<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', html = ''): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag)
   if (className) el.className = className
@@ -26,6 +28,11 @@ export function fit(el: HTMLElement, width: number, height: number): void {
 }
 
 export const fmt = (n: number): string => n.toLocaleString('ja-JP')
+
+// 演出の見方（色 → 何が起きそうか）の一覧の中身。色だけで伝えないよう、形と色の名前も並べる
+export function tierGuide(words: readonly string[], quiet: string): string {
+  return TIER_NAME.map((name, t) => `<li data-t="${t}"><i>${TIER_SHAPE[t]}</i><b>${name}</b><span>${t === 0 ? quiet : words[t]}</span></li>`).join('')
+}
 
 export function esc(text: string): string {
   return text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)

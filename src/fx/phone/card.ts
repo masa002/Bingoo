@@ -14,7 +14,7 @@ import { Timeline, el, escapeHtml, prefersReducedMotion } from '../runtime'
 //   await card.stamp(7)
 //
 // 演出の途中のマスは setMarks で上書きせず、演出が終わったときに最新の状態で描き直す。
-// 下の小さな部品（play / settle / shake / sparkBurst / ring / boxIn / MOLE_SVG）は aori.ts でも使う
+// 下の小さな部品（play / settle / shake / sparkBurst / ring / boxIn / MOLE_SVG）は、スマホのほかの演出（aori.ts・spin.ts・quest.ts）でも使う
 
 export interface CardMarks {
   waiting?: readonly number[] // リーチで、あと 1 つのマス

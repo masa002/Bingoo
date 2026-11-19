@@ -1,5 +1,5 @@
 /* 大画面の抽選機（draw.ts）。座標は 1920×1080 の大画面のまま書く。
-   z-index: 背景の光 1〜2、STEP 4、減光 8、カードまわり 10、群予告 13、テロップ 14、PUSH 16、カットイン 18、粒子 60。
+   z-index: 背景の光 1〜2、期待度の目盛り 4、減光 8、カードまわり 10、群予告 13、テロップ 14、PUSH 16、カットイン 18、粒子 60。
    根（.fxd）は z-index も transform も持たない（子の重なりを host にそのまま並べるため）。
    光過敏への配慮: 繰り返す光は 1 秒に 3 回より遅く、回る縞は 40 秒で 1 回転、赤は点滅させない */
 
@@ -137,7 +137,7 @@
   }
 }
 
-/* ---- STEP の列（下から STEP 1 → 上へ STEP 5） -------------------------- */
+/* ---- ビンゴ期待度の目盛り（下から ★ 1 つ → 上へ ★ 5 つ） ----------------- */
 
 .fxd-steps {
   position: absolute;
@@ -146,6 +146,26 @@
   width: 250px;
   height: 492px;
   z-index: 4;
+}
+
+/* 何の目盛りかを、必ず見出しで添える */
+.fxd-steps-title {
+  position: absolute;
+  left: 0;
+  top: -58px;
+  padding: 6px 22px 7px;
+  border-radius: 999px;
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: #e8ecff;
+  background: linear-gradient(180deg, #1b2459, #0d1433);
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, var(--h) 60%, #2a3570),
+    0 0 18px color-mix(in srgb, var(--h) 30%, transparent);
+  transition: box-shadow 0.4s;
 }
 
 .fxd-gauge {
@@ -200,22 +220,32 @@
   transform: skewX(10deg);
 }
 
-.fxd-step i {
+/* ★ の数が期待度（上の段ほど多い） */
+.fxd-step b {
+  font-size: 25px;
+  line-height: 1;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+
+/* 段階の形（色だけに頼らない）。★ の列と紛れないよう、丸い札に入れる */
+.fxd-step em {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-left: auto;
+  border-radius: 50%;
   font-style: normal;
   font-size: 22px;
-  letter-spacing: 2px;
+  line-height: 1;
+  background: rgba(4, 6, 16, 0.4);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35);
 }
 
-.fxd-step b {
-  font-size: 50px;
-  line-height: 1;
-}
-
-.fxd-step em {
-  margin-left: auto;
-  font-style: normal;
-  font-size: 36px;
-  line-height: 1;
+.fxd-step em:empty {
+  visibility: hidden;
 }
 
 .fxd-step.on {
@@ -509,8 +539,8 @@
   bottom: 34px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 26px;
+  gap: 8px;
+  padding: 6px 20px;
   border-radius: 999px;
   background: linear-gradient(180deg, var(--hl), var(--h) 40%, var(--hd));
   box-shadow:
@@ -524,13 +554,14 @@
 
 .fxd-badge i {
   font-style: normal;
-  font-size: 28px;
+  font-size: 26px;
   line-height: 1.2;
 }
 
+/* 段階の言葉（「ビンゴが出るかも！」など）。カードの幅に収める */
 .fxd-badge b {
-  font-size: 28px;
-  letter-spacing: 2px;
+  font-size: 27px;
+  letter-spacing: 0;
   line-height: 1.2;
 }
 
@@ -1084,7 +1115,7 @@
   font-size: 52px;
 }
 
-/* ---- 捨て札・NEXT・心電図 ----------------------------------------------- */
+/* ---- 捨て札・「まだ止まらない！」・心電図 ---------------------------------- */
 
 .fxd-next {
   position: absolute;
@@ -1094,14 +1125,14 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 6px 26px 6px 34px;
+  padding: 8px 22px 8px 34px;
   border-radius: 999px;
   background: linear-gradient(180deg, #ffffff, #dfe6ff);
   color: #0b1024;
-  font-size: 56px;
+  font-size: 48px;
   font-weight: 900;
   font-style: italic;
-  letter-spacing: 2px;
+  letter-spacing: 0;
   white-space: nowrap;
   box-shadow:
     0 0 0 5px var(--h),
@@ -1115,16 +1146,10 @@
   opacity: 1;
 }
 
-.fxd-next i {
-  font-style: normal;
-  font-size: 40px;
-  color: var(--hd);
-}
-
 .fxd-next em {
   font-style: normal;
-  font-size: 38px;
-  padding: 0 14px;
+  font-size: 34px;
+  padding: 2px 14px;
   border-radius: 12px;
   background: var(--h);
   color: #fff;
@@ -1316,11 +1341,11 @@
   display: flex;
   align-items: center;
   gap: 18px;
-  padding: 4px 48px 4px 20px;
+  padding: 6px 48px 6px 20px;
   border-radius: 999px;
   background: linear-gradient(180deg, #fff8dc 0%, #ffe08a 30%, #f5c542 55%, #c8900f 100%);
   color: #1a1240;
-  font-size: 70px;
+  font-size: 58px;
   font-weight: 900;
   font-style: italic;
   letter-spacing: 4px;
@@ -1340,6 +1365,25 @@
   opacity: 1;
   visibility: visible;
   animation: fxd-push var(--pp, 1s) ease-in-out infinite;
+}
+
+/* だれが何をすると公開されるかを、ボタンの名前の上に書く */
+.fxd-push p {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.fxd-push small {
+  font-size: 24px;
+  font-style: normal;
+  letter-spacing: 1px;
+  line-height: 1.2;
+}
+
+.fxd-push b {
+  line-height: 1;
 }
 
 .fxd-push span {
@@ -1384,7 +1428,7 @@
   }
 }
 
-/* ---- カットイン（緑 CHANCE・赤 激アツ・金 BINGO CHANCE） ----------------- */
+/* ---- カットイン（段階の言葉: リーチが増えるかも・ビンゴが出るかも！・ビンゴが出そう！） ---- */
 
 .fxd-cut {
   position: absolute;
@@ -1490,24 +1534,20 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 26px;
+  gap: 18px;
   margin-right: 400px;
-  font-size: 132px;
+  /* 言葉は 8〜9 文字。右の結果パネル（x 1270〜）にかからない幅に収める */
+  font-size: 100px;
   font-weight: 900;
   font-style: italic;
-  letter-spacing: 6px;
+  letter-spacing: 1px;
   line-height: 1;
   white-space: nowrap;
 }
 
-.fxd-cut[data-t='3'] .fxd-cut-txt {
-  font-size: 108px;
-  letter-spacing: 2px;
-}
-
 .fxd-cut-txt em {
   font-style: normal;
-  font-size: 80px;
+  font-size: 60px;
   color: var(--ce);
   text-shadow: 0 4px 0 rgba(0, 0, 0, 0.4);
 }
@@ -1524,7 +1564,7 @@
 /* 縁取りは後ろの別の層に描く（グラデーションの文字に縁を重ねないため） */
 .fxd-cut-word .o {
   color: transparent;
-  -webkit-text-stroke: 16px rgba(0, 0, 0, 0.8);
+  -webkit-text-stroke: 14px rgba(0, 0, 0, 0.8);
 }
 
 .fxd-cut-word .f {

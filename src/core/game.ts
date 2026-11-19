@@ -46,7 +46,6 @@ export interface CellChange {
   cells: Map<number, number> // 人 → 変わったマス
   newReach: number
   newDouble: number
-  lostReach: number
 }
 
 // 全員のカードと抽選の列。純粋な計算だけで、通信も描画も知らない
@@ -245,7 +244,7 @@ export class Game {
   // 全員確定（虹玉）: まだ上がっていない全員のカードで、マスを 1 つ開ける。
   // ビンゴが完成するマスは避け、いちばんそろうマスを選ぶ（ここで大量にビンゴが出ると景品が一気に尽きるため）
   applyWild(rng: Rng): CellChange {
-    const change: CellChange = { cells: new Map(), newReach: 0, newDouble: 0, lostReach: 0 }
+    const change: CellChange = { cells: new Map(), newReach: 0, newDouble: 0 }
     for (const p of this.players) {
       if (p.bingoDraw !== null) continue
       let best = -1

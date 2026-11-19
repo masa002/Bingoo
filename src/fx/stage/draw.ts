@@ -1,47 +1,48 @@
 import './draw.css'
 import { bgm, sfx } from '../../audio'
-import type { Beat, BeatKind, Plan } from '../../core/show'
+import { pickStyle, type Beat, type Plan } from '../../core/show'
+import { FLIP_EASING, MACHINE, flapMs, flipPlan, maStopMs, pseudoPlan, reelRun, slotOf, stopMs, type ReelRun } from '../landing'
 import { Particles } from '../particles'
 import { Timeline, el, escapeHtml, prefersReducedMotion, replay } from '../runtime'
-import { GOLD, TIER_COLOR, TIER_SHAPE, TIER_WORD, type Tier } from '../theme'
+import { GOLD, HEAT_LABEL, TIER_COLOR, TIER_SHAPE, TIER_WORD, type MachineStyle, type Tier } from '../theme'
 
 // 大画面の抽選機（1920×1080 の大画面に重ねて使う）。
 // 通常の抽選は 青・緑・赤・金 の 4 段階（会場全体の熱）。虹（全員確定）は events.ts の別イベント。
+// この画面が答える問いは 1 つ: 「この番号で、会場にビンゴが出そうか」。オリパと同じで、色がそのまま答えの言葉になる
+// （TIER_WORD: リーチが増えるかも → ビンゴが出るかも！ → ビンゴが出そう！）。左の目盛りには「ビンゴ期待度」の見出しを付ける
 //
 // 使い方:
 //   const m = new DrawMachine(stageRoot)
 //   m.setPool(まだ出ていない番号)
-//   m.start(beats, plan)        // core/show.ts の schedule() が作った拍の列どおりに溜める
+//   m.start(beats, plan, style) // core/show.ts の schedule() が作った拍の列どおりに溜める。style は権威が決めた型
 //   m.awaitPush()               // 金のとき、MC の PUSH を待つ表示
 //   await m.reveal(23, tier)    // 番号を見せる（着地・バースト）
 //   m.reset()                   // 次の抽選の前に戻す（めくった札は捨て札として飛んでいく）
 //
 // 見た目:
 //   - カードはトレカ（オリパ）風。段階の色の金属の縁とホロの光沢。裏は紺地に金の箔押しで、goldEdge では全面が金の箔になる。
-//   - 回し方の型を plan と乱数で毎回選ぶ（同じ型は 3 回続けない。熱い回ほどカードめくり型が出やすい）:
+//   - 回し方の型は毎回変わる（権威が core/show.ts の pickStyle で決めて、スマホにも同じ型を配る。渡されなければここで選ぶ）:
 //       reel  スロットリール型: 縦に流れるリール。速さに応じてモーションブラーをかける
 //       stack カードめくり型: 山札の一番上を弾き飛ばして、下の札をめくる
 //       flap  パタパタ型: 駅の発車標のような反転フラップ
 //   - 登場のしかた・カットインの向きと角度・放射光の本数と向き・群予告の向きも毎回変える。
+//   - リールの動かし方と着地の時刻の数字は fx/landing.ts にある（スマホの手元の演出と同じ数字を使い、番号が見える瞬間をそろえる）。
 //
-// 配置（大画面の座標）: STEP の列 x 52〜300、カード 400×560（中心 810, 440）、テロップ y 726〜786、PUSH は中心 (810, 748)。
-// z-index: 背景の光 1〜2、STEP 4、減光 8、カードまわり 10、群予告 13、テロップ 14、PUSH 16、カットイン 18、粒子 60。
+// 配置（大画面の座標）: 期待度の目盛り x 52〜300、カード 400×560（中心 810, 440）、テロップ y 726〜786、PUSH は中心 (810, 748)。
+// z-index: 背景の光 1〜2、期待度の目盛り 4、減光 8、カードまわり 10、群予告 13、テロップ 14、PUSH 16、カットイン 18、粒子 60。
 // 根（.fxd）は z-index も transform も持たないので、子は host の重なりの中にそのまま並ぶ。
-
-export type DrawVariant = 'reel' | 'stack' | 'flap'
-export const DRAW_VARIANTS: readonly DrawVariant[] = ['reel', 'stack', 'flap']
 
 export interface DrawMachineOptions {
   speed?: number
-  variant?: DrawVariant // 回し方の型を固定する（ギャラリーなど）。省略すると plan と乱数で毎回選ぶ
+  variant?: MachineStyle // 回し方の型を固定する（ギャラリーなど）。省略すると start に渡された型（なければ pickStyle）
   reducedMotion?: boolean // 動きを減らした表示にする。省略すると OS の設定（prefers-reduced-motion）に従う
 }
 
 const CX = 810 // カードの中心（大画面の座標）
 const CY = 440
 const ROW = 200 // リールの 1 コマの高さ
-const STEP_X = 189 // STEP の札の中心 x
-const stepY = (i: number): number => 236 + (4 - i) * 102 // STEP 1 が下、STEP 5 が上
+const STEP_X = 189 // 期待度の目盛りの札の中心 x
+const stepY = (i: number): number => 236 + (4 - i) * 102 // ★ 1 つが下、★ 5 つが上
 
 // リールのコマ: 1〜75 = 番号、0 = 空白、-1 = ？、-2 = 回る前の「--」
 type Code = number
@@ -51,8 +52,6 @@ const DASH = -2
 
 const LIGHT: Readonly<Record<Tier, string>> = { 0: '#93c5fd', 1: '#86efac', 2: '#fca5a5', 3: '#fff4cc', 4: '#ffffff' }
 const ALL = Array.from({ length: 75 }, (_, i) => i + 1)
-// 次の拍までの持ち時間を測るときに数えない拍（重ねて出すもの・会場ビュー用）
-const PASSIVE: ReadonlySet<BeatKind> = new Set<BeatKind>(['telop', 'sea', 'holdChange'])
 
 const clamp = (x: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, x))
 const rand = (lo: number, hi: number): number => lo + Math.random() * (hi - lo)
@@ -224,11 +223,10 @@ interface ViewCtx {
   flick(c: Code, v: number): void
 }
 
+// 型ごとの全速・止めるときに進めるコマ数・着地までの遅れは、fx/landing.ts の MACHINE にある
 interface SpinView {
-  readonly kind: DrawVariant
+  readonly kind: MachineStyle
   readonly root: HTMLElement // カードの窓の中に入る
-  readonly rate: number // 全速（コマ / ms）
-  readonly minStop: number // 止めるときに最低限進めるコマ数
   render(s: Strip): void // 毎フレーム
   cross(to: Code, v: number): void // 中央のコマが替わった
   sync(s: Strip): void // 今の位置の表示に即座に合わせる
@@ -240,8 +238,6 @@ interface SpinView {
 class ReelView implements SpinView {
   readonly kind = 'reel' as const
   readonly root = el('div', 'fxd-reel')
-  readonly rate = 0.018
-  readonly minStop = 1.5 // 上下 1.4 コマまでは窓から見えるので、それより先で止める番号を差し込む
   private readonly rows: { node: HTMLElement; i: number; c: Code }[] = []
   private blur = -1
 
@@ -295,7 +291,7 @@ class ReelView implements SpinView {
   }
 
   lockDelay(): number {
-    return 0
+    return MACHINE.reel.lock
   }
 }
 
@@ -303,8 +299,6 @@ class ReelView implements SpinView {
 class StackView implements SpinView {
   readonly kind = 'stack' as const
   readonly root = el('div', 'fxd-stack')
-  readonly rate = 0.011
-  readonly minStop = 1
   private shown: Code = Number.NaN
 
   constructor(private readonly ctx: ViewCtx) {}
@@ -335,7 +329,7 @@ class StackView implements SpinView {
   }
 
   lockDelay(): number {
-    return 110 // 弾いた札がどいて、下の番号が見えるまで
+    return MACHINE.stack.lock // 弾いた札がどいて、下の番号が見えるまで
   }
 }
 
@@ -347,8 +341,6 @@ class FlapView implements SpinView {
     'fxd-flap',
     '<div class="fxd-fl top"><div></div></div><div class="fxd-fl bot"><div></div></div><div class="fxd-fl ftop"><div></div></div><div class="fxd-fl fbot"><div></div></div><i class="fxd-hinge"></i>',
   )
-  readonly rate = 0.0135
-  readonly minStop = 1
   private readonly halves: HTMLElement[]
   private shown: Code = DASH
   private last = 120
@@ -378,7 +370,7 @@ class FlapView implements SpinView {
     const from = this.shown
     this.settle()
     this.shown = to
-    const d = clamp(0.95 / Math.max(v, 1e-4), 70, 240)
+    const d = flapMs(v)
     this.last = d
     this.put(0, to)
     this.put(1, from)
@@ -410,7 +402,7 @@ class FlapView implements SpinView {
   }
 
   lockDelay(): number {
-    return this.last // 最後の 1 枚が落ちきるまで
+    return this.last // 最後の 1 枚が落ちきるまで（止まる瞬間の 1 枚なので、MACHINE.flap.lock と同じ長さになる）
   }
 }
 
@@ -419,8 +411,8 @@ class FlapView implements SpinView {
 const HTML = `
 <div class="fxd-aura"></div>
 <div class="fxd-rays"></div>
-<div class="fxd-steps"><div class="fxd-gauge"></div>${[0, 1, 2, 3, 4]
-  .map((i) => `<div class="fxd-step" style="top:${(4 - i) * 102}px;width:${[196, 204, 212, 222, 236][i]}px"><i>STEP</i><b>${i + 1}</b><em></em></div>`)
+<div class="fxd-steps"><div class="fxd-steps-title">${HEAT_LABEL.venue}</div><div class="fxd-gauge"></div>${[0, 1, 2, 3, 4]
+  .map((i) => `<div class="fxd-step" style="top:${(4 - i) * 102}px;width:${[196, 204, 212, 222, 236][i]}px"><b>${'★'.repeat(i + 1)}</b><em></em></div>`)
   .join('')}</div>
 <div class="fxd-dim"></div>
 <div class="fxd-stage">
@@ -450,11 +442,11 @@ const HTML = `
   <div class="fxd-flyers"></div>
   <div class="fxd-ghosts"></div>
   <svg class="fxd-ecg" viewBox="0 0 600 60" preserveAspectRatio="none"><path class="base"></path><path class="line" pathLength="1"></path></svg>
-  <div class="fxd-next"><b>NEXT</b><i>▶</i><em></em></div>
+  <div class="fxd-next"><b>まだ止まらない！</b><em></em></div>
 </div>
 <div class="fxd-flock"></div>
 <div class="fxd-telop"><b></b></div>
-<div class="fxd-push"><span></span><b>PUSH!</b></div>
+<div class="fxd-push"><span></span><p><small>司会がボタンを押すと公開</small><b>PUSH!</b></p></div>
 <div class="fxd-cut"><div class="fxd-cut-rot">
   <div class="fxd-cut-band"><i></i><i></i><i></i><div class="fxd-cut-txt"><em></em><span class="fxd-cut-word"><b class="o"></b><b class="f"></b></span><em></em></div></div>
   <div class="fxd-cut-slash"></div>
@@ -468,12 +460,12 @@ export class DrawMachine {
   private readonly fx: Particles
   private readonly strip: Strip
   private readonly ctx: ViewCtx
-  private readonly views: Partial<Record<DrawVariant, SpinView>> = {}
+  private readonly views: Partial<Record<MachineStyle, SpinView>> = {}
   private view: SpinView
-  private readonly forced: DrawVariant | undefined
+  private readonly forced: MachineStyle | undefined
   private readonly rmOption: boolean | undefined
   private rm = false
-  private readonly history: DrawVariant[] = []
+  private readonly history: MachineStyle[] = [] // 最近の型（自分で選ぶときに、同じ型を 3 回続けないため）
   private pool: number[] = []
   private lastPick = 0
 
@@ -588,29 +580,24 @@ export class DrawMachine {
     this.pool = numbers.filter((n) => Number.isInteger(n) && n >= 1 && n <= 75)
   }
 
-  // variant を渡すと、その型で回す（権威が決めた型。スマホの手元の演出と着地の時刻をそろえるため）
-  start(beats: readonly Beat[], plan: Plan, variant?: DrawVariant): void {
+  // style を渡すと、その型で回す（権威が決めた型。スマホの手元の演出と着地の時刻をそろえるため）。
+  // 渡されなければ、権威と同じ選び方（core/show.ts の pickStyle）でここで選ぶ
+  start(beats: readonly Beat[], plan: Plan, style?: MachineStyle): void {
     if (this.dead) return
     this.retire()
     this.clear()
     this.applyMotion()
-    this.mount(this.forced ?? variant ?? this.choose(plan))
+    const kind = this.forced ?? style ?? pickStyle(plan, this.history, Math.random)
+    this.history.push(kind)
+    if (this.history.length > 4) this.history.shift()
+    this.mount(kind)
     this.dir = Math.random() < 0.5 ? 1 : -1
     this.rays.style.setProperty('--ray', `${360 / pickOne([12, 16, 20, 24])}deg`)
     this.rays.classList.toggle('rev', Math.random() < 0.5)
     this.el.dataset.phase = 'run'
     // 拍ごとに「次の拍までの持ち時間」を渡す（詰めて並んだ回でも、部品が次の拍にかぶらないように縮める）
     const list = [...beats].sort((a, b) => a.at - b.at)
-    list.forEach((b, i) => {
-      let slot = 1200
-      for (let j = i + 1; j < list.length; j++) {
-        if (!PASSIVE.has(list[j].kind)) {
-          slot = list[j].at - b.at
-          break
-        }
-      }
-      this.tl.at(b.at, () => this.beat(b, slot))
-    })
+    list.forEach((b, i) => this.tl.at(b.at, () => this.beat(b, slotOf(list, i))))
   }
 
   awaitPush(): void {
@@ -637,11 +624,13 @@ export class DrawMachine {
     this.back.classList.remove('has-q')
     this.setHeat(t, true)
     this.appeared = true
+    // 着地までの時間は fx/landing.ts の数字で決める（スマホの手元の演出も、同じ数字で同じ時刻に着地する）
     if (this.isBack || this.rm) {
       // 裏（金の箔・待機中）からは、めくって見せる。金は一瞬ためてから
+      const f = flipPlan(t, this.rm)
       this.strip.jumpTo(n)
       this.view.sync(this.strip)
-      if (t >= 3 && this.isBack && !this.rm) {
+      if (f.squeeze > 0 && this.isBack) {
         // ぐっと縮めてから、めくりながら弾ける
         this.anim(
           this.pop,
@@ -649,15 +638,13 @@ export class DrawMachine {
           340,
           { composite: 'add', easing: 'ease-in-out' },
         )
-        await tl.wait(120)
+        await tl.wait(f.squeeze)
         if (tl.cancelled) return
       }
-      this.flipTo(false, t >= 3 ? 420 : 340)
-      await tl.wait(this.rm ? 0 : t >= 3 ? 220 : 180)
+      this.flipTo(false, f.ms)
+      await tl.wait(f.land - f.squeeze)
     } else {
-      const moving = this.strip.v > 0.0015
-      const T = moving ? clamp(260 + this.strip.v * 14000, 300, 520) : 280
-      await this.stopOn(n, T, this.view.minStop)
+      await this.stopOn(n, stopMs(this.strip.v), MACHINE[this.view.kind].minStop)
       if (tl.cancelled) return
       const d = this.view.lockDelay()
       if (d > 0) await tl.wait(d)
@@ -772,7 +759,7 @@ export class DrawMachine {
       this.view.sync(this.strip)
       return
     }
-    this.strip.run(this.view.rate, 150)
+    this.run(reelRun.spin(this.view.kind))
   }
 
   // 保留変化: 枠の色が上がり、札の帯が弾む
@@ -817,34 +804,34 @@ export class DrawMachine {
     if (k >= 4 && !this.rm) this.fx.rise(40, this.colors(t), STEP_X - 110, STEP_X + 110, stepY(k) + 20)
   }
 
-  // 疑似連: 減速して「？」で止まりかけ → 「NEXT」 → 回り直す。回数が増えるほど派手に
+  // 疑似連: 減速して「？」で止まりかけ →「まだ止まらない！」→ 回り直す。回数が増えるほど派手に
   private async pseudo(i: number, slot: number): Promise<void> {
     const tl = this.tl
-    const d = clamp(slot, 380, 1100)
+    const p = pseudoPlan(this.view.kind, i, slot)
     if (this.rm) {
       this.strip.jumpTo(Q)
       this.view.sync(this.strip)
     } else if (!this.isBack) {
-      await this.stopQ(d * 0.34)
+      await this.stopQ(p.stop)
       if (tl.cancelled) return
     }
     sfx.pseudoStop()
-    await tl.wait(d * 0.14)
+    await tl.wait(p.pause)
     if (tl.cancelled) return
-    this.showNext(i, d * 0.52)
+    this.showNext(i, p.show)
     sfx.nextChime()
     this.punch(0.05 + 0.02 * i)
     this.burst(CX, CY + 150, 24 + 16 * i, this.heat, 7 + i)
     if (i >= 1) this.ring(420 + 50 * i, 0, 4)
-    await tl.wait(d * 0.18)
+    await tl.wait(p.rest)
     if (tl.cancelled || this.rm || this.isBack) return
-    this.strip.run(this.view.rate * (1.1 + 0.1 * i), 90)
+    this.run(p.resume)
   }
 
   private showNext(i: number, d: number): void {
     this.next.dataset.i = String(Math.min(2, i))
     const em = this.next.querySelector('em')
-    if (em) em.textContent = `×${i + 2}`
+    if (em) em.textContent = `${i + 2} 回目`
     this.next.classList.add('on')
     this.solo(
       this.next,
@@ -861,7 +848,7 @@ export class DrawMachine {
     this.tl.at(d, () => this.next.classList.remove('on'))
   }
 
-  // カットイン: 斜めの帯が走り抜ける（緑 CHANCE、赤 激アツ、金 BINGO CHANCE）
+  // カットイン: 斜めの帯が走り抜ける（緑「リーチが増えるかも」、赤「ビンゴが出るかも！」、金「ビンゴが出そう！」）
   private cutin(t: Tier, slot: number): void {
     const word = TIER_WORD[t] || TIER_WORD[1]
     const d = clamp(slot, 560, 980)
@@ -976,7 +963,7 @@ export class DrawMachine {
   // 減速（青）: 公開に向けてリールがゆっくりになる
   private decel(slot: number): void {
     if (this.rm || this.isBack) return
-    this.strip.run(0.0034, Math.max(60, slot / 2.6))
+    this.run(reelRun.decel(slot))
   }
 
   // ライザー: 音が上がり続ける間、光・ホロ・立ち上る粒子を強め、リールも速める
@@ -986,7 +973,7 @@ export class DrawMachine {
     this.el.style.setProperty('--rise', `${Math.round(this.tl.ms(dur))}ms`)
     this.el.classList.add('is-rise')
     if (this.rm) return
-    if (!this.isBack) this.strip.run(this.view.rate * 1.3, dur / 2.5)
+    if (!this.isBack) this.run(reelRun.riser(this.view.kind, dur))
     const colors = this.heat >= 3 ? GOLD : this.colors(this.heat)
     for (let at = 0; at < dur; at += 130) {
       const k = at / dur
@@ -999,7 +986,7 @@ export class DrawMachine {
     const period = 625 // 96 bpm
     sfx.heartbeat(96 * this.speed, this.tl.ms(dur))
     this.holding = true
-    if (!this.rm && !this.isBack) this.strip.run(0.0042, 260)
+    if (!this.rm && !this.isBack) this.run(reelRun.heartbeat())
     const n = Math.max(1, Math.ceil((dur - 80) / period))
     this.ecg.querySelector('.base')?.setAttribute('d', ecgPath(n, period, dur))
     this.ecg.querySelector('.line')?.setAttribute('d', ecgPath(n, period, dur))
@@ -1052,7 +1039,7 @@ export class DrawMachine {
       this.strip.jumpTo(Q)
       this.view.sync(this.strip)
     } else {
-      void this.stopQ(clamp(dur * 0.4, 160, 320))
+      void this.stopQ(maStopMs(dur))
     }
   }
 
@@ -1178,42 +1165,17 @@ export class DrawMachine {
 
   // ---- 部品 -----------------------------------------------------------------
 
-  private make(kind: DrawVariant): SpinView {
+  private make(kind: MachineStyle): SpinView {
     return kind === 'stack' ? new StackView(this.ctx) : kind === 'flap' ? new FlapView(this.ctx) : new ReelView(this.ctx)
   }
 
-  private mount(kind: DrawVariant): void {
+  private mount(kind: MachineStyle): void {
     const view = (this.views[kind] ??= this.make(kind))
     this.view = view
     this.el.dataset.variant = kind
     this.win.replaceChildren(view.root)
     this.strip.jumpTo(DASH)
     view.sync(this.strip)
-  }
-
-  // 型を選ぶ。熱い回ほどカードめくり型、静かな回ほどパタパタ型が出やすい。同じ型は 3 回続けない
-  private choose(plan: Plan): DrawVariant {
-    if (this.forced) return this.forced
-    const shown = plan.upgrade || plan.tier >= 3 ? 3 : plan.tier
-    const w: Record<DrawVariant, number> = {
-      reel: [4, 4, 3, 3][shown],
-      stack: [3, 3, 4, 5][shown],
-      flap: [3, 3, 2, 2][shown],
-    }
-    const recent = this.history.slice(-2)
-    if (recent.length === 2 && recent[0] === recent[1]) w[recent[0]] = 0
-    let r = Math.random() * DRAW_VARIANTS.reduce((s, k) => s + w[k], 0)
-    let kind: DrawVariant = 'reel'
-    for (const k of DRAW_VARIANTS) {
-      r -= w[k]
-      if (r < 0) {
-        kind = k
-        break
-      }
-    }
-    this.history.push(kind)
-    if (this.history.length > 4) this.history.shift()
-    return kind
   }
 
   private pick(): Code {
@@ -1235,7 +1197,7 @@ export class DrawMachine {
 
   // 「？」で止める。上（次に来るコマ）は空白にしておく（公開のとき、そこを通って番号が下りてくる）
   private stopQ(T: number): Promise<void> {
-    return this.stopOn(Q, T, this.view.minStop, BLANK)
+    return this.stopOn(Q, T, MACHINE[this.view.kind].minStop, BLANK)
   }
 
   // カードめくり型: 一番上の札を弾き飛ばす（左右交互に、少しずつ角度を変える）
@@ -1341,8 +1303,13 @@ export class DrawMachine {
     this.isBack = back
     this.card.style.transform = `rotateY(${this.angle}deg)`
     this.anim(this.card, [{ transform: `rotateY(${from}deg)` }, { transform: `rotateY(${this.angle}deg)` }], ms, {
-      easing: 'cubic-bezier(.35,1.3,.55,1)',
+      easing: FLIP_EASING,
     })
+  }
+
+  // 一定の速さに向かう（数字は fx/landing.ts の reelRun）
+  private run(r: ReelRun): void {
+    this.strip.run(r.v, r.ease)
   }
 
   // 前の抽選の名残を消して、裏向きの札が待つ状態にする（演出はすべて止める）

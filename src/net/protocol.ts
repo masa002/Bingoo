@@ -65,14 +65,11 @@ export type Msg =
   // 全員確定（虹玉）。durationMs が大画面の演出の長さ、resultAt に各自の結果を見せる
   | {
       type: 'eventPlay'
-      kind: 'wild'
       durationMs: number
       resultAt: number
       total: number
       newReach: number
       newDouble: number
-      hit: number
-      lostReach: number
       me: MyCellChange // 本人宛て
       totals: Totals
     }
@@ -85,7 +82,8 @@ export type Msg =
       style: MachineStyle // 抽選機の回し方の型（大画面とスマホで着地をそろえる）
       timing: Timing
       beats: Beat[]
-      personal: { tier: Tier; waiting: string[] } // 本人宛て
+      // 本人宛て。sure は先バレ（オリパの「ポヒュン」）: この番号は自分のカードに必ず当たる。始まった瞬間に知らせる
+      personal: { tier: Tier; waiting: string[]; sure: boolean }
     }
   | { type: 'awaitPush'; drawNo: number; ms: number }
   | {

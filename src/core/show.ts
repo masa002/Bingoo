@@ -7,7 +7,12 @@ import type { Rng } from './rng'
 // 段階: 0 青 / 1 緑 / 2 赤 / 3 金 / 4 虹
 export type Tier = 0 | 1 | 2 | 3 | 4
 export const TIER_NAME = ['青', '緑', '赤', '金', '虹'] as const
-export const TIER_WORD = ['', 'CHANCE', '激アツ', 'BINGO CHANCE', '確定'] as const
+// 段階の言葉は「誰に、何が起きそうか」をそのまま言う（パチンコの「CHANCE」「激アツ」「STEP」は、知らない人に伝わらなかった）。
+// オリパと同じで、色がそのまま結果の言葉になる。大画面は会場の誰かの話、スマホは自分のカードの話
+export const TIER_WORD = ['', 'リーチが増えるかも', 'ビンゴが出るかも！', 'ビンゴが出そう！', '全員確定'] as const
+export const MY_TIER_WORD = ['', '当たるかも？', 'リーチかビンゴかも！', 'ビンゴのチャンス！', 'ビンゴ確定！'] as const
+// 期待度の目盛りの見出し（何の目盛りかを必ず添える）
+export const HEAT_LABEL = { venue: 'ビンゴ期待度', mine: 'あなたの期待度' } as const
 export const TIER_SHAPE = ['●', '▲', '◆', '★', '✦'] as const
 
 export type FactClass = 'QUIET' | 'WARM' | 'HOT' | 'BINGO' | 'PREM'
@@ -97,8 +102,9 @@ export function timing(tier: Tier, size: number): Timing {
 export type MachineStyle = 'reel' | 'stack' | 'flap'
 const STYLES: readonly MachineStyle[] = ['reel', 'stack', 'flap']
 
-// 熱い回ほどカードめくり型、静かな回ほどパタパタ型が出やすい。同じ型は 3 回続けない
-export function pickStyle(plan: Plan, recent: readonly MachineStyle[], rng: Rng): MachineStyle {
+// 熱い回ほどカードめくり型、静かな回ほどパタパタ型が出やすい。同じ型は 3 回続けない。
+// rand は 0 以上 1 未満の乱数（権威は種つきの乱数、ギャラリーは Math.random を渡す）
+export function pickStyle(plan: Plan, recent: readonly MachineStyle[], rand: () => number): MachineStyle {
   const shown = plan.upgrade || plan.tier >= 3 ? 3 : plan.tier
   const w: Record<MachineStyle, number> = {
     reel: [4, 4, 3, 3][shown],
@@ -107,7 +113,12 @@ export function pickStyle(plan: Plan, recent: readonly MachineStyle[], rng: Rng)
   }
   const last = recent.slice(-2)
   if (last.length === 2 && last[0] === last[1]) w[last[0]] = 0
-  return STYLES[rng.weighted(STYLES.map((k) => w[k]))]
+  let r = rand() * STYLES.reduce((s, k) => s + w[k], 0)
+  for (const k of STYLES) {
+    r -= w[k]
+    if (r < 0) return k
+  }
+  return 'reel'
 }
 
 export interface Plan {

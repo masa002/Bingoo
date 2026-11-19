@@ -207,7 +207,7 @@ export class DemoAuthority {
     if (this.forcedNumber !== null || this.forcedTier !== null) return null // 操作パネルで指定中は任せる
     if (this.wilds < 1 && d >= 5 && g.winners.length === 0) {
       const projected = d + g.estimateDrawsUntil(left, this.paceRng, 6)
-      if (projected > this.target + 3) return { kind: 'wild', ratio: 1 }
+      if (projected > this.target + 3) return { kind: 'wild', ratio: 0 } // 虹玉は ratio を使わない
     }
     if (this.moles >= MAX_MOLES || g.reachHolders() === 0) return null
     const next = g.nextInDeck()
@@ -230,14 +230,11 @@ export class DemoAuthority {
     const durationMs = 11500
     this.hub.publish({
       type: 'eventPlay',
-      kind: 'wild',
       durationMs,
       resultAt: 8200,
       total: g.players.filter((p) => p.bingoDraw === null).length,
       newReach: change.newReach,
       newDouble: change.newDouble,
-      hit: change.cells.size,
-      lostReach: 0,
       me: { cell, label: cell === null ? '' : labelOf(g.me.cells[cell]), reachBefore: before, reachAfter: g.me.reach },
       totals: this.totals(),
     })
@@ -348,10 +345,14 @@ export class DemoAuthority {
       if (gen !== this.generation) return
     }
     const plan = makePlan(tier, this.rng)
-    const style = pickStyle(plan, this.styles, this.rng)
+    const style = pickStyle(plan, this.styles, () => this.rng.next())
     this.styles = [...this.styles.slice(-3), style]
     const t = timing(tier, g.size)
-    const personal = { tier: personalTier(this.myOutcome(imp), this.rng), waiting: this.myWaiting() }
+    const outcome = this.myOutcome(imp)
+    const myTier = personalTier(outcome, this.rng)
+    // 先バレ: 自分のカードに当たる回の 4 回に 1 回は、始まった瞬間に「当たり確定」を知らせる（虹はそれ自体が確定の合図）
+    const sure = outcome !== 'none' && myTier < 4 && this.rng.chance(0.25)
+    const personal = { tier: myTier, waiting: this.myWaiting(), sure }
     this.forcedNumber = null
     this.forcedTier = null
     const drawNo = g.drawCount + 1

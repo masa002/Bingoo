@@ -1,5 +1,5 @@
 import { registerGallery } from '../gallery'
-import { playAllKakutei, playFinalBall, playLastOne, playMole } from './events'
+import { playAllKakutei, playFinalBall } from './events'
 
 // 大画面の特別なイベントのギャラリー。後ろに大画面の配置（HUD・抽選機・結果・会場・番号の盤）を薄く描いて、
 // 重ねたときの見え方も確かめられるようにする
@@ -26,17 +26,6 @@ function backdrop(host: HTMLElement): HTMLElement {
   return host
 }
 
-const ANIMALS = ['しろくま', 'ぱんだ', 'きつね', 'うさぎ', 'ねこ', 'たぬき', 'ぺんぎん', 'こあら', 'らっこ', 'かわうそ', 'はりねずみ', 'あるぱか', 'ふくろう', 'いるか']
-
-// 仮の参加者（me 番目が自分、wins に入っている番目が当たり）
-function entrants(n: number, me: number, wins: readonly number[]): { name: string; isMe: boolean; win: boolean }[] {
-  return Array.from({ length: n }, (_, i) => ({
-    name: ANIMALS[(i * 5) % ANIMALS.length] + String((i * 137 + 42) % 1000).padStart(3, '0'),
-    isMe: i === me,
-    win: wins.includes(i),
-  }))
-}
-
 registerGallery(
   {
     id: 'stage-event-kakutei',
@@ -53,20 +42,6 @@ registerGallery(
     play: (host, tl) => playAllKakutei(backdrop(host), { speed: tl.speed, total: 30, newReach: 6, newDouble: 1 }),
   },
   {
-    id: 'stage-event-mole',
-    group: G,
-    label: 'モグラ（BAD）リーチが消えた人あり',
-    screen: 'stage',
-    play: (host, tl) => playMole(backdrop(host), { speed: tl.speed, total: 1000, hit: 128, lostReach: 41 }),
-  },
-  {
-    id: 'stage-event-mole-safe',
-    group: G,
-    label: 'モグラ（BAD）リーチは全員無事',
-    screen: 'stage',
-    play: (host, tl) => playMole(backdrop(host), { speed: tl.speed, total: 300, hit: 12, lostReach: 0 }),
-  },
-  {
     id: 'stage-event-final',
     group: G,
     label: 'この1球で景品が尽きる！（残り 3 個）',
@@ -79,19 +54,5 @@ registerGallery(
     label: 'この1球で景品が尽きる！（残り 14 個）',
     screen: 'stage',
     play: (host, tl) => playFinalBall(backdrop(host), { speed: tl.speed, prizesLeft: 14 }),
-  },
-  {
-    id: 'stage-event-lastone',
-    group: G,
-    label: 'ラストワン争奪（27 人で 1 個）',
-    screen: 'stage',
-    play: (host, tl) => playLastOne(backdrop(host), { speed: tl.speed, prizes: 1, entrants: entrants(27, 4, [19]) }),
-  },
-  {
-    id: 'stage-event-lastone-me',
-    group: G,
-    label: 'ラストワン争奪（7 人で 2 個・自分が当たる）',
-    screen: 'stage',
-    play: (host, tl) => playLastOne(backdrop(host), { speed: tl.speed, prizes: 2, entrants: entrants(7, 2, [2, 5]) }),
   },
 )
