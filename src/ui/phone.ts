@@ -40,7 +40,7 @@ const GUIDE_HTML = `
   <h4>色の見方</h4>
   <p>次の番号が <b>あなたのカード</b>にありそうなほど、青 → 緑 → 赤 → 金に変わります（なかった、もあります）。</p>
   <ol class="tier-guide">${tierGuide(MY_TIER_WORD, TIER_QUIET)}</ol>
-  <p>画面のふちの色は <b>会場</b>のぶん。大画面と同じ色です。</p>
+  <p>色は <b>あなただけ</b>のもの。となりの人とは違います。虹が出たら、ビンゴ確定！</p>
 </div>`
 
 interface MyChallenge {
@@ -131,9 +131,6 @@ export class PhoneView {
         if (!this.joined) this.join() // 受付を締め切ったら自動で参加する
         this.syncSpeed()
         return this.onScheduled(m)
-      case 'awaitPush':
-        this.spin.awaitPush()
-        return
       case 'numberRevealed':
         void this.onRevealed(m)
         return
@@ -366,7 +363,7 @@ export class PhoneView {
     this.renderCard()
   }
 
-  // ---- 抽選（大画面と同じ拍で溜め、番号は大画面と同時に開く） ------------------
+  // ---- 抽選（自分の段階で溜め、番号は大画面と同時に出る） ----------------------
 
   private onScheduled(m: MsgOf<'drawScheduled'>): void {
     const drawn = new Set(this.history)
@@ -375,10 +372,10 @@ export class PhoneView {
       tier: m.personal.tier,
       waiting: m.personal.waiting,
       pool: Array.from({ length: 75 }, (_, i) => i + 1).filter((n) => !drawn.has(n)),
-      beats: m.beats,
-      revealAt: m.timing.reveal,
-      venueTier: m.tier,
-      venueVariant: m.style, // 大画面と同じ型の着地に合わせる
+      beats: m.personal.beats,
+      revealAt: m.revealAt,
+      venueBeats: m.beats, // 番号が見える瞬間を、大画面の抽選機に合わせる
+      venueVariant: m.style,
     })
   }
 

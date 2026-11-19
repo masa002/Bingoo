@@ -139,7 +139,6 @@ export function motionAt(beats: readonly Beat[], t: number, style: MachineStyle)
         halt()
         break
       case 'goldEdge':
-      case 'freeze':
         back = true
         break
     }

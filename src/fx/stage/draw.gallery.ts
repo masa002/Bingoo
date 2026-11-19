@@ -1,13 +1,13 @@
 import { Rng } from '../../core/rng'
-import { makePlan, schedule, timing, type Beat, type BeatKind, type MachineStyle, type Plan, type Tier } from '../../core/show'
+import { drawTiming, venueBeats, type MachineStyle } from '../../core/show'
 import { registerGallery, type GalleryItem } from '../gallery'
 import { MACHINE_STYLES } from '../landing'
 import type { Timeline } from '../runtime'
-import { TIER_QUIET, TIER_WORD } from '../theme'
 import { DrawMachine } from './draw'
 
 // 大画面の抽選機の見本（URL に ?gallery を付けて開く）。
-// 段階ごとの通し（core/show.ts の makePlan → schedule で毎回ちがう計画）と、要素ごとの見本を並べる
+// 抽選機は、どの回も同じ調子で「回る → ゆっくりになる → 番号が出る → 結果の言葉」。
+// 変わるのは、回し方の型（3 つ）と、着地のあとの強さ（結果で決まる 3 つ）だけなので、その組み合わせを並べる
 
 const GROUP = '大画面: 抽選機'
 const VARIANT_NAME: Readonly<Record<MachineStyle, string>> = {
@@ -16,6 +16,12 @@ const VARIANT_NAME: Readonly<Record<MachineStyle, string>> = {
   flap: 'パタパタ型',
 }
 
+type Power = 0 | 1 | 2
+const POWERS: readonly Power[] = [0, 1, 2]
+const POWER_NAME = ['何もなし', 'リーチが増えた', 'ビンゴが出た（金）'] as const
+// 着地のあとにカードの帯へ出す結果の言葉の見本（組み込みでは、ui 側がその回の結果から作って渡す）
+const RESULT = ['ビンゴなし', 'リーチ +12 人', 'ビンゴ 3 人！'] as const
+
 // 見本の番号の候補（すでに 12 個出た体で）
 function poolOf(rng: Rng): number[] {
   return rng.shuffle(Array.from({ length: 75 }, (_, i) => i + 1)).slice(12)
@@ -23,69 +29,22 @@ function poolOf(rng: Rng): number[] {
 
 const seedRng = (name: string): Rng => new Rng(`draw-gallery/${name}/${Math.random()}`)
 
-const beat = (at: number, kind: BeatKind, heat: Tier, extra: Partial<Beat> = {}): Beat => ({ at, kind, heat, ...extra })
-
-const planOf = (tier: Tier, o: Partial<Plan> = {}): Plan => ({
-  tier,
-  steps: 0,
-  stepTiers: [],
-  pseudo: 0,
-  cutin: null,
-  telop: null,
-  group: false,
-  upgrade: false,
-  ...o,
-})
-
-// 着地のあとにカードの帯へ出す結果の言葉の見本（組み込みでは、ui 側がその回の結果から作って渡す）
-const RESULT = ['ビンゴなし', 'リーチ +12 人', 'リーチ +28 人', 'ビンゴ 1 人！'] as const
-
 // 見本が終わっても最後の画面を残し、ギャラリーで次を選んだ（tl が取り消された）ときに片付ける
 async function linger(tl: Timeline, m: DrawMachine): Promise<void> {
   await tl.wait(10 * 60 * 1000)
   m.destroy()
 }
 
-// 計画を作って公開まで通す。金は PUSH 待ちに入ってから公開する。取り消されたら false
-async function drawOnce(tl: Timeline, m: DrawMachine, tier: Tier, rng: Rng, o: { size?: number; pushWait?: number } = {}): Promise<boolean> {
-  const plan = makePlan(tier, rng)
-  const t = timing(tier, o.size ?? 1000)
+// 1 回の抽選を、回り出しから着地まで通す。reveal は番号が出る時刻（省略すると本番と同じ長さ）。取り消されたら false
+async function drawOnce(tl: Timeline, m: DrawMachine, power: Power, rng: Rng, o: { reveal?: number; result?: string } = {}): Promise<boolean> {
+  const reveal = o.reveal ?? drawTiming(1000, power === 2).reveal
   const pool = poolOf(rng)
   m.reset()
   m.setPool(pool)
-  m.start(schedule(plan, t), plan)
-  await tl.wait(t.reveal)
+  m.start(venueBeats(reveal))
+  await tl.wait(reveal)
   if (tl.cancelled) return false
-  if (t.push) {
-    m.awaitPush()
-    await tl.wait(o.pushWait ?? 1600)
-    if (tl.cancelled) return false
-  }
-  await m.reveal(rng.pick(pool), tier, { result: RESULT[Math.min(3, tier)] })
-  return !tl.cancelled
-}
-
-// 手で組んだ拍の列を流して、revealAt で公開する（push を渡すと、PUSH 待ちをその長さだけ見せてから公開）
-async function custom(
-  tl: Timeline,
-  m: DrawMachine,
-  beats: Beat[],
-  plan: Plan,
-  o: { revealAt: number; tier: Tier; push?: number },
-): Promise<boolean> {
-  const rng = seedRng('custom')
-  const pool = poolOf(rng)
-  m.reset()
-  m.setPool(pool)
-  m.start(beats, plan)
-  await tl.wait(o.revealAt)
-  if (tl.cancelled) return false
-  if (o.push !== undefined) {
-    m.awaitPush()
-    await tl.wait(o.push)
-    if (tl.cancelled) return false
-  }
-  await m.reveal(rng.pick(pool), o.tier, { result: RESULT[Math.min(3, o.tier)] })
+  await m.reveal(rng.pick(pool), { result: o.result ?? RESULT[power], power })
   return !tl.cancelled
 }
 
@@ -93,233 +52,66 @@ function item(id: string, label: string, play: (host: HTMLElement, tl: Timeline)
   return { id: `stage-draw-${id}`, group: GROUP, label, screen: 'stage', play }
 }
 
-// 拍の列だけを差し替える見本
-function sample(
-  id: string,
-  label: string,
-  beats: Beat[],
-  plan: Plan,
-  o: { revealAt: number; tier: Tier; push?: number; variant?: MachineStyle },
-): GalleryItem {
-  return item(id, label, async (host, tl) => {
-    const m = new DrawMachine(host, { speed: tl.speed, variant: o.variant })
-    await custom(tl, m, beats, plan, o)
-    await linger(tl, m)
-  })
-}
-
-const TIER_LABEL = [`青（${TIER_QUIET}）`, `緑（${TIER_WORD[1]}）`, `赤（${TIER_WORD[2]}）`, `金（${TIER_WORD[3]}・司会の合図を待って発表）`] as const
-
 registerGallery(
-  // ---- 段階ごとの通し（毎回ちがう計画と型） ----
-  ...([0, 1, 2, 3] as const).map((tier) =>
-    item(`tier${tier}`, `最初から最後まで: ${TIER_LABEL[tier]}`, async (host, tl) => {
-      const m = new DrawMachine(host, { speed: tl.speed })
-      await drawOnce(tl, m, tier, seedRng(`tier${tier}`))
-      await linger(tl, m)
-    }),
+  // ---- 型 × 着地の強さ（本番と同じ長さで、最初から最後まで） ----
+  ...MACHINE_STYLES.flatMap((variant) =>
+    POWERS.map((power) =>
+      item(`${variant}-${power}`, `${VARIANT_NAME[variant]}: ${POWER_NAME[power]}「${RESULT[power]}」`, async (host, tl) => {
+        const m = new DrawMachine(host, { speed: tl.speed, variant })
+        await drawOnce(tl, m, power, seedRng(`${variant}-${power}`))
+        await linger(tl, m)
+      }),
+    ),
   ),
 
-  // ---- 型ごと（赤の計画で、型を固定） ----
-  ...MACHINE_STYLES.map((variant) =>
-    item(`variant-${variant}`, `型: ${VARIANT_NAME[variant]}（赤の回）`, async (host, tl) => {
-      const m = new DrawMachine(host, { speed: tl.speed, variant })
-      await drawOnce(tl, m, 2, seedRng(variant))
-      await linger(tl, m)
-    }),
-  ),
-
-  // ---- 要素ごとの見本 ----
-  sample(
-    'steps',
-    '会場の期待度の目盛り（4 段。色が上がると、下から順に点く）',
-    [
-      beat(0, 'appear', 0),
-      beat(300, 'spin', 0),
-      beat(700, 'step', 0, { index: 0, tier: 0 }),
-      beat(1300, 'step', 1, { index: 1, tier: 1 }),
-      beat(1900, 'step', 2, { index: 2, tier: 2 }),
-      beat(2500, 'step', 2, { index: 3, tier: 2 }),
-      beat(3100, 'step', 3, { index: 4, tier: 3 }),
-      beat(3900, 'riser', 3, { dur: 1200 }),
-    ],
-    planOf(3, { steps: 5, stepTiers: [0, 1, 2, 2, 3] }),
-    { revealAt: 5100, tier: 3 },
-  ),
-  sample(
-    'pseudo',
-    '止まりかけて、また回る ×3（「まだ止まらない！」2・3・4 回目）',
-    [
-      beat(0, 'appear', 0),
-      beat(300, 'spin', 0),
-      beat(380, 'holdChange', 2, { tier: 2 }),
-      beat(1000, 'pseudo', 2, { index: 0 }),
-      beat(2000, 'pseudo', 2, { index: 1 }),
-      beat(3000, 'pseudo', 2, { index: 2 }),
-      beat(4100, 'heartbeat', 2, { dur: 1400 }),
-      beat(5500, 'ma', 2, { dur: 800 }),
-    ],
-    planOf(2, { pseudo: 3 }),
-    { revealAt: 6300, tier: 2 },
-  ),
-  sample(
-    'pseudo-flap',
-    '止まりかけて、また回る ×3（パタパタ型）',
-    [
-      beat(0, 'appear', 0),
-      beat(300, 'spin', 0),
-      beat(380, 'holdChange', 2, { tier: 2 }),
-      beat(1000, 'pseudo', 2, { index: 0 }),
-      beat(2000, 'pseudo', 2, { index: 1 }),
-      beat(3000, 'pseudo', 2, { index: 2 }),
-      beat(4200, 'decel', 2),
-    ],
-    planOf(2, { pseudo: 3 }),
-    { revealAt: 4800, tier: 2, variant: 'flap' },
-  ),
-  sample(
-    'cutin',
-    `カットイン 3 色（緑「${TIER_WORD[1]}」・赤「${TIER_WORD[2]}」・金「${TIER_WORD[3]}」）`,
-    [
-      beat(0, 'appear', 0),
-      beat(300, 'spin', 0),
-      beat(800, 'cutin', 1, { tier: 1 }),
-      beat(2100, 'cutin', 2, { tier: 2 }),
-      beat(3400, 'cutin', 3, { tier: 3 }),
-      beat(4700, 'decel', 3),
-    ],
-    planOf(3, { cutin: 3 }),
-    { revealAt: 5300, tier: 3 },
-  ),
-  sample(
-    'group',
-    'カードの群れが飛ぶ（青 → 赤）',
-    [
-      beat(0, 'appear', 0),
-      beat(300, 'spin', 0),
-      beat(700, 'group', 0),
-      beat(2100, 'holdChange', 2, { tier: 2 }),
-      beat(2200, 'group', 2),
-      beat(3600, 'decel', 2),
-    ],
-    planOf(2, { group: true }),
-    { revealAt: 4200, tier: 2, variant: 'stack' },
-  ),
-  sample(
-    'telop',
-    'テロップ 3 つ（控えめ → 強め）',
-    [
-      beat(0, 'appear', 0),
-      beat(300, 'spin', 0),
-      beat(450, 'telop', 0, { text: '次の番号に注目！' }),
-      beat(2700, 'holdChange', 1, { tier: 1 }),
-      beat(2800, 'telop', 1, { text: '会場がざわついてきた…' }),
-      beat(5300, 'holdChange', 2, { tier: 2 }),
-      beat(5400, 'telop', 2, { text: 'これは来るか…!?' }),
-      beat(7400, 'decel', 2),
-    ],
-    planOf(2, { telop: 'これは来るか…!?' }),
-    { revealAt: 8000, tier: 2 },
-  ),
-  sample(
-    'decel',
-    'ゆっくりになる → 番号が出る（青）',
-    [beat(0, 'appear', 0), beat(300, 'spin', 0), beat(2000, 'decel', 0)],
-    planOf(0),
-    { revealAt: 2600, tier: 0 },
-  ),
-  sample(
-    'riser',
-    '音が上がっていく → 番号が出る（緑）',
-    [beat(0, 'appear', 0), beat(300, 'spin', 0), beat(380, 'holdChange', 1, { tier: 1 }), beat(2800, 'riser', 1, { dur: 1200 })],
-    planOf(1),
-    { revealAt: 4000, tier: 1 },
-  ),
-  sample(
-    'heartbeat',
-    'ドキドキ → 間（ま）→ 番号が出る（赤）',
-    [
-      beat(0, 'appear', 0),
-      beat(300, 'spin', 0),
-      beat(380, 'holdChange', 2, { tier: 2 }),
-      beat(1600, 'heartbeat', 2, { dur: 1400 }),
-      beat(3000, 'ma', 2, { dur: 800 }),
-    ],
-    planOf(2),
-    { revealAt: 3800, tier: 2 },
-  ),
-  sample(
-    'gold',
-    '金のカード → 音が上がる → 間（ま）→ 司会の合図待ち → 発表',
-    [
-      beat(0, 'appear', 0),
-      beat(300, 'spin', 0),
-      beat(380, 'holdChange', 3, { tier: 3 }),
-      beat(1400, 'goldEdge', 3),
-      beat(2000, 'riser', 3, { dur: 1800 }),
-      beat(3800, 'ma', 3, { dur: 600 }),
-      beat(4400, 'push', 3),
-    ],
-    planOf(3),
-    { revealAt: 4400, tier: 3, push: 2000 },
-  ),
-  sample(
-    'push',
-    '司会の合図待ち「まもなく発表！」（5 秒。1 秒に 1 回、ゆっくり光る）',
-    [
-      beat(0, 'appear', 0),
-      beat(300, 'spin', 0),
-      beat(800, 'goldEdge', 3),
-      beat(1800, 'ma', 3, { dur: 600 }),
-      beat(2400, 'push', 3),
-    ],
-    planOf(3),
-    { revealAt: 2400, tier: 3, push: 5000 },
-  ),
-  item('lands', '番号が出る瞬間 4 色（青 → 緑 → 赤 → 金。reset して使い回す）', async (host, tl) => {
+  // ---- 着地だけを見比べる・続けて回す・崩れないことの確認 ----
+  item('lands', '着地の強さ 3 つを続けて（何もなし → リーチが増えた → ビンゴが出た。短く回す）', async (host, tl) => {
     const m = new DrawMachine(host, { speed: tl.speed })
-    for (const t of [0, 1, 2, 3] as const) {
-      const beats = [beat(0, 'appear', 0), beat(300, 'spin', 0), beat(1100, 'decel', t)]
-      if (t > 0) beats.push(beat(380, 'holdChange', t, { tier: t }))
-      if (!(await custom(tl, m, beats, planOf(t), { revealAt: 1700, tier: t }))) break
+    const rng = seedRng('lands')
+    for (const power of POWERS) {
+      if (!(await drawOnce(tl, m, power, rng, { reveal: 1700 }))) break
       await tl.wait(2600)
       if (tl.cancelled) break
     }
     await linger(tl, m)
   }),
-  item('repeat', '続けて 8 回（本番と同じ出やすさ。型と入り方が毎回変わる）', async (host, tl) => {
+  item('repeat', '続けて 8 回（型と入り方が毎回変わる。結果はまちまち）', async (host, tl) => {
     const m = new DrawMachine(host, { speed: tl.speed })
     const rng = seedRng('repeat')
     for (let i = 0; i < 8; i++) {
-      const tier = rng.weighted([52, 26, 15, 7]) as Tier
-      if (!(await drawOnce(tl, m, tier, rng, { size: 100, pushWait: 900 }))) break
-      const t = timing(tier, 100)
-      await tl.wait(t.total - t.reveal)
+      const power = rng.weighted([55, 33, 12]) as Power
+      const t = drawTiming(100, power === 2)
+      if (!(await drawOnce(tl, m, power, rng, { reveal: t.reveal }))) break
+      await tl.wait(t.result)
       if (tl.cancelled) break
     }
     await linger(tl, m)
   }),
-  item('speed', '速さの切り替え（×1 → ×3 → ×0.5 → ×1、金の回）', async (host, tl) => {
+  item('long', '長い結果の言葉（「リーチ +1280 人」。帯に収まるまで文字を小さくする）', async (host, tl) => {
+    const m = new DrawMachine(host, { speed: tl.speed })
+    await drawOnce(tl, m, 1, seedRng('long'), { reveal: 1700, result: 'リーチ +1280 人' })
+    await linger(tl, m)
+  }),
+  item('speed', '速さの切り替え（×1 → ×3 → ×0.5 → ×1、ビンゴが出た回）', async (host, tl) => {
     const base = tl.speed
     const m = new DrawMachine(host, { speed: base })
     tl.at(1200, () => m.setSpeed(base * 3))
     tl.at(2600, () => m.setSpeed(base * 0.5))
     tl.at(4600, () => m.setSpeed(base))
-    await drawOnce(tl, m, 3, seedRng('speed'))
+    await drawOnce(tl, m, 2, seedRng('speed'))
     await linger(tl, m)
   }),
-  item('interrupt', '途中で発表（ためている最中に発表しても崩れない）', async (host, tl) => {
+  item('interrupt', '途中で発表（回っている最中に発表しても崩れない）', async (host, tl) => {
     const m = new DrawMachine(host, { speed: tl.speed })
     const rng = seedRng('interrupt')
-    const plan = makePlan(3, rng)
     const pool = poolOf(rng)
     m.setPool(pool)
-    m.start(schedule(plan, timing(3, 1000)), plan)
+    m.start(venueBeats(drawTiming(1000, false).reveal))
     await tl.wait(1500)
-    if (!tl.cancelled) await m.reveal(rng.pick(pool), 3)
+    if (!tl.cancelled) await m.reveal(rng.pick(pool), { result: RESULT[1], power: 1 })
     await linger(tl, m)
   }),
-  item('reduced', '動きを減らす設定（色と文字だけ。赤の回）', async (host, tl) => {
+  item('reduced', '動きを減らす設定（色と文字だけ。ビンゴが出た回）', async (host, tl) => {
     const m = new DrawMachine(host, { speed: tl.speed, reducedMotion: true })
     await drawOnce(tl, m, 2, seedRng('reduced'))
     await linger(tl, m)

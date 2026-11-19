@@ -168,7 +168,8 @@ input {
   width: 1920px;
   height: 1080px;
   overflow: hidden;
-  background: radial-gradient(ellipse at 42% 40%, #16204a 0%, #070b1a 60%, #04060d 100%);
+  /* 明るいところは、抽選機のカードの後ろ（x 640, y 440）に置く */
+  background: radial-gradient(ellipse at 33% 40%, #16204a 0%, #070b1a 60%, #04060d 100%);
 }
 
 .st-hud {
@@ -560,7 +561,7 @@ input {
   z-index: 60;
 }
 
-/* 抽選の「間（ま）」では、抽選機の外のパネルも少し暗くして画面全体で息をのむ */
+/* イベントの間（.stage.is-event）に、抽選機の外のパネルを暗く・薄くするときの変わり方 */
 .st-hud,
 .st-result,
 .st-venue,
@@ -568,10 +569,6 @@ input {
   transition:
     filter 0.3s,
     opacity 0.3s;
-}
-
-.stage:has(.fxd.is-ma) :is(.st-hud, .st-result, .st-venue, .st-board) {
-  filter: brightness(0.8);
 }
 
 .st-overlay {
@@ -1042,8 +1039,7 @@ input {
   min-height: 2.9em;
 }
 
-.hc-next,
-.hc-push {
+.hc-next {
   width: 100%;
   border-radius: 12px;
   font-weight: 900;
@@ -1059,27 +1055,7 @@ input {
   color: var(--primary-ink);
 }
 
-.hc-push {
-  margin-top: 8px;
-  padding: 12px;
-  font-size: 18px;
-  border: 0;
-  background: var(--primary);
-  color: var(--primary-ink);
-}
-
-.hc-push.ready {
-  animation: pushpulse 1s ease-in-out infinite;
-}
-
-@keyframes pushpulse {
-  50% {
-    box-shadow: 0 0 0 6px rgba(245, 197, 66, 0.35);
-  }
-}
-
-.hc-next:disabled,
-.hc-push:disabled {
+.hc-next:disabled {
   background: none;
   border: 2px solid #2a3360;
   color: #55608f;
@@ -1121,7 +1097,6 @@ input {
 
 .hc-speed button,
 .dp-tiers button,
-.dp-kind button,
 .dp-me button,
 .dp-ff button,
 .dp-ev button,
@@ -1134,8 +1109,7 @@ input {
 }
 
 .hc-speed button.on,
-.dp-tiers button.on,
-.dp-kind button.on {
+.dp-tiers button.on {
   background: var(--gold);
   color: #1a1400;
   border-color: var(--gold);
@@ -1296,17 +1270,12 @@ button:disabled {
 }
 
 .dp-tiers,
-.dp-kind,
 .dp-me,
 .dp-ff,
 .dp-ev {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-}
-
-.dp-kind {
-  margin-top: 6px;
 }
 
 .dp-set {

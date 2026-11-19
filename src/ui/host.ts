@@ -3,7 +3,7 @@ import { labelOf } from '../core/card'
 import type { Impact } from '../core/game'
 import { TIER_NAME, TIER_SHAPE, type Tier } from '../core/show'
 import type { Clock } from '../demo/clock'
-import type { DemoAuthority, EventKind, HitKind, Settings } from '../demo/authority'
+import type { DemoAuthority, EventKind, Settings } from '../demo/authority'
 import type { LocalHub } from '../net/hub'
 import type { Msg } from '../net/protocol'
 import { h, q } from './dom'
@@ -17,12 +17,11 @@ const HOST_HTML = `
   <h2>主催コンソール</h2>
   <div class="hc-status">準備中</div>
   <button class="hc-next">次へ ▶</button>
-  <button class="hc-push" disabled>発表する</button>
   <div class="hc-row">
     <label><input type="checkbox" class="hc-sound" checked /> 音</label>
     <button class="hc-new">新しいゲーム</button>
   </div>
-  <p class="hc-keys">キー操作: Space 次へ ／ P 発表する</p>
+  <p class="hc-keys">キー操作: Space 次へ</p>
   <p class="hc-hash"></p>
 </section>
 <details class="dp" open>
@@ -43,19 +42,16 @@ const HOST_HTML = `
   <h4>次の番号 <label class="dp-spoil-label"><input type="checkbox" class="dp-spoil" /> ネタバレ表示</label></h4>
   <div class="dp-grid"></div>
   <p class="dp-legend">数字をクリックで次の番号に指定。ネタバレ: <b class="b">B</b>=ビンゴになる人数 <b class="r">R</b>=リーチになる人数 ★=あなたがビンゴ ●=あなたがリーチ ・=あなたのカードにある</p>
-  <h4>次の演出の段階（大画面）</h4>
-  <div class="dp-tiers">
-    <button data-tier="auto" class="on">自動</button>${[0, 1, 2, 3].map((t) => `<button data-tier="${t}">${TIER_SHAPE[t as Tier]} ${TIER_NAME[t as Tier]}</button>`).join('')}
-  </div>
-  <div class="dp-kind">
-    <button data-kind="any" class="on">どちらでも</button><button data-kind="hit">当たり</button><button data-kind="gase">ガセ</button>
-  </div>
-  <p class="dp-note">選ぶと、その色をうそなく出せる番号が自動で選ばれます。大画面の虹は「全員確定」のときだけです</p>
   <h4>あなたのカード</h4>
   <div class="dp-me">
     <button data-me="hit">次で当てる</button><button data-me="reach">リーチにする</button><button data-me="bingo">次でビンゴ</button>
   </div>
   <p class="dp-note">上位チャレンジ中は、「次でビンゴ」でチャレンジ成功の番号が出ます</p>
+  <h4>次の抽選の、あなたのスマホの色</h4>
+  <div class="dp-tiers">
+    <button data-tier="auto" class="on">自動</button>${[0, 1, 2, 3, 4].map((t) => `<button data-tier="${t}">${TIER_SHAPE[t as Tier]} ${TIER_NAME[t as Tier]}</button>`).join('')}
+  </div>
+  <p class="dp-note">色（期待度）が出るのはスマホだけです。いまのカードでうそになる色は出せません（金はリーチのときだけ、虹はビンゴになる番号のときだけ）</p>
   <h4>進める</h4>
   <div class="dp-ff"><button data-ff="5">5 回進める</button><button data-ff="10">10 回進める</button></div>
   <p class="dp-note">演出なしで番号を進めます。ビンゴが出る番号の手前で止まります</p>
@@ -77,7 +73,6 @@ const HOST_HTML = `
 
 export class HostView {
   private readonly root: HTMLDivElement
-  private pushReady = false
   private hash = ''
 
   constructor(
@@ -100,7 +95,6 @@ export class HostView {
 
   private bind(): void {
     this.$('.hc-next').addEventListener('click', () => this.next())
-    this.$('.hc-push').addEventListener('click', () => this.push())
     this.$<HTMLInputElement>('.hc-auto').addEventListener('change', (e) => {
       this.auth.auto = (e.target as HTMLInputElement).checked
       if (this.auth.auto && (this.auth.holding || (!this.auth.busy && this.auth.phase !== 'over'))) this.next()
@@ -127,11 +121,8 @@ export class HostView {
     this.root.querySelectorAll<HTMLButtonElement>('[data-tier]').forEach((b) =>
       b.addEventListener('click', () => {
         const t = b.dataset.tier === 'auto' ? null : (Number(b.dataset.tier) as Tier)
-        this.auth.setForcedTier(t, this.auth.forcedKind)
+        this.auth.setForcedTier(t)
       }),
-    )
-    this.root.querySelectorAll<HTMLButtonElement>('[data-kind]').forEach((b) =>
-      b.addEventListener('click', () => this.auth.setForcedTier(this.auth.forcedTier, b.dataset.kind as HitKind)),
     )
     this.root.querySelectorAll<HTMLButtonElement>('[data-me]').forEach((b) =>
       b.addEventListener('click', () => {
@@ -156,8 +147,6 @@ export class HostView {
       if (e.code === 'Space') {
         e.preventDefault()
         this.next()
-      } else if (e.key === 'p' || e.key === 'P') {
-        this.push()
       }
     })
   }
@@ -166,13 +155,6 @@ export class HostView {
     engine.unlock()
     sfx.uiTap()
     void this.auth.next()
-  }
-
-  private push(): void {
-    if (!this.pushReady) return
-    this.pushReady = false
-    this.auth.push()
-    this.render()
   }
 
   private on(m: Msg): void {
@@ -211,14 +193,9 @@ export class HostView {
         break
       case 'drawScheduled':
         this.$('.dp-msg').textContent = ''
-        this.status(`抽選中 ${TIER_SHAPE[m.tier]} ${TIER_NAME[m.tier]}`)
-        break
-      case 'awaitPush':
-        this.pushReady = true
-        this.status('「発表する」を押してください（3 秒たつと自動で発表）')
+        this.status('抽選中 — まもなく番号が出ます')
         break
       case 'numberRevealed':
-        this.pushReady = false
         this.status(`${m.label} が出ました（結果を表示中）`)
         break
       case 'prizeTime':
@@ -279,8 +256,6 @@ export class HostView {
     // 終わったら、次に押すのは「新しいゲーム」
     this.$('.hc-new').classList.toggle('primary', phase === 'done')
     this.$('.hc-hash').textContent = this.hash ? `抽選順と景品の並びのハッシュ ${this.hash.slice(0, 16)}…${auth.isTampered ? '（デモ操作で変更あり）' : ''}` : ''
-    this.$<HTMLButtonElement>('.hc-push').disabled = !this.pushReady
-    this.$('.hc-push').classList.toggle('ready', this.pushReady)
     const playing = phase === 'reception' || phase === 'playing'
 
     // 次の番号の盤（ネタバレ表示はデモ専用。本番の主催卓には出さない）
@@ -306,7 +281,6 @@ export class HostView {
       const t = b.dataset.tier === 'auto' ? null : Number(b.dataset.tier)
       b.classList.toggle('on', t === auth.forcedTier)
     })
-    this.root.querySelectorAll<HTMLButtonElement>('[data-kind]').forEach((b) => b.classList.toggle('on', b.dataset.kind === auth.forcedKind))
     this.root.querySelectorAll<HTMLButtonElement>('[data-me], [data-ff], [data-ev]').forEach((b) => (b.disabled = busy || !playing))
   }
 }

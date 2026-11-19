@@ -1,6 +1,6 @@
 import { bgm, engine, sfx, type BgmScene } from '../audio'
 import { LETTERS } from '../core/card'
-import { TIER_QUIET, TIER_WORD } from '../core/show'
+import { MY_TIER_WORD, TIER_QUIET } from '../core/show'
 import type { Player } from '../core/game'
 import type { Clock } from '../demo/clock'
 import { Particles, RAINBOW } from '../fx/particles'
@@ -58,7 +58,6 @@ export class StageView {
   private lastOne: AbortController | null = null
   private lastOneBrief: { close(): void } | null = null
   private timers: number[] = []
-  private cancelBeats: () => void = () => {}
   private drawn = new Set<number>()
   private last = 0
   private scene: BgmScene = 'reception'
@@ -106,9 +105,6 @@ export class StageView {
         return
       case 'drawScheduled':
         return this.onScheduled(m)
-      case 'awaitPush':
-        this.machine.awaitPush()
-        return
       case 'numberRevealed':
         return this.onRevealed(m)
       case 'questBrief':
@@ -204,10 +200,10 @@ export class StageView {
         <div class="rcp-count"><b>0</b> / ${fmt(m.size)} 人</div>
         <p class="rcp-join">スマホの「参加する」を押してね</p>
         <div class="rcp-guide">
-          <h3>色の見方</h3>
-          <p>青 → 緑 → 赤 → 金の順に、ビンゴやリーチが出やすい番号です（はずれることもあります）</p>
-          <ol class="tier-guide">${tierGuide(TIER_WORD, TIER_QUIET)}</ol>
-          <p>大画面の色は <b>会場</b>のぶん、スマホの色は <b>あなたのカード</b>のぶん。虹が出たら、必ず当たり！</p>
+          <h3>スマホの色の見方</h3>
+          <p>次の番号が <b>あなたのカード</b>にありそうなほど、スマホが 青 → 緑 → 赤 → 金に変わります（なかった、もあります）</p>
+          <ol class="tier-guide">${tierGuide(MY_TIER_WORD, TIER_QUIET)}</ol>
+          <p>色が出るのは <b>スマホだけ</b>。虹が出たら、ビンゴ確定！</p>
         </div>
       </div>`)
   }
@@ -329,18 +325,13 @@ export class StageView {
     this.machine.setSpeed(this.clock.speed)
     this.machine.reset()
     this.machine.setPool(Array.from({ length: 75 }, (_, i) => i + 1).filter((n) => !this.drawn.has(n)))
-    this.machine.start(m.beats, m.plan, m.style)
-    // 会場ビュー（デモ専用）は、赤以上の溜めでリーチの人のスマホが光る様子を見せる
-    this.cancelBeats = this.clock.run(
-      m.beats.filter((b) => b.kind === 'sea'),
-      () => this.venue.sea(),
-    )
+    // 大画面は、どの回も同じ調子で回して番号を出す（期待度の色はスマホだけ）
+    this.machine.start(m.beats, m.style)
   }
 
   private onRevealed(m: MsgOf<'numberRevealed'>): void {
-    this.cancelBeats()
     // 番号は、主役のカードが開いた瞬間（着地）に、右の欄・盤・会場ビューにも出す。先に脇で見せない。
-    // カードの帯は、着地のあと結果の言葉に差し替える（「ビンゴが出そう！」のまま残さない）
+    // カードの帯は、着地のあと結果の言葉に差し替える。着地の強さは結果で決める（ビンゴが出た・リーチが増えた・何もなし）
     let shown = false
     const show = () => {
       if (shown) return
@@ -348,7 +339,8 @@ export class StageView {
       window.clearTimeout(this.resultTimer)
       this.showResult(m)
     }
-    void this.machine.reveal(m.n, m.tier, { onLand: show, result: resultWord(m) })
+    const power = m.newBingo + m.challengeWins.length > 0 ? 2 : m.newReach > 0 ? 1 : 0
+    void this.machine.reveal(m.n, { onLand: show, result: resultWord(m), power })
     this.resultTimer = window.setTimeout(show, this.clock.scale(1500)) // 着地の合図が来なかったときの保険
     this.timers.push(this.resultTimer)
   }
@@ -500,7 +492,6 @@ export class StageView {
   }
 
   private cancelAll(): void {
-    this.cancelBeats()
     this.timers.forEach((t) => window.clearTimeout(t))
     this.timers = []
   }
@@ -523,7 +514,7 @@ function resultWord(m: MsgOf<'numberRevealed'>): string {
 // 会場ビュー: 仮想参加者全員のスマホを点で並べる（デモ専用。一人では見られない「会場が光る」様子を見る窓）
 class Venue {
   private readonly ctx: CanvasRenderingContext2D
-  private mode: 'idle' | 'sea' | 'rainbow' = 'idle'
+  private mode: 'idle' | 'rainbow' = 'idle'
   private flashN = 0
   private flashDraw = 0
   private flashUntil = 0
@@ -545,11 +536,6 @@ class Venue {
     this.mode = 'idle'
     this.flashN = 0
     this.refresh()
-  }
-
-  sea(): void {
-    this.mode = 'sea'
-    this.run(5000)
   }
 
   rainbow(): void {
@@ -618,7 +604,7 @@ class Venue {
       } else if (p.bingoDraw !== null) {
         color = '#8a6d1d'
       } else if (p.reach > 0) {
-        color = this.mode === 'sea' ? `rgba(255, 90, 60, ${0.6 + 0.4 * Math.sin(t / 159)})` : '#5c2a20'
+        color = '#5c2a20'
       }
       const x = ox + (k % cols) * pitch + (pitch - dot) / 2
       const y = oy + Math.floor(k / cols) * pitch + (pitch - dot) / 2

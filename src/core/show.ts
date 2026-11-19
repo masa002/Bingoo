@@ -1,103 +1,82 @@
-import type { Impact } from './game'
 import type { Rng } from './rng'
 
-// 演出の方針。「結果が先、演出はあと」: 次の番号の影響（事実）から段階を抽選し、
+// 演出の方針。「結果が先、演出はあと」: 次の番号が自分のカードにとって何を意味するか（事実）から段階を抽選し、
 // 段階から予告の組み合わせと時刻を決める。結果について嘘はつかない（虹は確定のときだけ）。
+//
+// 期待度（色）を出すのはスマホだけ。大画面（会場）には出さない。
+//   - 会場と自分の 2 本を出すと、同じ回に色が食い違う（会場は金なのに自分は青、など）。
+//   - 会場の盛り上がりは、イベント（緊急クエストなど）で作る。
+// 大画面の抽選機は、どの回も同じ調子で回して番号を出し、結果（ビンゴ N 人など）だけを伝える。
 
 // 段階: 0 青 / 1 緑 / 2 赤 / 3 金 / 4 虹
 export type Tier = 0 | 1 | 2 | 3 | 4
 export const TIER_NAME = ['青', '緑', '赤', '金', '虹'] as const
-// 段階の言葉は「誰に、何が起きそうか」をそのまま言う（パチンコの「CHANCE」「激アツ」「STEP」は、知らない人に伝わらなかった）。
-// オリパと同じで、色がそのまま結果の言葉になる。大画面は会場の誰かの話、スマホは自分のカードの話
-// 言葉は、会場で口に出して自然なものにする（説明の書き言葉をそのまま置かない）
-export const TIER_WORD = ['', 'リーチが増えそう', 'ビンゴが出るかも！', 'ビンゴ目前！', '全員確定'] as const
+// 段階の言葉は「自分のカードに、何が起きそうか」をそのまま言う（パチンコの「CHANCE」「激アツ」「STEP」は、知らない人に伝わらなかった）。
+// オリパと同じで、色がそのまま結果の言葉になる。言葉は、会場で口に出して自然なものにする（説明の書き言葉をそのまま置かない）
 export const MY_TIER_WORD = ['', 'あるかも？', 'リーチのチャンス！', 'ビンゴのチャンス！', 'ビンゴ確定！'] as const
-// いちばん下の段階（青）の呼び名。大画面でもスマホでも同じ
+// いちばん下の段階（青）の呼び名
 export const TIER_QUIET = 'まだまだ'
 // 期待度の目盛りの見出し（何の目盛りかを必ず添える）
-export const HEAT_LABEL = { venue: '会場の期待度', mine: 'あなたの期待度' } as const
+export const HEAT_LABEL = 'あなたの期待度'
 export const TIER_SHAPE = ['●', '▲', '◆', '★', '✦'] as const
-
-export type FactClass = 'QUIET' | 'WARM' | 'HOT' | 'BINGO' | 'PREM'
-
-// 大画面の段階の抽選表（％）。会場全体の熱を表す 4 段階で、ガセは溜めの間だけ。
-// 虹は「虹が出た画面の持ち主は必ず当たる」ので、大画面では全員確定のイベントにだけ使う
-export const TIER_TABLE: Readonly<Record<FactClass, readonly number[]>> = {
-  QUIET: [86, 11, 3, 0, 0],
-  WARM: [45, 40, 15, 0, 0],
-  HOT: [10, 40, 42, 8, 0],
-  // 1000 人規模だと中盤以降はほぼ毎回ビンゴが出るので、金（PUSH 待ち）が続きすぎないように抑える
-  BINGO: [6, 22, 42, 30, 0],
-  PREM: [0, 0, 20, 80, 0],
-}
 
 export type PersonalOutcome = 'none' | 'hit' | 'reach' | 'bingo'
 
-// 手元（スマホ）の段階の抽選表（％）。次の番号が自分のカードにとって何を意味するかで決める。
-// 当たらない人にも緑・赤のあおりを少し出し（失敗演出で終わる）、虹は自分がビンゴになるときだけ
+// 段階の抽選表（％）。次の番号が自分のカードにとって何を意味するかで決める。
+//   - 当たらない回にも緑・赤を少し出す（「なかった…」で終わる）
+//   - ビンゴになる回にも青・緑を少し残す（青だから外れ、と先に分からないようにする。「なかった…？ → あった！」で覆る）
+//   - 虹は、自分がビンゴになるときだけ
 export const PERSONAL_TABLE: Readonly<Record<PersonalOutcome, readonly number[]>> = {
-  none: [90, 8, 2, 0, 0],
+  none: [84, 13, 3, 0, 0],
   hit: [30, 55, 15, 0, 0],
-  reach: [5, 35, 50, 10, 0],
-  bingo: [0, 5, 25, 40, 30],
+  reach: [8, 37, 55, 0, 0],
+  bingo: [5, 12, 23, 30, 30],
+}
+// リーチの人には、ビンゴにならない回にも金を少し出す（金が出たら必ずビンゴ、にはしない。必ずなのは虹だけ）
+const TEASE_GOLD = 3
+
+// いまのカードで、次の 1 個で起こりうること。カードは本人に見えているので、起こりえない言葉は出さない
+// （リーチでない人に「ビンゴのチャンス！」、もうビンゴした人に「あるかも？」を出さない）
+export interface Possible {
+  hit: boolean // 残りの番号のどれかが、自分のカードにある
+  reach: boolean // 残りの番号のどれかで、リーチが増える
+  bingo: boolean // 残りの番号のどれかで、ビンゴになる（リーチ中）
 }
 
-export function personalTier(outcome: PersonalOutcome, rng: Rng): Tier {
-  return rng.weighted(PERSONAL_TABLE[outcome]) as Tier
+export function allowedPersonal(can: Possible): Tier[] {
+  const out: Tier[] = [0]
+  if (can.hit || can.reach || can.bingo) out.push(1)
+  if (can.reach) out.push(2)
+  if (can.bingo) out.push(3, 4)
+  return out
 }
 
-export interface Context {
-  size: number
-  winners: number // 公開前までに上がった人数
-  prizeCount: number
-}
-
-export function classify(imp: Impact, all: readonly Impact[], ctx: Context): FactClass {
-  const b = imp.newBingo
-  if (b >= 1) {
-    const first = ctx.winners === 0
-    const lastPrize = ctx.winners + b >= ctx.prizeCount
-    const mass = b >= Math.max(5, Math.ceil(0.02 * ctx.size))
-    return first || lastPrize || mass ? 'PREM' : 'BINGO'
+export function personalTier(outcome: PersonalOutcome, can: Possible, rng: Rng): Tier {
+  // 実際に起きることは、起こりうることに必ず含める
+  const able: Possible = {
+    hit: can.hit || outcome !== 'none',
+    reach: can.reach || outcome === 'reach',
+    bingo: can.bingo || outcome === 'bingo',
   }
-  if (imp.newReach < 1) return 'QUIET'
-  // ビンゴが出ない候補の中で、新規リーチ数が上位何％か（人数によらず頻度が安定する）
-  const pool = all.filter((i) => i.newBingo === 0)
-  const above = pool.filter((i) => i.newReach > imp.newReach).length
-  const share = above / Math.max(1, pool.length)
-  if (share < 0.15) return 'HOT'
-  if (share < 0.5) return 'WARM'
-  return 'QUIET'
+  const w = [...PERSONAL_TABLE[outcome]]
+  if (able.bingo && outcome !== 'bingo') {
+    w[3] += TEASE_GOLD
+    w[0] = Math.max(0, w[0] - TEASE_GOLD)
+  }
+  const ok = new Set(allowedPersonal(able))
+  return rng.weighted(w.map((p, t) => (ok.has(t as Tier) ? p : 0))) as Tier
 }
 
-export function allowedTiers(cls: FactClass): Tier[] {
-  return TIER_TABLE[cls].flatMap((p, t) => (p > 0 ? [t as Tier] : []))
-}
+// 1 回の抽選の時間（ms、「次へ」から）。番号が出るまでの長さは、どの回も同じ（大画面も全員のスマホも、同時に番号が出る）。
+// 結果を見せる長さは、ビンゴが出た回だけ長くする
+const REVEAL = 7400
+const RESULT = 3400
+const RESULT_WIN = 4600
 
-export function pickTier(cls: FactClass, rng: Rng): Tier {
-  return rng.weighted(TIER_TABLE[cls]) as Tier
-}
-
-// 1 回の抽選の時間割（ms、「次へ」から）。大画面と各自のスマホは同じ拍の列で進み、番号はどちらも reveal で同時に開く
-// （スマホで先に開けると、会場と驚くタイミングがずれる）:
-//   reveal  番号の公開（金・虹は、ここから MC の PUSH を待つ。スマホも一緒に待つ）
-//   total   結果を見せ終わる
-export interface Timing {
-  reveal: number
-  total: number
-  push: boolean
-}
-
-// 普通の番号でも一瞬で流さず、溜めてから開ける
-const REVEAL = [7400, 8400, 9400, 10400, 11400]
-const RESULT = [3200, 3600, 4000, 4400, 5000]
-const RAINBOW_REVEAL = 8500 // 虹（全員確定の流れ）の拍の基準
-
-export function timing(tier: Tier, size: number): Timing {
+export function drawTiming(size: number, win: boolean): { reveal: number; result: number } {
   // 少人数は抽選回数が多くなるので、尺を少し縮める
   const k = size <= 100 ? 0.85 : 1
-  const reveal = REVEAL[tier] * k
-  return { reveal, total: reveal + RESULT[tier] * k, push: tier >= 3 }
+  return { reveal: REVEAL * k, result: (win ? RESULT_WIN : RESULT) * k }
 }
 
 // 抽選機の回し方の型（リール・カードめくり・パタパタ）。型ごとに着地の時間が少し違うので、
@@ -105,62 +84,41 @@ export function timing(tier: Tier, size: number): Timing {
 export type MachineStyle = 'reel' | 'stack' | 'flap'
 const STYLES: readonly MachineStyle[] = ['reel', 'stack', 'flap']
 
-// 熱い回ほどカードめくり型、静かな回ほどパタパタ型が出やすい。同じ型は 3 回続けない。
+// 型は毎回くじで決める（期待度とは関係ない。見た目に変化をつけるだけ）。同じ型は 3 回続けない。
 // rand は 0 以上 1 未満の乱数（権威は種つきの乱数、ギャラリーは Math.random を渡す）
-export function pickStyle(plan: Plan, recent: readonly MachineStyle[], rand: () => number): MachineStyle {
-  const shown = plan.upgrade || plan.tier >= 3 ? 3 : plan.tier
-  const w: Record<MachineStyle, number> = {
-    reel: [4, 4, 3, 3][shown],
-    stack: [3, 3, 4, 5][shown],
-    flap: [3, 3, 2, 2][shown],
-  }
+export function pickStyle(recent: readonly MachineStyle[], rand: () => number): MachineStyle {
   const last = recent.slice(-2)
-  if (last.length === 2 && last[0] === last[1]) w[last[0]] = 0
-  let r = rand() * STYLES.reduce((s, k) => s + w[k], 0)
-  for (const k of STYLES) {
-    r -= w[k]
-    if (r < 0) return k
-  }
-  return 'reel'
+  const pool = last.length === 2 && last[0] === last[1] ? STYLES.filter((k) => k !== last[0]) : STYLES
+  return pool[Math.min(pool.length - 1, Math.floor(rand() * pool.length))]
 }
 
+// スマホの予告の計画（自分のカードにとっての段階から作る）
 export interface Plan {
-  tier: Tier
+  tier: Tier // 予告で見せる段階（0 青〜3 金。虹の「確定」は、スマホが発表の少し前に自分で出す）
   steps: number // ステップアップの段数（0〜5）
   stepTiers: Tier[]
   pseudo: number // 疑似連の回数（0〜3）
   cutin: Tier | null
   telop: string | null
   group: boolean // 群予告
-  upgrade: boolean // 金の流れから虹に昇格する版
 }
 
-const BUDGET: readonly (readonly [number, number])[] = [[0, 1], [2, 3], [4, 6], [7, 10], [7, 10]]
+const BUDGET: readonly (readonly [number, number])[] = [[0, 1], [2, 3], [4, 6], [7, 10]]
 const PSEUDO_COST = [0, 1, 2, 4]
 const CUTIN_COST = [0, 1, 2, 4]
-// テロップは、その回の段階に合った言葉にする（熱い回に弱気な言葉が出ると、降格に見える）
+// テロップは、その回の段階に合った言葉にする（熱い回に弱気な言葉が出ると、降格に見える）。どれも自分のカードの話
 const TELOPS = [
-  ['次の番号に注目！', 'さあ、何が出る？'],
-  ['リーチが増えそう…', '会場がざわついてきた…'],
-  ['これは来るか…!?', 'リーチの人、準備はいい？'],
-  ['ビンゴ目前！', 'みんな、画面に注目！'],
+  ['カードにあるかな？', 'さあ、何が出る？'],
+  ['あるかも…？', 'そろそろ来るか…？'],
+  ['これは来るか…!?', 'チャンスかも…！'],
+  ['ビンゴ、来い！', 'これは大チャンス…！'],
 ]
 
 // 予告ポイント制: 段階ごとの予算の中で、予告の部品をランダムに組み合わせる。
-// 部品が多いほど熱い、という読み筋を観客が覚えられるようにする
+// 部品が多いほど熱い、という読み筋を覚えられるようにする
 export function makePlan(tier: Tier, rng: Rng): Plan {
-  const plan: Plan = {
-    tier,
-    steps: 0,
-    stepTiers: [],
-    pseudo: 0,
-    cutin: null,
-    telop: null,
-    group: false,
-    upgrade: tier === 4 && rng.chance(0.3),
-  }
-  if (tier === 4 && !plan.upgrade) return plan
-  const shown = (plan.upgrade ? 3 : tier) as Tier
+  const shown = Math.min(3, tier) as Tier
+  const plan: Plan = { tier: shown, steps: 0, stepTiers: [], pseudo: 0, cutin: null, telop: null, group: false }
   const [lo, hi] = BUDGET[shown]
   let left = lo + rng.int(hi - lo + 1)
   for (const part of rng.shuffle(['steps', 'pseudo', 'cutin', 'telop', 'group'])) {
@@ -179,7 +137,7 @@ export function makePlan(tier: Tier, rng: Rng): Plan {
         left -= PSEUDO_COST[plan.pseudo]
       }
     } else if (part === 'cutin') {
-      // カットインは、その回の段階の言葉だけ（金の回に緑の「リーチが増えるかも」が出ると、合図が食い違う）
+      // カットインは、その回の段階の言葉だけ（金の回に緑の言葉が出ると、合図が食い違う）
       if (shown >= 1 && CUTIN_COST[shown] <= left) {
         plan.cutin = shown
         left -= CUTIN_COST[shown]
@@ -215,11 +173,6 @@ export type BeatKind =
   | 'heartbeat'
   | 'ma'
   | 'goldEdge'
-  | 'freeze'
-  | 'crack'
-  | 'kakutei'
-  | 'rainbowPhones'
-  | 'push'
   | 'reveal'
 
 export interface Beat {
@@ -232,34 +185,21 @@ export interface Beat {
   text?: string
 }
 
-// 演出計画を「時刻つきの拍の列」にする。大画面もスマホも同じ列を見て動くので、色や鼓動がそろう
-export function schedule(plan: Plan, t: Timing): Beat[] {
+// 計画を「時刻つきの拍の列」にする。reveal は番号が出る時刻（ms）
+export function schedule(plan: Plan, reveal: number): Beat[] {
   const beats: Beat[] = []
   let heat: Tier = 0
   const add = (at: number, kind: BeatKind, extra: Partial<Beat> = {}) => {
     beats.push({ at: Math.round(at), kind, heat, ...extra })
   }
-  const r = t.reveal
-
-  if (plan.tier === 4 && !plan.upgrade) {
-    // 虹: すべてを止める → ヒビ → 確定ロゴ → 全台が虹色 → PUSH 待ち
-    const k = r / RAINBOW_REVEAL
-    heat = 4
-    add(0, 'freeze')
-    add(1500 * k, 'crack')
-    add(3000 * k, 'kakutei')
-    add(5000 * k, 'rainbowPhones')
-    add(r, 'push')
-    return beats
-  }
-
-  const shown = (plan.upgrade ? 3 : plan.tier) as Tier
+  const r = reveal
+  const shown = plan.tier
   add(0, 'appear')
   add(300, 'spin')
   if (plan.telop) add(450, 'telop', { text: plan.telop })
 
   // 前半: 予告の部品を順に並べる。入りきらなければ詰める
-  const tail = plan.upgrade ? 4300 : [600, 1200, 3000, 3200][shown]
+  const tail = [600, 1200, 3000, 3200][shown]
   const room = Math.max(600, r - tail - 400)
   const items: { kind: BeatKind; dur: number; extra: Partial<Beat> }[] = []
   for (let i = 0; i < plan.steps; i++) {
@@ -283,33 +223,32 @@ export function schedule(plan: Plan, t: Timing): Beat[] {
   heat = Math.max(heat, shown) as Tier
 
   // 後半: 減速・ライザー・鼓動・間（ま）。段階が上がるほど長く溜める
-  if (plan.upgrade) {
-    add(r - 4300, 'goldEdge')
-    add(r - 3600, 'riser', { dur: 1200 })
-    heat = 4
-    add(r - 2400, 'freeze')
-    add(r - 1800, 'crack')
-    add(r - 1200, 'kakutei')
-    add(r - 900, 'rainbowPhones')
-    add(r, 'push')
-  } else if (shown === 0) {
+  if (shown === 0) {
     add(r - 600, 'decel')
-    add(r, 'reveal')
   } else if (shown === 1) {
     add(r - 1200, 'riser', { dur: 1200 })
-    add(r, 'reveal')
   } else if (shown === 2) {
     add(r - 3000, 'sea')
     add(r - 2200, 'heartbeat', { dur: 1400 })
     add(r - 800, 'ma', { dur: 800 })
-    add(r, 'reveal')
   } else {
     add(r - 3200, 'goldEdge')
     add(r - 3000, 'sea')
     add(r - 2400, 'riser', { dur: 1800 })
     add(r - 600, 'ma', { dur: 600 })
-    add(r, 'push')
   }
+  add(r, 'reveal')
   return beats.sort((a, b) => a.at - b.at)
 }
 
+// 大画面の抽選機の拍: 回り出して、ゆっくりになって、番号が出る。どの回も同じ（期待度の予告は入れない）
+export function venueBeats(reveal: number): Beat[] {
+  return schedule({ tier: 0, steps: 0, stepTiers: [], pseudo: 0, cutin: null, telop: null, group: false }, reveal)
+}
+
+// スマホの拍: 自分のカードにとっての段階から作る。虹（自分のビンゴ確定）は、確定の前にどこまで上げておくかを毎回変える
+// （青のまま突然・緑・赤・金から。確定そのものは、スマホが発表の少し前に出す）
+export function personalBeats(tier: Tier, reveal: number, rng: Rng): Beat[] {
+  const shown = tier === 4 ? rng.pick<Tier>([0, 1, 2, 3, 3]) : tier
+  return schedule(makePlan(shown, rng), reveal)
+}

@@ -69,7 +69,7 @@
   z-index: 9;
 }
 
-/* 画面のふちの光は、会場（大画面）の色。大画面と同じ瞬間に同じ色になる（外は会場、内は自分） */
+/* 画面のふちの光。色は、自分のカードにとっての段階（内側のパネルと同じ色） */
 .fxs-edge {
   position: absolute;
   inset: 0;
@@ -78,23 +78,23 @@
   transition: opacity calc(500ms * var(--fxs-k)) ease;
 }
 
-.fxs[data-venue='1'] .fxs-edge {
+.fxs[data-tier='1'] .fxs-edge {
   opacity: 0.9;
   box-shadow: inset 0 0 36px 4px rgba(34, 197, 94, 0.55);
 }
 
-.fxs[data-venue='2'] .fxs-edge {
+.fxs[data-tier='2'] .fxs-edge {
   opacity: 0.9;
   box-shadow: inset 0 0 50px 8px rgba(239, 68, 68, 0.55);
 }
 
-.fxs[data-venue='3'] .fxs-edge {
+.fxs[data-tier='3'] .fxs-edge {
   opacity: 0.9;
   box-shadow: inset 0 0 56px 10px rgba(245, 197, 66, 0.6);
   animation: fxs-edge var(--fxs-edge-ms, 2400ms) ease-in-out infinite;
 }
 
-.fxs[data-venue='4'] .fxs-edge {
+.fxs[data-tier='4'] .fxs-edge {
   opacity: 0.9;
   box-shadow: inset 0 0 50px 8px rgba(255, 255, 255, 0.35);
 }
@@ -194,7 +194,7 @@
     0 4px 10px rgba(0, 0, 0, 0.4);
 }
 
-/* ---- 段階の文字（中央に叩きつけ、本体のランプへ吸い込まれる） ---------------- */
+/* ---- 段階の文字（中央に叩きつけ、本体の段階の札へ吸い込まれる） -------------- */
 
 .fxs-emblem {
   position: absolute;
@@ -273,7 +273,7 @@
   animation: fxs-hue var(--fxs-hue-ms, 12000ms) linear infinite;
 }
 
-/* カットインの頭の札: 「あなたに」（水色＝自分の話）と「昇格！」 */
+/* カットインの頭の札: 「あなた」（水色＝自分の話）と「期待度アップ！」 */
 .fxs-tags {
   display: flex;
   align-items: center;
@@ -312,7 +312,7 @@
     0 4px 10px rgba(0, 0, 0, 0.45);
 }
 
-/* ---- カットイン（大画面のカットインと同じ時刻。色と言葉は自分の段階） --------- */
+/* ---- カットイン（斜めの帯。色と言葉は自分の段階） ------------------------------ */
 
 .fxs-cut {
   position: absolute;
@@ -488,88 +488,138 @@
   filter: saturate(0.3) brightness(0.85);
 }
 
-/* 上の段: 同じ形の 2 段を常に出す。「会場 ◆ ビンゴが出るかも！」（会場の色）と「あなた ▲ 当たるかも？」（自分の色）。
-   札（会場＝白、あなた＝水色）→ 形 → 言葉の順で、大画面のカードの帯と同じ形 */
+/* 上の段: 見出し「あなたの期待度」と目盛り（▲ ◆ ★ ✦）の行と、その下の、いまの段階の札（形 → 言葉）。
+   色は全部、自分のカードにとっての段階 */
 .fxs-head {
   position: relative;
   flex: none;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   transition: opacity calc(200ms * var(--fxs-k)) ease;
 }
 
-/* 当たりの言葉が出ている間は、頭の 2 段を消す（言葉を重ねない） */
+/* 当たりの言葉が出ている間は、頭の段を消す（言葉を重ねない） */
 .fxs.is-hero .fxs-head {
   opacity: 0;
 }
 
-.fxs-who {
+.fxs-cap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 20px;
+}
+
+/* 見出しは「あなた」の印（水色の札） */
+.fxs-cap small {
+  padding: 3px 10px 4px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  color: #06223a;
+  background: #5ad2ff;
+}
+
+/* 期待度の目盛り（▲ ◆ ★ ✦。いまの段階まで点く。形を中に入れて、色だけに頼らない） */
+.fxs-meter {
+  flex: none;
+  display: inline-flex;
+  gap: 4px;
+}
+
+.fxs-meter u {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 20px;
+  border-radius: 6px;
+  text-decoration: none;
+  font-size: 13px; /* 形の記号 */
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(5, 8, 22, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  transition:
+    background calc(300ms * var(--fxs-k)),
+    color calc(300ms * var(--fxs-k));
+}
+
+/* 点いた目盛りは、その段階の色 */
+.fxs-meter u.on {
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.45);
+}
+
+.fxs-meter u.on[data-k='1'] {
+  color: #052e14;
+  background: linear-gradient(180deg, #b9f7cf, #22c55e);
+}
+
+.fxs-meter u.on[data-k='2'] {
+  color: #fff;
+  background: linear-gradient(180deg, #f87171, #dc2626);
+}
+
+.fxs-meter u.on[data-k='3'] {
+  color: #2a1a05;
+  background: linear-gradient(180deg, #fff6d6, #f5c542);
+}
+
+.fxs-meter u.on[data-k='4'] {
+  color: #1a1400;
+  background: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
+}
+
+/* いまの段階の札（形 → 言葉。「▲ あるかも？」）。段階の文字は、叩きつけられたあと、ここへ吸い込まれる */
+.fxs-lamp {
   --lc: #3b82f6;
   --ll: #9cc3ff;
   --ld: #1e3f86;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  height: 26px;
-  padding: 0 6px 0 3px;
-  border-radius: 13px;
-  font-size: 14px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 15px;
+  font-size: 16px;
   font-weight: 900;
   line-height: 1;
   white-space: nowrap;
   color: #fff;
   background: linear-gradient(180deg, var(--ll) -30%, var(--lc) 45%, var(--ld) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  box-shadow:
+    0 0 12px color-mix(in srgb, var(--lc) 55%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
 }
 
-/* だれの話かの札: 会場は白、あなたは水色（どの画面でも同じ形） */
-.fxs-who small {
+.fxs-lamp i {
   flex: none;
-  min-width: 52px;
-  padding: 3px 0 4px;
-  border-radius: 10px;
-  text-align: center;
-  font-size: 13px;
-  font-weight: 900;
-  color: #16204a;
-  background: #eef1ff;
-  text-shadow: none;
-}
-
-.fxs-lamp small {
-  color: #06223a;
-  background: #5ad2ff;
-}
-
-.fxs-who i {
-  flex: none;
-  width: 16px;
-  text-align: center;
   font-style: normal;
-  font-size: 14px;
 }
 
-.fxs-who b {
+.fxs-lamp b {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.fxs-who[data-t='1'] {
+.fxs-lamp[data-t='1'] {
   --lc: #22c55e;
   --ll: #b9f7cf;
   --ld: #15803d;
 }
 
-.fxs-who[data-t='2'] {
+.fxs-lamp[data-t='2'] {
   --lc: #ef4444;
   --ll: #ffc4b8;
   --ld: #b91c1c;
 }
 
-.fxs-who[data-t='3'] {
+.fxs-lamp[data-t='3'] {
   --lc: #f5c542;
   --ll: #fff6d6;
   --ld: #c99212;
@@ -578,48 +628,10 @@
 }
 
 /* 虹（面は横のグラデーション） */
-.fxs-who[data-t='4'] {
+.fxs-lamp[data-t='4'] {
   color: #1a1400;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
   background: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
-}
-
-/* 自分の段の光（内側のパネルは自分の色） */
-.fxs-lamp {
-  box-shadow:
-    0 0 12px color-mix(in srgb, var(--lc) 55%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
-}
-
-/* あなたの期待度のランプ（▲ ◆ ★ ✦。いまの段階まで点く。形をランプの中に入れる） */
-.fxs-meter {
-  flex: none;
-  display: inline-flex;
-  gap: 3px;
-  margin-left: auto;
-}
-
-.fxs-meter u {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 16px;
-  border-radius: 4px;
-  text-decoration: none;
-  font-size: 13px; /* 形の記号 */
-  line-height: 1;
-  color: rgba(255, 255, 255, 0.55);
-  background: rgba(4, 6, 16, 0.42);
-  text-shadow: none;
-  transition:
-    background calc(300ms * var(--fxs-k)),
-    color calc(300ms * var(--fxs-k));
-}
-
-.fxs-meter u.on {
-  color: #16204a;
-  background: #ffffff;
-  box-shadow: 0 0 6px rgba(255, 255, 255, 0.7);
 }
 
 /* ---- リールの窓 ------------------------------------------------------------ */
@@ -681,7 +693,7 @@
   will-change: transform, opacity;
 }
 
-/* 列の文字の玉は、中立の色（白地に濃紺）。色は段階だけに使う（大画面の玉も同じ色） */
+/* 列の文字の玉は、中立の色（白地に濃紺）。色は段階だけに使う */
 .fxs-l {
   display: inline-grid;
   place-items: center;
@@ -793,7 +805,7 @@
   transition: opacity calc(240ms * var(--fxs-k)) ease;
 }
 
-/* ふた（大画面のカードが金の箔で裏返っている間）。色は自分の段階。公開で、大画面と同じ曲線でめくれる */
+/* ふた（金の箔。「ビンゴのチャンス！」の回に下りて、番号を隠す）。色は自分の段階。発表でめくれる */
 .fxs-cover {
   position: absolute;
   inset: 0;
@@ -849,25 +861,6 @@
 .fxs[data-tier='4'] .fxs-cover b {
   color: #fff;
   text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
-}
-
-/* 司会の合図（公開）を待つ間: ふたの縁がゆっくり呼吸する（1 秒に約 0.6 回） */
-.fxs.is-push .fxs-cover {
-  animation: fxs-cover var(--fxs-breathe-ms, 1600ms) ease-in-out infinite;
-}
-
-.fxs.is-push[data-tier='4'] .fxs-cover {
-  animation:
-    fxs-cover var(--fxs-breathe-ms, 1600ms) ease-in-out infinite,
-    fxs-hue var(--fxs-hue-ms, 12000ms) linear infinite;
-}
-
-@keyframes fxs-cover {
-  50% {
-    box-shadow:
-      inset 0 0 0 3px rgba(255, 255, 255, 0.85),
-      inset 0 0 20px rgba(255, 255, 255, 0.25);
-  }
 }
 
 /* 疑似連（止まりかけて、また回る）の「まだ止まらない！ 2 回目」 */
@@ -1134,7 +1127,7 @@
   position: absolute;
   left: 12px;
   right: 12px;
-  top: 201px;
+  top: 200px; /* 頭の段（55px）と窓（124px）の下 */
   bottom: 10px;
   z-index: 5;
   display: flex;

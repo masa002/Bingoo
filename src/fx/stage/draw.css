@@ -1,7 +1,8 @@
 /* 大画面の抽選機（draw.ts）。座標は 1920×1080 の大画面のまま書く。
-   z-index: 背景の光 1〜2、期待度の目盛り 4、減光 8、カードまわり 10、群予告 13、テロップ 14、PUSH 16、カットイン 18、粒子 60。
+   抽選機の領域（x 40〜1240、y 90〜790）の真ん中にカードを置く。右の結果の欄（x 1270〜）・上の HUD・下の番号の盤には重ねない。
+   z-index: 背景の光 1〜2、カードまわり 10、粒子 60。
    根（.fxd）は z-index も transform も持たない（子の重なりを host にそのまま並べるため）。
-   光過敏への配慮: 繰り返す光は 1 秒に 3 回より遅く、回る縞は 40 秒で 1 回転、赤は点滅させない */
+   光過敏への配慮: 繰り返す光は 1 秒に 3 回より遅く、回る縞は 40 秒で 1 回転 */
 
 .fxd {
   position: absolute;
@@ -12,39 +13,25 @@
   --ray: 22.5deg;
 }
 
-/* 段階の色: h = 基本、hl = 明るい、hd = 暗い、hx1・hx2 = ホロのにじみ（虹にはしない。虹は全員確定のため）。
-   カードの面（.fxd-side・.fxd-flick）にも直接書く: 親（動かしている最中の要素）からの継承だけに頼ると、
-   目盛りは赤なのにカードが青のまま残ることがあった（色がずれると「会場の色」が読めなくなる） */
+/* 色: h = 基本、hl = 明るい、hd = 暗い、hg = 背景の光、hx1・hx2 = ホロの光の筋。
+   回っている間は中立の色（濃紺と白）だけ。期待度の色（青・緑・赤・金）は使わない（期待度を出すのはスマホだけ）。
+   カードの面（.fxd-side・.fxd-flick）にも直接書く（動かしている最中の要素は、親からの継承だけに頼ると色が遅れることがある） */
 .fxd,
 .fxd-side,
 .fxd-flick {
-  --h: #3b82f6;
-  --hl: #93c5fd;
-  --hd: #1d3f99;
-  --hx1: #38bdf8;
-  --hx2: #a78bfa;
+  --h: #b9c6ff;
+  --hl: #ffffff;
+  --hd: #2f3c80;
+  --hg: #3a4fb8;
+  --hx1: #9fb0f5;
+  --hx2: #e6ebff;
 }
 
-.fxd[data-heat='1'],
-.fxd[data-heat='1'] :is(.fxd-side, .fxd-flick) {
-  --h: #22c55e;
-  --hl: #86efac;
-  --hd: #14652f;
-  --hx1: #a3e635;
-  --hx2: #2dd4bf;
-}
-
-.fxd[data-heat='2'],
-.fxd[data-heat='2'] :is(.fxd-side, .fxd-flick) {
-  --h: #ef4444;
-  --hl: #fca5a5;
-  --hd: #8f1d1d;
-  --hx1: #fb923c;
-  --hx2: #f472b6;
-}
-
-.fxd[data-heat='3'],
-.fxd[data-heat='3'] :is(.fxd-side, .fxd-flick) {
+/* 金は、番号が出たあと、ビンゴが出た回だけ（結果の表示。予告ではない）。捨て札として飛んでいく札（.fxd-ghost）も金のまま。
+   金になるのは、縁・番号・帯・光。カードの絵柄は濃紺のまま（hg はカードの面では変えない。金を濃紺に混ぜると濁る） */
+.fxd[data-power='2'],
+.fxd[data-power='2'] :is(.fxd-side, .fxd-flick),
+.fxd-ghost[data-power='2'] .fxd-side {
   --h: #f5c542;
   --hl: #fff4cc;
   --hd: #9a6a0c;
@@ -52,37 +39,24 @@
   --hx2: #fbbf24;
 }
 
+.fxd[data-power='2'] {
+  --hg: #f5c542;
+}
+
 /* ---- 背景の光 ------------------------------------------------------------ */
 
 .fxd-aura {
   position: absolute;
-  left: 360px;
+  left: 190px;
   top: 90px;
   width: 900px;
   height: 700px;
   z-index: 1;
   background:
-    radial-gradient(closest-side, color-mix(in srgb, var(--h) 30%, transparent), transparent),
-    radial-gradient(34% 12% at 50% 93%, color-mix(in srgb, var(--hl) 24%, transparent), transparent);
-  opacity: 0.55;
+    radial-gradient(closest-side, color-mix(in srgb, var(--hg) 34%, transparent), transparent),
+    radial-gradient(34% 12% at 50% 93%, color-mix(in srgb, var(--h) 16%, transparent), transparent);
+  opacity: 0.6;
   transition: opacity 0.5s;
-}
-
-.fxd[data-heat='1'] .fxd-aura {
-  opacity: 0.7;
-}
-
-.fxd[data-heat='2'] .fxd-aura {
-  opacity: 0.85;
-}
-
-.fxd[data-heat='3'] .fxd-aura {
-  opacity: 1;
-}
-
-.fxd.is-ma .fxd-aura {
-  opacity: 0.4;
-  transition-duration: 0.25s;
 }
 
 /* 抽選の合間（裏向きの札が待っている）は控えめに */
@@ -90,10 +64,19 @@
   opacity: 0.35;
 }
 
-/* 放射の光（画面の 1/3 より小さい円。40 秒で 1 回転） */
+/* 着地のあとは、結果の強さで明るさを変える */
+.fxd[data-power='1'] .fxd-aura {
+  opacity: 0.8;
+}
+
+.fxd[data-power='2'] .fxd-aura {
+  opacity: 1;
+}
+
+/* 放射の光（画面の 1/3 より小さい円。40 秒で 1 回転）。出るのは着地のあとだけ: リーチが増えた回は白くうすく、ビンゴが出た回は金 */
 .fxd-rays {
   position: absolute;
-  left: 460px;
+  left: 290px;
   top: 90px;
   width: 700px;
   height: 700px;
@@ -115,30 +98,16 @@
   animation-direction: reverse;
 }
 
-.fxd[data-heat='1'] .fxd-rays {
-  opacity: 0.12;
+.fxd[data-power='1'] .fxd-rays {
+  opacity: 0.1;
 }
 
-.fxd[data-heat='2'] .fxd-rays {
-  opacity: 0.2;
-}
-
-.fxd[data-heat='3'] .fxd-rays {
+.fxd[data-power='2'] .fxd-rays {
   opacity: 0.3;
 }
 
-.fxd.is-rise .fxd-rays {
-  opacity: 0.4;
-  transition-duration: var(--rise, 1s);
-}
-
-.fxd.is-ma .fxd-rays {
-  opacity: 0.06;
-  transition-duration: 0.25s;
-}
-
 .fxd .fxd-rays.boost {
-  opacity: 0.55;
+  opacity: 0.5;
 }
 
 @keyframes fxd-rot {
@@ -147,221 +116,54 @@
   }
 }
 
-/* ---- 会場の期待度の目盛り（段階と 1 対 1 の 4 段。下から 青 → 緑 → 赤 → 金） ---- */
-
-.fxd-steps {
-  position: absolute;
-  left: 52px;
-  top: 200px;
-  width: 450px;
-  height: 454px;
-  z-index: 4;
-}
-
-/* 何の目盛りかを、必ず見出しで添える */
-.fxd-steps-title {
-  position: absolute;
-  left: 0;
-  top: -66px;
-  padding: 6px 24px 7px;
-  border-radius: 999px;
-  font-size: 36px;
-  font-weight: 900;
-  letter-spacing: 3px;
-  line-height: 1.2;
-  white-space: nowrap;
-  color: #e8ecff;
-  background: linear-gradient(180deg, #1b2459, #0d1433);
-  box-shadow:
-    inset 0 0 0 2px color-mix(in srgb, var(--h) 60%, #2a3570),
-    0 0 18px color-mix(in srgb, var(--h) 30%, transparent);
-  transition: box-shadow 0.4s;
-}
-
-/* 各段に、形と言葉を書く（点いていない段も、うすく読める）。いまの色の段まで点く */
-.fxd-step {
-  position: absolute;
-  left: 0;
-  width: 450px;
-  height: 100px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 18px 0 22px;
-  border-radius: 14px;
-  border: 3px solid #1f2850;
-  background: linear-gradient(180deg, #121a3c, #0a1028);
-  color: #4d5990;
-  font-weight: 900;
-  transform: skewX(-10deg);
-  overflow: hidden;
-  transition:
-    background 0.25s,
-    color 0.25s,
-    border-color 0.25s,
-    box-shadow 0.25s;
-}
-
-/* 札は斜め、文字はまっすぐ */
-.fxd-step > * {
-  transform: skewX(10deg);
-}
-
-.fxd-step b {
-  font-size: 36px;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-/* 段階の形（色だけに頼らない） */
-.fxd-step em {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  font-style: normal;
-  font-size: 32px;
-  line-height: 1;
-  background: rgba(4, 6, 16, 0.4);
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.22);
-}
-
-.fxd-step.on {
-  color: #fff;
-  border-color: color-mix(in srgb, var(--c) 50%, #fff);
-  background: linear-gradient(
-    160deg,
-    color-mix(in srgb, var(--c) 55%, #fff) 0%,
-    var(--c) 38%,
-    color-mix(in srgb, var(--c) 55%, #000) 100%
-  );
-  box-shadow:
-    0 0 30px color-mix(in srgb, var(--c) 70%, transparent),
-    inset 0 2px 0 rgba(255, 255, 255, 0.45);
-  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
-}
-
-.fxd-step.on em {
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.5);
-}
-
-/* 金の段は、文字を濃い茶にする（金の地に白は読みにくい） */
-.fxd-step.on[data-t='3'] {
-  color: #2a1a05;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
-}
-
-.fxd-step.on[data-t='3'] em {
-  color: #fff4cc;
-  text-shadow: none;
-}
-
-/* 点いた瞬間に光の帯が 1 回だけ横切る */
-.fxd-step::after {
-  content: '';
-  position: absolute;
-  top: -10%;
-  bottom: -10%;
-  left: 0;
-  width: 38%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
-  transform: translateX(-160%);
-}
-
-.fxd-step.sweep::after {
-  animation: fxd-sweep var(--sd, 0.56s) ease-out;
-}
-
-@keyframes fxd-sweep {
-  to {
-    transform: translateX(420%);
-  }
-}
-
-/* 金の段だけ、ゆっくり光が満ち引きする（赤は点滅させない） */
-.fxd-step.hot {
-  animation: fxd-hot 1.5s ease-in-out infinite alternate;
-}
-
-@keyframes fxd-hot {
-  to {
-    box-shadow:
-      0 0 52px color-mix(in srgb, var(--c) 90%, transparent),
-      inset 0 2px 0 rgba(255, 255, 255, 0.45);
-  }
-}
-
-/* ---- 減光（間） --------------------------------------------------------- */
-
-.fxd-dim {
-  position: absolute;
-  inset: 0;
-  z-index: 8;
-  background: radial-gradient(440px 520px at 810px 440px, rgba(2, 4, 12, 0) 52%, rgba(2, 4, 12, 0.2) 100%);
-  opacity: 0;
-  transition: opacity 0.3s ease-out;
-}
-
-.fxd-dim.on {
-  opacity: 1;
-}
-
 /* ---- カードまわり ------------------------------------------------------- */
 
+/* 抽選機の領域（1200×700）。カードは 400×560 で組んで、領域ごと 1.15 倍に広げる（見た目は 460×644、中心は大画面の 640, 440）。
+   倍率を変えるときは、draw.ts の SCALE も合わせる */
 .fxd-stage {
   position: absolute;
-  left: 330px;
+  left: 40px;
   top: 90px;
-  width: 910px;
+  width: 1200px;
   height: 700px;
   z-index: 10;
   perspective: 1700px;
-  perspective-origin: 480px 350px;
+  perspective-origin: 600px 350px;
+  transform: scale(1.15);
+  transform-origin: 600px 350px;
 }
 
 .fxd-glow {
   position: absolute;
-  left: 140px;
+  left: 260px;
   top: -10px;
   width: 680px;
   height: 720px;
   background: radial-gradient(
     closest-side,
-    color-mix(in srgb, var(--h) 55%, transparent),
-    color-mix(in srgb, var(--h) 18%, transparent) 55%,
+    color-mix(in srgb, var(--hg) 55%, transparent),
+    color-mix(in srgb, var(--hg) 18%, transparent) 55%,
     transparent
   );
-  opacity: 0.35;
+  opacity: 0.4;
   transition: opacity 0.4s;
-}
-
-.fxd[data-heat='2'] .fxd-glow {
-  opacity: 0.5;
-}
-
-.fxd[data-heat='3'] .fxd-glow {
-  opacity: 0.6;
-}
-
-.fxd.is-rise .fxd-glow {
-  opacity: 0.85;
-  transition-duration: var(--rise, 1s);
-}
-
-.fxd.is-ma .fxd-glow {
-  opacity: 0.22;
-  transition-duration: 0.25s;
 }
 
 .fxd.is-done .fxd-glow {
   opacity: 0.6;
 }
 
+.fxd.is-done[data-power='1'] .fxd-glow {
+  opacity: 0.8;
+}
+
+.fxd.is-done[data-power='2'] .fxd-glow {
+  opacity: 0.7;
+}
+
 .fxd-halo {
   position: absolute;
-  left: 480px;
+  left: 600px;
   top: 350px;
   border-radius: 50%;
   opacity: 0;
@@ -382,7 +184,7 @@
 
 .fxd-ring {
   position: absolute;
-  left: 480px;
+  left: 600px;
   top: 350px;
   border-radius: 50%;
   border: 6px solid var(--hl);
@@ -403,7 +205,7 @@
 .fxd-flick,
 .fxd-ghost {
   position: absolute;
-  left: 280px;
+  left: 400px;
   top: 70px;
   width: 400px;
   height: 560px;
@@ -429,7 +231,7 @@
   -webkit-backface-visibility: hidden;
 }
 
-/* 表: 段階の色の金属の縁 + 紺の絵柄 + 窓 + 段階の帯 + ホロ */
+/* 表: 銀と濃紺の金属の縁 + 紺の絵柄 + 窓 + 帯 + ホロ */
 .fxd-face,
 .fxd-flick {
   border-radius: 24px;
@@ -446,8 +248,8 @@
   inset: 14px;
   border-radius: 14px;
   background:
-    radial-gradient(120% 70% at 50% 0%, color-mix(in srgb, var(--h) 30%, transparent), transparent 62%),
-    radial-gradient(80% 50% at 50% 110%, color-mix(in srgb, var(--h) 22%, transparent), transparent 70%),
+    radial-gradient(120% 70% at 50% 0%, color-mix(in srgb, var(--hg) 34%, transparent), transparent 62%),
+    radial-gradient(80% 50% at 50% 110%, color-mix(in srgb, var(--hg) 24%, transparent), transparent 70%),
     repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.028) 0 2px, transparent 2px 15px),
     repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.028) 0 2px, transparent 2px 15px),
     linear-gradient(170deg, #18214c, #0a0f27 58%, #060918);
@@ -456,15 +258,15 @@
     inset 0 0 36px rgba(0, 0, 0, 0.65);
 }
 
+/* 上の飾りの文字（意味は持たせない） */
 .fxd-top {
   position: absolute;
   left: 32px;
   right: 32px;
   top: 24px;
   height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  place-items: center;
 }
 
 .fxd-top b {
@@ -473,14 +275,6 @@
   letter-spacing: 7px;
   color: var(--hl);
   opacity: 0.9;
-}
-
-.fxd-mark {
-  font-style: normal;
-  font-size: 30px;
-  line-height: 1;
-  color: var(--hl);
-  text-shadow: 0 0 14px var(--h);
 }
 
 .fxd-win {
@@ -520,7 +314,7 @@
 
 /* カードめくり型は、窓ではなく札の絵柄の上に番号を刷る */
 .fxd[data-variant='stack'] .fxd-win {
-  background: radial-gradient(closest-side, color-mix(in srgb, var(--h) 20%, transparent), transparent);
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--hg) 30%, transparent), transparent);
   box-shadow: none;
 }
 
@@ -528,97 +322,74 @@
   background: linear-gradient(180deg, #07080e, #0d0f18);
 }
 
-/* カードの帯: 「会場」の札 ＋ 形 → 言葉（スマホの「あなた」の段と同じ形）。カードの幅いっぱいの帯にして、文字を大きく取る。
-   番号が出たあとは、結果の言葉（「ビンゴ 1 人！」など）に替わる */
+/* カードの帯: カードの幅いっぱいに、ひとこと。回っている間は濃紺の帯に白い文字（「次の番号は…？」）。
+   番号が出たら、白い帯に替わって結果の言葉（「リーチ +12 人」「ビンゴなし」）。ビンゴが出た回だけ金の帯（「ビンゴ 3 人！」） */
 .fxd-badge {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 16px;
+  bottom: 18px;
+  height: 86px;
   z-index: 1; /* ホロと光の筋より上（帯の文字が、覆い焼きで薄くならないように） */
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 0 10px;
-  background: linear-gradient(180deg, var(--hl), var(--h) 40%, var(--hd));
+  display: grid;
+  place-items: center;
+  background: linear-gradient(180deg, #2b3878, #16204a);
+  color: #fff;
   box-shadow:
-    0 0 22px color-mix(in srgb, var(--h) 55%, transparent),
-    inset 0 2px 0 rgba(255, 255, 255, 0.5),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.25);
+    inset 0 2px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -2px 0 rgba(255, 255, 255, 0.3);
   font-weight: 900;
   white-space: nowrap;
-  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
-}
-
-/* 「会場」の札（だれの話かを、形で分ける。スマホの「あなた」は水色の札） */
-.fxd-badge small {
-  padding: 0 14px 1px;
-  border-radius: 8px;
-  font-size: 28px;
-  letter-spacing: 4px;
-  line-height: 1.25;
-  color: #16204a;
-  background: #eef1ff;
-  text-shadow: none;
-}
-
-.fxd-badge span {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.fxd-badge i {
-  font-style: normal;
-  font-size: 34px;
-  line-height: 1.15;
 }
 
 .fxd-badge b {
-  font-size: 36px;
-  letter-spacing: 0;
+  font-size: 40px;
   line-height: 1.15;
 }
 
+.fxd-badge.is-result {
+  background: linear-gradient(180deg, #ffffff, #e6eaff 45%, #b4bfe6);
+  color: #16204a;
+  box-shadow:
+    0 0 22px rgba(200, 212, 255, 0.4),
+    inset 0 2px 0 rgba(255, 255, 255, 0.7),
+    inset 0 -2px 0 rgba(20, 30, 80, 0.25);
+}
+
 .fxd-badge.is-result b {
-  font-size: 44px;
+  font-size: 48px;
   letter-spacing: 1px;
 }
 
-.fxd[data-heat='3'] .fxd-badge {
+:is(.fxd, .fxd-ghost)[data-power='2'] .fxd-badge.is-result {
+  background: linear-gradient(180deg, #fff4cc, #f5c542 55%, #d9a520);
   color: #2a1a05;
+  box-shadow:
+    0 0 26px rgba(245, 197, 66, 0.6),
+    inset 0 2px 0 rgba(255, 255, 255, 0.6),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.25);
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
-/* ホロ: 段階の色のにじみ + 光の筋。カードの傾きに合わせて JS が動かす */
+/* ホロ: 細い光の筋（銀。ビンゴが出た回は金。虹にはしない）。カードの傾きに合わせて JS が動かす。
+   光を足すだけ（screen）にして、濃紺の地の色は変えない */
 .fxd-holo {
   position: absolute;
   left: -50%;
   top: -50%;
   width: 200%;
   height: 200%;
-  mix-blend-mode: color-dodge;
-  opacity: 0.18;
+  mix-blend-mode: screen;
+  opacity: 0.14;
   background:
     linear-gradient(120deg, transparent 42%, rgba(255, 255, 255, 0.6) 48%, rgba(255, 255, 255, 0.1) 51%, transparent 56%),
-    repeating-linear-gradient(120deg, var(--hx1) 0%, var(--h) 2.5%, var(--hx2) 5%, var(--hl) 7.5%, var(--hx1) 10%);
+    repeating-linear-gradient(120deg, var(--hx1) 0%, transparent 2.5%, var(--hx2) 5%, transparent 7.5%, var(--hx1) 10%);
   transition: opacity 0.4s;
   will-change: transform;
 }
 
-.fxd[data-heat='2'] .fxd-holo {
-  opacity: 0.24;
-}
-
-.fxd[data-heat='3'] .fxd-holo,
 .fxd.is-done .fxd-holo {
-  opacity: 0.32;
-}
-
-.fxd.is-rise .fxd-holo {
-  opacity: 0.4;
-  transition-duration: var(--rise, 1s);
+  opacity: 0.22;
 }
 
 .fxd-glare {
@@ -641,7 +412,7 @@
   }
 }
 
-/* 裏: 紺地に金の箔押し（待機中の札・群予告の札） */
+/* 裏: 紺地に金の箔押し（抽選の合間に待っている札） */
 .fxd-back {
   transform: rotateY(180deg);
   background: radial-gradient(110% 80% at 50% 35%, #1c2a62 0%, #0c1333 55%, #060918 100%);
@@ -677,7 +448,6 @@
     inset 0 0 0 9px #0c1333,
     inset 0 0 0 11px rgba(212, 175, 85, 0.65),
     0 0 34px rgba(212, 175, 85, 0.22);
-  transition: opacity 0.2s;
 }
 
 .fxd-emblem i,
@@ -705,7 +475,6 @@
   font-weight: 900;
   letter-spacing: 9px;
   line-height: 1.1;
-  transition: opacity 0.2s;
 }
 
 .fxd-logo small {
@@ -715,79 +484,12 @@
   letter-spacing: 9px;
 }
 
-/* 金の箔（goldEdge）: 全面が金。模様は型押し（エンボス）で、放射の型は止まったまま */
-.fxd-back.is-gold {
-  background:
-    radial-gradient(70% 45% at 30% 18%, rgba(255, 255, 255, 0.55), transparent 60%),
-    linear-gradient(135deg, #7a4f08 0%, #e3b23a 13%, #fff1b8 25%, #d79f22 38%, #f5c542 52%, #fff4cc 64%, #b47c12 80%, #f0c44c 100%);
-  box-shadow:
-    inset 0 0 0 3px rgba(255, 248, 220, 0.75),
-    inset 0 0 0 9px rgba(140, 90, 10, 0.45),
-    inset 0 0 50px rgba(120, 70, 0, 0.4),
-    0 0 80px rgba(245, 197, 66, 0.55),
-    0 28px 60px rgba(0, 0, 0, 0.5);
-}
-
-.fxd-back.is-gold .fxd-lattice {
-  border-color: rgba(120, 75, 0, 0.55);
-  background: repeating-conic-gradient(from 0deg at 50% 42%, rgba(255, 255, 255, 0.12) 0deg 5deg, rgba(120, 70, 0, 0.1) 5deg 10deg);
-}
-
-.fxd-back.is-gold .fxd-emblem {
-  border-color: rgba(120, 75, 0, 0.55);
-  background: radial-gradient(circle, rgba(255, 250, 225, 0.5), rgba(255, 250, 225, 0) 70%);
-  box-shadow:
-    inset 0 0 0 9px rgba(255, 245, 210, 0.25),
-    inset 0 0 0 11px rgba(120, 75, 0, 0.4),
-    0 0 30px rgba(255, 240, 180, 0.4);
-}
-
-.fxd-back.is-gold .fxd-emblem i,
-.fxd-back.is-gold .fxd-logo {
-  background: none;
-  color: #c08a16;
-  text-shadow:
-    -1px -1px 0 rgba(255, 250, 225, 0.9),
-    2px 2px 0 rgba(110, 70, 0, 0.55);
-  filter: none;
-}
-
-/* 間（ま）で金の箔に型押しされる「？」 */
-.fxd-backq {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  font-size: 300px;
-  font-weight: 900;
-  line-height: 1;
-  color: #c48d18;
-  text-shadow:
-    -2px -2px 0 rgba(255, 250, 225, 0.9),
-    3px 3px 0 rgba(110, 70, 0, 0.55);
-  opacity: 0;
-}
-
-.fxd-back.has-q .fxd-backq {
-  opacity: 1;
-}
-
-.fxd-back.has-q .fxd-emblem,
-.fxd-back.has-q .fxd-logo {
-  opacity: 0;
-}
-
-/* 箔の照り返し（帯が横切るだけ。金は 2.6 秒に 1 回） */
+/* 箔の照り返し（光の帯が、5 秒に 1 回ゆっくり横切るだけ） */
 .fxd-sheen {
   position: absolute;
   inset: -30%;
   background: linear-gradient(115deg, transparent 42%, rgba(255, 244, 204, 0.2) 49%, transparent 56%);
   animation: fxd-sheen 5s ease-in-out infinite;
-}
-
-.fxd-back.is-gold .fxd-sheen {
-  background: linear-gradient(115deg, transparent 40%, rgba(255, 255, 255, 0.7) 48%, rgba(255, 255, 255, 0.15) 52%, transparent 60%);
-  animation-duration: 2.6s;
 }
 
 @keyframes fxd-sheen {
@@ -812,7 +514,7 @@
   font-size: 58px;
   font-weight: 900;
   line-height: 1;
-  /* 列の文字の玉は、中立の色（白地に濃紺）。色は段階だけに使う（スマホの玉も同じ色） */
+  /* 列の文字の玉は、中立の色（白地に濃紺）。スマホの玉も同じ色 */
   color: #16204a;
   background: radial-gradient(circle at 34% 28%, #ffffff, #e6eaff 48%, #b4bfe6);
   box-shadow:
@@ -853,36 +555,25 @@
   color: rgba(255, 255, 255, 0.22);
 }
 
-/* 「？」はゆっくり息をする（大きさだけ。明るさは変えない） */
-.is-q .fxd-q {
-  animation: fxd-breathe 1.2s ease-in-out infinite alternate;
-}
-
-@keyframes fxd-breathe {
-  to {
-    transform: scale(1.07);
-  }
-}
-
-/* 着地した番号（リールは中央のコマだけ）: 少し大きくして、段階の色の光をまとわせる */
+/* 着地した番号（リールは中央のコマだけ）: 少し大きくして、光をまとわせる。捨て札として飛んでいく札（.fxd-ghost）も同じ見た目のまま */
 .fxd-row .fxd-n,
 .fxd-stack .fxd-n,
 .fxd-flap .fxd-n {
   transition: transform 0.3s cubic-bezier(0.2, 1.4, 0.4, 1);
 }
 
-.fxd.is-done .fxd-row.is-c .fxd-n,
-.fxd.is-done .fxd-stack .fxd-n,
-.fxd.is-done .fxd-flap .fxd-n {
+:is(.fxd, .fxd-ghost).is-done .fxd-row.is-c .fxd-n,
+:is(.fxd, .fxd-ghost).is-done .fxd-stack .fxd-n,
+:is(.fxd, .fxd-ghost).is-done .fxd-flap .fxd-n {
   transform: scale(1.06);
   text-shadow:
     0 6px 0 rgba(0, 0, 0, 0.45),
     0 0 40px color-mix(in srgb, var(--h) 85%, transparent);
 }
 
-.fxd.is-done .fxd-row.is-c .fxd-l,
-.fxd.is-done .fxd-stack .fxd-l,
-.fxd.is-done .fxd-flap .fxd-l {
+:is(.fxd, .fxd-ghost).is-done .fxd-row.is-c .fxd-l,
+:is(.fxd, .fxd-ghost).is-done .fxd-stack .fxd-l,
+:is(.fxd, .fxd-ghost).is-done .fxd-flap .fxd-l {
   box-shadow:
     inset 0 -6px 12px rgba(20, 30, 80, 0.3),
     inset 0 3px 6px rgba(255, 255, 255, 0.6),
@@ -891,14 +582,15 @@
 }
 
 /* リール型: 着地したら、上下の隣のコマは消す（窓の端に、隣の数字の切れ端を残さない） */
-.fxd.is-done .fxd-row:not(.is-c) {
+:is(.fxd, .fxd-ghost).is-done .fxd-row:not(.is-c) {
   opacity: 0 !important;
   transition: opacity 0.2s;
 }
 
-.fxd.is-done[data-heat='3'] .fxd-row.is-c .fxd-n,
-.fxd.is-done[data-heat='3'] .fxd-stack .fxd-n,
-.fxd.is-done[data-heat='3'] .fxd-flap .fxd-n {
+/* ビンゴが出た回だけ、番号を金にする */
+:is(.fxd, .fxd-ghost).is-done[data-power='2'] .fxd-row.is-c .fxd-n,
+:is(.fxd, .fxd-ghost).is-done[data-power='2'] .fxd-stack .fxd-n,
+:is(.fxd, .fxd-ghost).is-done[data-power='2'] .fxd-flap .fxd-n {
   background: linear-gradient(180deg, #fffbe6 0%, #ffe08a 38%, #f5c542 60%, #c8900f 100%);
   -webkit-background-clip: text;
   background-clip: text;
@@ -927,7 +619,7 @@
   will-change: transform, opacity;
 }
 
-/* モーションブラー: 速さの段階に応じて、ぼかしと縦の残像を重ねる */
+/* モーションブラー: 速さに応じて、ぼかしと縦の残像を重ねる */
 .fxd-reel[data-blur='1'] .fxd-row {
   filter: blur(0.7px);
 }
@@ -1138,488 +830,6 @@
   font-size: 52px;
 }
 
-/* ---- 捨て札・「まだ止まらない！」・心電図 ---------------------------------- */
-
-.fxd-next {
-  position: absolute;
-  left: 480px;
-  top: 458px; /* カードの帯（会場の札）にかからない高さ */
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 22px 8px 34px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, #ffffff, #dfe6ff);
-  color: #0b1024;
-  font-size: 48px;
-  font-weight: 900;
-  font-style: italic;
-  letter-spacing: 0;
-  white-space: nowrap;
-  box-shadow:
-    0 0 0 5px var(--h),
-    0 0 44px color-mix(in srgb, var(--h) 70%, transparent),
-    0 10px 0 rgba(0, 0, 0, 0.35);
-  transform: translate(-50%, -50%);
-  opacity: 0;
-}
-
-.fxd-next.on {
-  opacity: 1;
-}
-
-.fxd-next em {
-  font-style: normal;
-  font-size: 34px;
-  padding: 2px 14px;
-  border-radius: 12px;
-  background: var(--h);
-  color: #fff;
-}
-
-.fxd-next[data-i='1'] {
-  background: linear-gradient(180deg, #ffffff, color-mix(in srgb, var(--h) 35%, #fff));
-}
-
-.fxd-next[data-i='2'] {
-  background: linear-gradient(180deg, #fff8dc, #f5c542);
-  color: #2a1a00;
-  box-shadow:
-    0 0 0 5px #fff4cc,
-    0 0 0 9px #b07a0c,
-    0 0 60px rgba(245, 197, 66, 0.7),
-    0 10px 0 rgba(0, 0, 0, 0.35);
-}
-
-.fxd-ecg {
-  position: absolute;
-  left: 180px;
-  top: 636px;
-  width: 600px;
-  height: 60px;
-  overflow: visible;
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-
-.fxd-ecg.on {
-  opacity: 1;
-}
-
-.fxd-ecg path {
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.fxd-ecg .base {
-  stroke: rgba(255, 255, 255, 0.1);
-  stroke-width: 3px;
-}
-
-.fxd-ecg .line {
-  stroke: #fff;
-  stroke-width: 4px;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  filter: drop-shadow(0 0 6px var(--h));
-}
-
-.fxd-ecg.run .line {
-  animation: fxd-ecg var(--ed, 1.4s) linear forwards;
-}
-
-@keyframes fxd-ecg {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-/* ---- 群予告 ------------------------------------------------------------- */
-
-/* 飛ぶのは抽選機の領域（x 40〜1240、y 90〜790）の中だけ。HUD と右の欄には出さない */
-.fxd-flock {
-  position: absolute;
-  left: 40px;
-  top: 90px;
-  width: 1200px;
-  height: 700px;
-  z-index: 13;
-  overflow: hidden;
-}
-
-.fxd-fc {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 84px;
-  height: 118px;
-  margin: -59px 0 0 -42px;
-  border-radius: 9px;
-  background: radial-gradient(110% 80% at 50% 35%, #1c2a62, #0c1333 60%, #060918);
-  box-shadow:
-    inset 0 0 0 2px var(--h),
-    inset 0 0 0 5px #0a0f26,
-    inset 0 0 0 6px rgba(212, 175, 85, 0.7),
-    0 10px 22px rgba(0, 0, 0, 0.45);
-  transform: translate(-400px, -400px);
-  will-change: transform;
-}
-
-.fxd-fc::after {
-  content: '★';
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  font-size: 40px;
-  color: #e8c15a;
-}
-
-.fxd-fc.far {
-  filter: blur(1.2px) brightness(0.7);
-}
-
-/* ---- テロップ ----------------------------------------------------------- */
-
-.fxd-telop {
-  position: absolute;
-  left: 330px;
-  top: 726px;
-  width: 910px;
-  height: 60px;
-  z-index: 14;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(90deg, transparent, rgba(4, 7, 20, 0.88) 12%, rgba(4, 7, 20, 0.88) 88%, transparent);
-  opacity: 0;
-  transform: translateY(10px);
-  transition:
-    opacity 0.25s,
-    transform 0.25s;
-}
-
-.fxd-telop::before,
-.fxd-telop::after {
-  content: '';
-  position: absolute;
-  left: 6%;
-  right: 6%;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--h), transparent);
-}
-
-.fxd-telop::before {
-  top: 0;
-}
-
-.fxd-telop::after {
-  bottom: 0;
-}
-
-.fxd-telop.on {
-  opacity: 1;
-  transform: none;
-}
-
-.fxd-telop b {
-  font-size: 38px;
-  font-weight: 900;
-  letter-spacing: 3px;
-  white-space: nowrap;
-  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.5);
-}
-
-.fxd-telop b i {
-  font-style: normal;
-  margin-right: 14px;
-  color: var(--hl);
-}
-
-.fxd-telop b span {
-  display: inline-block;
-  animation: fxd-char var(--cd, 0.3s) cubic-bezier(0.2, 1.4, 0.4, 1) both;
-}
-
-.fxd-telop.strong b {
-  font-size: 44px;
-  color: #ffe8a3;
-  text-shadow:
-    0 3px 0 rgba(0, 0, 0, 0.5),
-    0 0 22px rgba(245, 197, 66, 0.45);
-}
-
-@keyframes fxd-char {
-  from {
-    opacity: 0;
-    transform: translateY(16px) scale(1.35);
-  }
-}
-
-/* ---- 公開待ち（司会の合図を待つ間。1 秒に 1 回のゆっくりした脈動） ------- */
-
-.fxd-push {
-  position: absolute;
-  left: 810px;
-  top: 726px; /* 外側の輪が、下の番号の盤（y 800〜）に乗らない高さ */
-  z-index: 16;
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 18px 64px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, #fff8dc 0%, #ffe08a 30%, #f5c542 55%, #c8900f 100%);
-  color: #1a1240;
-  font-size: 58px;
-  font-weight: 900;
-  font-style: italic;
-  letter-spacing: 4px;
-  line-height: 1.1;
-  white-space: nowrap;
-  box-shadow:
-    0 0 0 4px #fff7dd,
-    0 0 0 9px #a8730a,
-    0 0 56px rgba(245, 197, 66, 0.65),
-    0 12px 0 rgba(0, 0, 0, 0.35);
-  transform: translate(-50%, -50%);
-  opacity: 0;
-  visibility: hidden;
-}
-
-.fxd-push.on {
-  opacity: 1;
-  visibility: visible;
-  animation: fxd-push var(--pp, 1s) ease-in-out infinite;
-}
-
-/* 見ている人が押すものではないので、ボタンの絵は出さず、これから何が起きるかだけを書く */
-.fxd-push p {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.fxd-push b {
-  line-height: 1;
-}
-
-.fxd-push span {
-  flex: none;
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 36% 30%, #ffffff, #ffd27a 30%, #ff9d2e 70%, #b4600a);
-  box-shadow:
-    inset 0 -6px 0 rgba(0, 0, 0, 0.25),
-    0 0 0 4px rgba(255, 255, 255, 0.85),
-    0 4px 0 rgba(0, 0, 0, 0.3);
-}
-
-.fxd-push::after {
-  content: '';
-  position: absolute;
-  inset: -9px;
-  border-radius: inherit;
-  border: 4px solid rgba(255, 240, 190, 0.9);
-  opacity: 0;
-}
-
-.fxd-push.on::after {
-  animation: fxd-ripple var(--pp, 1s) ease-out infinite;
-}
-
-@keyframes fxd-push {
-  50% {
-    transform: translate(-50%, -50%) scale(1.07);
-  }
-}
-
-@keyframes fxd-ripple {
-  0% {
-    opacity: 0.85;
-    transform: scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(1.25, 1.7);
-  }
-}
-
-/* ---- カットイン（段階の言葉: リーチが増えるかも・ビンゴが出るかも！・ビンゴが出そう！） ---- */
-
-.fxd-cut {
-  position: absolute;
-  inset: 0;
-  z-index: 18;
-  overflow: hidden;
-  display: none;
-}
-
-.fxd-cut.on {
-  display: block;
-}
-
-/* 帯はカードの中心（x 810, y 440）を軸に傾ける */
-.fxd-cut-rot {
-  position: absolute;
-  left: -340px;
-  width: 2600px;
-  top: 440px;
-  height: 0;
-  transform-origin: 1150px 0;
-}
-
-.fxd-cut[data-t='1'] {
-  --cb1: #4ade80;
-  --cb2: #16a34a;
-  --cb3: #0d5c2a;
-  --ce: #dcfce7;
-  --cg: rgba(34, 197, 94, 0.55);
-}
-
-.fxd-cut[data-t='2'] {
-  --cb1: #f87171;
-  --cb2: #dc2626;
-  --cb3: #6b1414;
-  --ce: #ffe4e4;
-  --cg: rgba(239, 68, 68, 0.55);
-}
-
-.fxd-cut[data-t='3'] {
-  --cb1: #2a1d00;
-  --cb2: #0f0a00;
-  --cb3: #2a1d00;
-  --ce: #f5c542;
-  --cg: rgba(245, 197, 66, 0.6);
-}
-
-.fxd-cut-band {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: -104px;
-  height: 208px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  background: linear-gradient(180deg, var(--cb1), var(--cb2) 50%, var(--cb3));
-  border-top: 6px solid var(--ce);
-  border-bottom: 6px solid var(--ce);
-  box-shadow:
-    0 0 60px var(--cg),
-    0 18px 40px rgba(0, 0, 0, 0.45);
-}
-
-/* 赤の帯には止まった斜線（動かさない） */
-.fxd-cut[data-t='2'] .fxd-cut-band {
-  background:
-    repeating-linear-gradient(115deg, rgba(0, 0, 0, 0.08) 0 18px, transparent 18px 44px),
-    linear-gradient(180deg, var(--cb1), var(--cb2) 50%, var(--cb3));
-}
-
-/* 流れる光の筋（不規則に 3 本だけ、薄く） */
-.fxd-cut-band i {
-  position: absolute;
-  left: 0;
-  height: 4px;
-  width: 46%;
-  border-radius: 2px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
-  transform: translateX(-140%);
-}
-
-.fxd-cut-band i:nth-child(1) {
-  top: 34px;
-}
-
-.fxd-cut-band i:nth-child(2) {
-  top: 152px;
-  height: 3px;
-  width: 34%;
-}
-
-.fxd-cut-band i:nth-child(3) {
-  top: 98px;
-  height: 2px;
-  width: 60%;
-  opacity: 0.6;
-}
-
-/* 文字はカードの少し左（x 760）を中心に置く（右の結果パネルに隠れないように） */
-.fxd-cut-txt {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  margin-right: 400px;
-  /* 言葉は 8〜9 文字。右の結果パネル（x 1270〜）にかからない幅に収める */
-  font-size: 100px;
-  font-weight: 900;
-  font-style: italic;
-  letter-spacing: 1px;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.fxd-cut-txt em {
-  font-style: normal;
-  font-size: 60px;
-  color: var(--ce);
-  text-shadow: 0 4px 0 rgba(0, 0, 0, 0.4);
-}
-
-.fxd-cut-word {
-  display: grid;
-}
-
-.fxd-cut-word b {
-  grid-area: 1 / 1;
-  padding: 0 10px;
-}
-
-/* 縁取りは後ろの別の層に描く（グラデーションの文字に縁を重ねないため） */
-.fxd-cut-word .o {
-  color: transparent;
-  -webkit-text-stroke: 14px rgba(0, 0, 0, 0.8);
-}
-
-.fxd-cut-word .f {
-  color: #fff;
-}
-
-.fxd-cut[data-t='2'] .fxd-cut-word .f {
-  background: linear-gradient(180deg, #ffffff 30%, #ffe066 70%, #ffb020);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.fxd-cut[data-t='3'] .fxd-cut-word .f {
-  background: linear-gradient(180deg, #fffbe6 10%, #ffe08a 40%, #f5c542 60%, #b8860b 90%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.fxd-cut[data-t='3'] .fxd-cut-word .o {
-  -webkit-text-stroke-color: #3a2600;
-}
-
-.fxd-cut-slash {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: -5px;
-  height: 10px;
-  background: linear-gradient(90deg, transparent, #fff 30%, #fff 70%, transparent);
-  box-shadow: 0 0 30px #fff;
-  opacity: 0;
-}
-
 /* ---- 粒子 --------------------------------------------------------------- */
 
 .fxd-fx {
@@ -1638,8 +848,4 @@
 .fxd.is-rm *::after {
   animation: none !important;
   transition: none !important;
-}
-
-.fxd.is-rm .fxd-ecg .line {
-  stroke-dashoffset: 0;
 }

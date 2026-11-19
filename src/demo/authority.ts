@@ -5,18 +5,15 @@ import { PrizeStock, RANKS, commitHash, doubleChancePrizes, packLook, type Prize
 import { Rng } from '../core/rng'
 import {
   TIER_NAME,
-  allowedTiers,
-  classify,
-  makePlan,
+  allowedPersonal,
+  drawTiming,
+  personalBeats,
   personalTier,
   pickStyle,
-  pickTier,
-  schedule,
-  timing,
-  type Context,
-  type FactClass,
+  venueBeats,
   type MachineStyle,
   type PersonalOutcome,
+  type Possible,
   type Tier,
 } from '../core/show'
 import type { BallColor } from '../fx/theme'
@@ -32,7 +29,6 @@ export interface Settings {
   dc: number // ダブルチャンス用の数
 }
 
-export type HitKind = 'any' | 'hit' | 'gase' // 段階を指定するとき: 新規ビンゴあり／なし
 export type EventKind = 'wild' | 'mole' | 'moleMe'
 
 // ペースの調整役のモグラ（緊急クエスト）は、1 ゲームにこの回数まで
@@ -58,8 +54,7 @@ export class DemoAuthority {
   busy = false
   phase: Phase = 'reception'
   forcedNumber: number | null = null
-  forcedTier: Tier | null = null
-  forcedKind: HitKind = 'any'
+  forcedTier: Tier | null = null // 自分のスマホの段階の指定（操作パネル）
   onChange: () => void = () => {}
 
   private rng!: Rng
@@ -79,10 +74,10 @@ export class DemoAuthority {
   private lastEventAt = -10
   private moles = 0
   private wilds = 0
+  private tierNote = '' // スマホの色の指定を通せなかったときの知らせ
   private styles: MachineStyle[] = [] // 最近の抽選機の型（同じ型を 3 回続けない）
   private questScore: ((score: number) => void) | null = null
   private pendingEvent: EventKind | null = null
-  private pushNow: (() => void) | null = null
   private gate: (() => void) | null = null // 説明の画面などで、司会の合図を待っている
   holdLabel = '' // 待っている間の、主催のボタンの名前
   private choiceNow: ((kind: 'receive' | 'challenge') => void) | null = null
@@ -113,9 +108,7 @@ export class DemoAuthority {
     this.tampered = false
     this.forcedNumber = null
     this.forcedTier = null
-    this.forcedKind = 'any'
     this.pendingEvent = null
-    this.pushNow = null
     this.gate = null
     this.choiceNow = null
     this.entryClose = null
@@ -158,10 +151,6 @@ export class DemoAuthority {
       this.entrants.add(0)
       this.hub.publish({ type: 'dcEntrants', count: this.entrants.size })
     }
-  }
-
-  push(): void {
-    this.pushNow?.()
   }
 
   // 説明の画面を出していて、司会の「スタート」を待っている
@@ -230,7 +219,7 @@ export class DemoAuthority {
     const d = g.drawCount
     const left = this.stock.lowerLeft
     if (d < 3 || d - this.lastEventAt < 2 || left <= 0) return null
-    if (this.forcedNumber !== null || this.forcedTier !== null) return null // 操作パネルで指定中は任せる
+    if (this.forcedNumber !== null) return null // 操作パネルで番号を指定中は任せる
     if (this.wilds < 1 && d >= 5 && g.winners.length === 0) {
       const projected = d + g.estimateDrawsUntil(left, this.paceRng, 6)
       if (projected > this.target + 3) return { kind: 'wild', ratio: 0 } // 虹玉は ratio を使わない
@@ -387,35 +376,32 @@ export class DemoAuthority {
     const g = this.game
     const all = g.previewAll()
     const lowerLeft = this.stock.lowerLeft
-    const ctx: Context = { size: g.size, winners: g.winners.length, prizeCount: g.winners.length + lowerLeft }
-    const pick = this.choose(all, ctx)
-    const imp = pick.imp
-    // この 1 球で下位の景品が尽きるなら、先に予告して会場の緊張を最大にする
+    const deckNext = g.nextInDeck()!
+    const imp = all.find((i) => i.n === (this.forcedNumber ?? deckNext))!
+    if (imp.n !== deckNext) this.tampered = true
+    // この 1 球で下位の景品が尽きるなら、先に知らせる（これは事実の知らせ。期待度の予告ではない）
     const final = imp.newBingo > 0 && imp.newBingo >= lowerLeft
-    const tier: Tier = final ? 3 : pick.tier
     if (final) {
       this.hub.publish({ type: 'finalBall', prizesLeft: lowerLeft, durationMs: 3800 })
       await this.clock.wait(3800)
       if (gen !== this.generation) return
     }
-    const plan = makePlan(tier, this.rng)
-    const style = pickStyle(plan, this.styles, () => this.rng.next())
+    const style = pickStyle(this.styles, () => this.rng.next())
     this.styles = [...this.styles.slice(-3), style]
-    const t = timing(tier, g.size)
-    const personal = { tier: personalTier(this.myOutcome(imp), this.rng), waiting: this.myWaiting() }
+    const t = drawTiming(g.size, imp.newBingo > 0 || imp.challengeIdx.length > 0)
+    // 期待度（色）はスマホだけ。大画面は、どの回も同じ調子で回して番号を出す
+    const tier = this.myTier(imp, all)
+    const personal = { tier, waiting: this.myWaiting(), beats: personalBeats(tier, t.reveal, this.rng) }
     this.forcedNumber = null
     this.forcedTier = null
     const drawNo = g.drawCount + 1
-    // 大画面と各自のスマホが、同じ拍の列・同じ型で溜める。番号はどちらも公開の瞬間に開く（スマホに先に渡さない）
-    this.hub.publish({ type: 'drawScheduled', drawNo, tier, plan, style, timing: t, beats: schedule(plan, t), personal })
+    // 番号は、大画面でも全員のスマホでも同じ瞬間に出る（スマホに先に渡さない）
+    this.hub.publish({ type: 'drawScheduled', drawNo, style, revealAt: t.reveal, beats: venueBeats(t.reveal), personal })
+    // 操作パネルへの知らせは、抽選が始まってから出す（始まるときに、前の知らせを消しているため）
+    if (this.tierNote) this.say(this.tierNote)
+    this.tierNote = ''
     await this.clock.wait(t.reveal)
     if (gen !== this.generation) return
-    if (t.push) {
-      this.hub.publish({ type: 'awaitPush', drawNo, ms: 3000 })
-      await Promise.race([new Promise<void>((r) => (this.pushNow = r)), this.clock.wait(3000)])
-      this.pushNow = null
-      if (gen !== this.generation) return
-    }
 
     const result = g.apply(imp.n)
     const names = result.bingoIdx.slice(0, 12).map((i) => ({ name: g.players[i].name, isMe: g.players[i].isMe }))
@@ -425,8 +411,6 @@ export class DemoAuthority {
       drawNo,
       n: imp.n,
       label: labelOf(imp.n),
-      tier,
-      cls: pick.cls,
       hits: result.hits,
       newReach: result.newReach,
       moreReach: result.moreReach,
@@ -434,16 +418,37 @@ export class DemoAuthority {
       names,
       challengeWins: result.challengeIdx.map((i) => ({ name: g.players[i].name, isMe: i === 0 })),
       totals: this.totals(),
-      resultMs: t.total - t.reveal,
+      resultMs: t.result,
     })
-    await this.clock.wait(t.total - t.reveal)
+    await this.clock.wait(t.result)
     if (gen !== this.generation) return
     if (result.newBingo > 0 || result.challengeIdx.length > 0) await this.prizePhase(result, final, gen)
     if (gen !== this.generation) return
     if (this.stock.lowerLeft === 0 || g.remaining().length === 0) this.finish()
   }
 
-  // 自分にとっての次の番号の意味（手元のあおりの段階を決める）
+  // 自分のスマホに出す段階。いまのカードで起こりうること（can）の中からだけ選ぶ
+  // （カードは本人に見えているので、リーチでない人に金を出すと、うそだと分かる）
+  private myTier(imp: Impact, all: Impact[]): Tier {
+    const outs = new Set(all.map((i) => this.myOutcome(i)))
+    const can: Possible = { hit: outs.has('hit') || outs.has('reach') || outs.has('bingo'), reach: outs.has('reach'), bingo: outs.has('bingo') }
+    const outcome = this.myOutcome(imp)
+    const wanted = this.forcedTier
+    if (wanted !== null) {
+      // 操作パネルの指定も、うそにならないときだけ通す（虹は、本当にビンゴになる番号のときだけ）
+      if (allowedPersonal(can).includes(wanted) && (wanted !== 4 || outcome === 'bingo')) return wanted
+      const why =
+        wanted === 4
+          ? 'あなたがビンゴになる番号のときだけです（「次でビンゴ」と一緒に使ってください）'
+          : wanted === 3
+            ? 'あなたがリーチのときだけです（「リーチにする」のあとで使ってください）'
+            : 'いまのあなたのカードでは出せません'
+      this.tierNote = `スマホの${TIER_NAME[wanted]}は、${why}。自動で選びました`
+    }
+    return personalTier(outcome, can, this.rng)
+  }
+
+  // 自分にとっての次の番号の意味
   private myOutcome(imp: Impact): PersonalOutcome {
     const me = this.game.me
     if (imp.me.bingo || imp.me.challenge) return 'bingo'
@@ -464,37 +469,6 @@ export class DemoAuthority {
       }
     }
     return [...new Set(labels)]
-  }
-
-  // 次の番号と段階を決める。段階を指定された場合も、その段階を正直に出せる番号だけを使う
-  private choose(all: Impact[], ctx: Context): { imp: Impact; cls: FactClass; tier: Tier } {
-    const g = this.game
-    const byN = new Map(all.map((i) => [i.n, i]))
-    const classOf = (imp: Impact) => classify(imp, all, ctx)
-    const deckNext = g.nextInDeck()!
-    let imp = byN.get(this.forcedNumber ?? deckNext)!
-    const wanted = this.forcedTier
-    if (wanted !== null) {
-      const fits = (i: Impact) =>
-        allowedTiers(classOf(i)).includes(wanted) &&
-        (this.forcedKind === 'any' || (this.forcedKind === 'hit') === i.newBingo > 0)
-      if (!fits(imp)) {
-        const alt = g.remaining().map((n) => byN.get(n)!).find(fits)
-        if (!alt) {
-          this.say(`いまの盤面では${TIER_NAME[wanted]}を出せる番号がありません。自動で選びます`)
-        } else {
-          if (this.forcedNumber !== null) this.say(`指定の番号では${TIER_NAME[wanted]}を出せないので、${labelOf(alt.n)} にしました`)
-          imp = alt
-        }
-      }
-      if (fits(imp)) {
-        if (imp.n !== deckNext) this.tampered = true
-        return { imp, cls: classOf(imp), tier: wanted }
-      }
-    }
-    if (imp.n !== deckNext) this.tampered = true
-    const cls = classOf(imp)
-    return { imp, cls, tier: pickTier(cls, this.rng) }
   }
 
   // ---- 景品 -----------------------------------------------------------------
@@ -685,9 +659,9 @@ export class DemoAuthority {
     this.onChange()
   }
 
-  setForcedTier(t: Tier | null, kind: HitKind): void {
+  // 次の抽選で、自分のスマホに出す段階を指定する
+  setForcedTier(t: Tier | null): void {
     this.forcedTier = t
-    this.forcedKind = kind
     this.onChange()
   }
 

@@ -1,5 +1,5 @@
 import type { Glow, Rarity } from '../core/prizes'
-import type { Beat, FactClass, MachineStyle, Plan, Tier, Timing } from '../core/show'
+import type { Beat, MachineStyle, Tier } from '../core/show'
 import type { BallColor } from '../fx/theme'
 
 // 権威（本番はサーバー、デモはブラウザ内）から画面へ流れるメッセージ。
@@ -77,21 +77,17 @@ export type Msg =
   | {
       type: 'drawScheduled'
       drawNo: number
-      tier: Tier
-      plan: Plan
       style: MachineStyle // 抽選機の回し方の型（大画面とスマホで着地をそろえる）
-      timing: Timing
-      beats: Beat[]
-      personal: { tier: Tier; waiting: string[] } // 本人宛て
+      revealAt: number // 番号が出る時刻（ms）。どの回も同じ長さ
+      beats: Beat[] // 大画面の抽選機の拍（期待度の予告は入らない。スマホは、番号が見える瞬間を合わせるのに使う）
+      // 本人宛て: 自分のカードにとっての段階（期待度はスマホだけに出す）と、その段階で作った拍
+      personal: { tier: Tier; waiting: string[]; beats: Beat[] }
     }
-  | { type: 'awaitPush'; drawNo: number; ms: number }
   | {
       type: 'numberRevealed'
       drawNo: number
       n: number
       label: string
-      tier: Tier
-      cls: FactClass
       hits: number
       newReach: number
       moreReach: number

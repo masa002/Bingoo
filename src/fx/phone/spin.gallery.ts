@@ -1,27 +1,28 @@
 import { Rng } from '../../core/rng'
-import { makePlan, pickStyle, schedule, timing, type Beat } from '../../core/show'
+import { drawTiming, personalBeats, pickStyle, venueBeats, type Beat } from '../../core/show'
 import { registerGallery, type GalleryItem } from '../gallery'
 import type { Timeline } from '../runtime'
-import { TIER_QUIET, TIER_SHAPE, TIER_WORD, type Tier } from '../theme'
+import { MY_TIER_WORD, TIER_QUIET, TIER_SHAPE, type Tier } from '../theme'
 import { playBingo, playReach, type AoriOutcome } from './aori'
 import { CardView } from './card'
 import { HandSpin } from './spin'
 
 // 手元の抽選演出のギャラリー。見本の画面は ui/phone.ts と同じ並び（ステータス・名前・リーチの札・カード・最新の番号・履歴）にして、
-// カードを上に置いたまま流す。拍の列と抽選機の型は権威と同じく、大画面の段階から makePlan → schedule・pickStyle で毎回作る
-// （timing は reveal・push だけを使う）。
-// 呼ぶ順番も組み込みと同じ: start → （金・虹は reveal の時刻に awaitPush → 司会の合図（公開）を待つ）→ reveal → resolve → スタンプなど。
-// オリパの合図の見本もここにある: 昇格（手元だけ色が上がる）、
-// 復活（青・緑のままリーチ・ビンゴになった回。「はずれ…？」→ 暗転 → 当たり）。
-// ステータスの行の真ん中に、大画面の拍（期待度の目盛り・カットイン・公開待ちなど）を小さく出す（見本だけ。そろい方を確かめるため）
+// カードを上に置いたまま流す。見本は「自分の段階 × 結果」の組み合わせ（期待度はスマホだけに出る）。
+// 拍は権威と同じ作り方で、毎回作る: 自分の拍は personalBeats、大画面の抽選機の拍は venueBeats、型は pickStyle、長さは drawTiming。
+// 呼ぶ順番も組み込みと同じ: start → 番号が出る時刻に reveal → resolve → スタンプなど。
+// 段階とカードは、権威と同じく食い違わないようにしてある（金・虹はリーチの人だけ、赤はリーチが増えうる人だけ）。
+// オリパの合図の見本もここにある: 昇格（途中で色が上がる）、復活（青・緑のままリーチ・ビンゴになった回。「なかった…？」→ 暗転 →「あった！」）。
+// ステータスの行の真ん中に、いまの拍を小さく出す（見本だけ。拍のなぞり方を確かめるため）
 
-const G = 'スマホ: 手元の抽選（大画面と同じ流れ）'
+const G = 'スマホ: 手元の抽選（あなたの期待度）'
 const CARD5 = [3, 22, 38, 51, 67, 12, 17, 44, 59, 70, 7, 28, 0, 48, 62, 15, 19, 33, 56, 74, 1, 25, 41, 53, 65]
 const HISTORY = [20, 3, 17, 56, 22, 74] // 見本の履歴（新しい順）
-const PUSH_WAIT = 2200 // 見本で、司会が公開の合図を出すまで
 const bits = (...cells: number[]): number => cells.reduce((m, i) => m | (1 << i), 0)
-const DIAG4 = bits(0, 6, 12, 18) // 斜めがあと 1 つ（O65）
-const QUIET = bits(1, 12, 19) // リーチなし
+const DIAG4 = bits(0, 6, 12, 18) // 斜めがあと 1 つ（O65）。ほかにリーチは増えない
+const DIAG4_ROW3 = DIAG4 | bits(10, 11) // 斜めがあと 1 つ（O65）で、横もあと 2 つ（G48 でリーチが増える）
+const COL3 = bits(2, 7, 12) // リーチなし。縦があと 2 つ（N33 でリーチになる）
+const QUIET = bits(1, 12, 19) // リーチなし。1 つあいても、リーチにならない
 const label = (n: number): string => `${'BINGO'[Math.floor((n - 1) / 15)]}${n}`
 
 // 5×5 のライン（横・縦・斜め）
@@ -41,15 +42,15 @@ interface Mock {
   chip: HTMLElement
   latest: HTMLElement
   history: HTMLElement
-  venue: HTMLElement
+  note: HTMLElement
 }
 
 interface Spec {
   id: string
   label: string
-  venue: Tier // 大画面の段階
   tier: Tier // 自分のカードにとっての段階
-  mask: number // 公開の前のカード
+  flow?: Tier // 虹のとき、確定の前に届く流れ（青〜金）。省略すると、権威と同じくじで決まる
+  mask: number // 番号が出る前のカード
   waiting: number[] // あと 1 つのマス
   n: number // 出る番号
   outcome: AoriOutcome
@@ -63,7 +64,7 @@ function mockPhone(host: HTMLElement, tl: Timeline, mask: number, waiting: reado
     'beforeend',
     `<div style="position:absolute;inset:0;background:radial-gradient(120% 60% at 50% 0%,#16204a,#0a0f24 60%,#070b1a);color:#e8ecff;font-family:'Hiragino Sans','Yu Gothic UI','Meiryo',system-ui,sans-serif;font-size:15px">
       <div style="position:relative;display:flex;justify-content:space-between;padding:12px 26px 4px;font-size:13px;font-weight:700"><span>9:41</span><span>●●● 100%</span>
-        <span data-k="venue" style="position:absolute;left:84px;right:96px;top:12px;text-align:center;font-size:11px;font-weight:700;color:#8a93b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></span></div>
+        <span data-k="note" style="position:absolute;left:84px;right:96px;top:12px;text-align:center;font-size:11px;font-weight:700;color:#8a93b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></span></div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin:6px 16px 4px"><div><b style="font-size:18px">あなた</b><small style="margin-left:8px;color:#8a93b8">No.00042</small></div><div style="color:#8a93b8;font-size:13px">参加 1,000人</div></div>
       <div style="min-height:38px;margin:0 14px"><div data-k="chip"></div></div>
       <div data-k="card" style="position:relative;margin-top:6px"></div>
@@ -76,7 +77,7 @@ function mockPhone(host: HTMLElement, tl: Timeline, mask: number, waiting: reado
   const card = new CardView($('card'), { size: 5, speed: tl.speed })
   card.setCells(CARD5)
   card.setMarks(mask, { waiting })
-  const m: Mock = { card, chip: $('chip'), latest: $('latest'), history: $('history'), venue: $('venue') }
+  const m: Mock = { card, chip: $('chip'), latest: $('latest'), history: $('history'), note: $('note') }
   setChip(m, waiting.length ? `リーチ　あと ${waiting.map((c) => label(CARD5[c])).join('・')}` : '')
   renderHistory(m, HISTORY)
   return m
@@ -100,24 +101,22 @@ function renderHistory(m: Mock, nums: readonly number[]): void {
     .join('')
 }
 
-// 大画面の拍の名前（見本の帯に出す）
+// 拍の名前（見本のステータスの行に出す）
 function describe(b: Beat): string {
   const t = (b.tier ?? b.heat) as Tier
   switch (b.kind) {
-    case 'appear':
-      return '登場'
     case 'spin':
       return '回る'
     case 'holdChange':
       return `色が変わる ${TIER_SHAPE[t]}`
     case 'step':
-      return `期待度が上がる ${TIER_SHAPE[t]}`
+      return `期待が高まる ${TIER_SHAPE[t]}`
     case 'group':
       return 'カードの群れが飛ぶ'
     case 'pseudo':
       return `まだ止まらない！ ${(b.index ?? 0) + 2} 回目`
     case 'cutin':
-      return `カットイン「${TIER_SHAPE[t]}${TIER_WORD[t]}」`
+      return `カットイン「${TIER_SHAPE[t]}${MY_TIER_WORD[t]}」`
     case 'telop':
       return `テロップ「${b.text ?? ''}」`
     case 'decel':
@@ -129,17 +128,7 @@ function describe(b: Beat): string {
     case 'ma':
       return '間（ま）'
     case 'goldEdge':
-      return '金の縁（裏返る）'
-    case 'freeze':
-      return 'ぴたっと止まる'
-    case 'crack':
-      return 'ヒビ'
-    case 'kakutei':
-      return '確定'
-    case 'rainbowPhones':
-      return 'みんなの画面が虹'
-    case 'push':
-      return '司会の合図待ち'
+      return '金の箔が下りる'
     case 'reveal':
       return '発表の時刻'
     default:
@@ -171,34 +160,28 @@ async function hold(tl: Timeline, ms: number): Promise<boolean> {
 
 async function run(host: HTMLElement, tl: Timeline, s: Spec): Promise<void> {
   const m = mockPhone(host, tl, s.mask, s.waiting)
-  const spin = new HandSpin(host, { speed: tl.speed })
+  // 見本には大画面がないので、回り出しと着地の音も手元で鳴らす（本番のスマホと同じ）
+  const spin = new HandSpin(host, { speed: tl.speed, sound: 'all' })
   watch(host, tl, m.card, spin)
   if (!(await hold(tl, 500))) return
-  // 権威と同じ作り方: 大画面の段階から、演出計画と拍の列を作る
-  const t = timing(s.venue, 1000)
-  const plan = makePlan(s.venue, new Rng(`${s.id}-${Math.random()}`))
-  const beats = schedule(plan, t)
+  // 権威と同じ作り方: 自分の段階から自分の拍を作る。大画面の抽選機の拍と型は、番号が見える瞬間を合わせるためだけに渡す
+  const reveal = drawTiming(1000, false).reveal
+  const beats = personalBeats(s.flow ?? s.tier, reveal, new Rng(`${s.id}-${Math.random()}`))
   spin.start({
     tier: s.tier,
     waiting: s.waiting.map((c) => label(CARD5[c])),
     pool: poolOf(s.mask),
     beats,
-    revealAt: t.reveal,
-    venueTier: s.venue,
-    venueVariant: pickStyle(plan, [], Math.random),
+    revealAt: reveal,
+    venueBeats: venueBeats(reveal),
+    venueVariant: pickStyle([], Math.random),
   })
   for (const b of beats) {
     const text = describe(b)
-    if (text) tl.at(b.at, () => (m.venue.textContent = `会場: ${text}`))
+    if (text) tl.at(b.at, () => (m.note.textContent = `拍: ${text}`))
   }
-  if (!(await hold(tl, t.reveal))) return
-  if (t.push) {
-    // 金・虹は、大画面が司会の合図（公開）を待つ
-    spin.awaitPush()
-    m.venue.textContent = '会場: 司会の合図待ち…'
-    if (!(await hold(tl, PUSH_WAIT))) return
-  }
-  m.venue.textContent = `会場: 発表 ${label(s.n)}`
+  if (!(await hold(tl, reveal))) return
+  m.note.textContent = `発表 ${label(s.n)}`
   await spin.reveal(s.n)
   if (tl.cancelled) return
   // 組み込み側: 出た番号を、最新の番号と履歴に出しておく（本体が引っ込むと見える）
@@ -231,21 +214,24 @@ async function follow(m: Mock, host: HTMLElement, tl: Timeline, s: Spec): Promis
 }
 
 const SPECS: Spec[] = [
-  { id: 'v0-p0', label: `会場 青 × 自分 青 → なかった…（${TIER_QUIET}のまま）`, venue: 0, tier: 0, mask: QUIET, waiting: [], n: 36, outcome: 'none' },
-  { id: 'v2-p0', label: '会場 赤 × 自分 青 → なかった…（会場は赤、手元は青のまま）', venue: 2, tier: 0, mask: QUIET, waiting: [], n: 36, outcome: 'none' },
-  { id: 'v1-p1', label: '会場 緑 × 自分 緑 → あった！', venue: 1, tier: 1, mask: QUIET, waiting: [], n: 28, outcome: 'hit' },
-  { id: 'v3-p1', label: '会場 金 × 自分 緑 → なかった…（手元は緑で止まる・司会の合図待ち）', venue: 3, tier: 1, mask: DIAG4, waiting: [24], n: 36, outcome: 'none' },
-  { id: 'v0-p2', label: '会場 青 × 自分 赤 → リーチ！（期待度アップ！ 手元だけ上がる）', venue: 0, tier: 2, mask: bits(2, 7, 12), waiting: [], n: 33, outcome: 'reach' },
-  { id: 'v2-p2', label: '会場 赤 × 自分 赤 → なかった…', venue: 2, tier: 2, mask: DIAG4, waiting: [24], n: 36, outcome: 'none' },
-  { id: 'v2-p2-double', label: '会場 赤 × 自分 赤 → ダブルリーチ！', venue: 2, tier: 2, mask: DIAG4 | bits(10, 11), waiting: [24], n: 48, outcome: 'double' },
-  { id: 'v1-p3', label: '会場 緑 × 自分 金 → なかった…（期待度アップ！ 手元だけ金）', venue: 1, tier: 3, mask: DIAG4, waiting: [24], n: 36, outcome: 'none' },
-  { id: 'v3-p3', label: '会場 金 × 自分 金 → ビンゴ！（司会の合図待ち）', venue: 3, tier: 3, mask: DIAG4, waiting: [24], n: 65, outcome: 'bingo', rank: 3 },
-  { id: 'v3-p4', label: '会場 金 × 自分 虹 → ビンゴ確定！（司会の合図待ち）', venue: 3, tier: 4, mask: DIAG4, waiting: [24], n: 65, outcome: 'bingo', rank: 1 },
-  { id: 'v0-p4', label: '会場 青 × 自分 虹 → ビンゴ確定！（会場は青、手元だけ確定）', venue: 0, tier: 4, mask: DIAG4, waiting: [24], n: 65, outcome: 'bingo', rank: 2 },
-  { id: 'v2-p4', label: '会場 赤 × 自分 虹 → ビンゴ確定！', venue: 2, tier: 4, mask: DIAG4, waiting: [24], n: 65, outcome: 'bingo', rank: 4 },
+  { id: 't0-none', label: `青 → なかった…（${TIER_QUIET}のまま）`, tier: 0, mask: QUIET, waiting: [], n: 36, outcome: 'none' },
+  { id: 't0-hit', label: '青 → あった！', tier: 0, mask: QUIET, waiting: [], n: 28, outcome: 'hit' },
+  { id: 't1-none', label: '緑「あるかも？」→ なかった…', tier: 1, mask: QUIET, waiting: [], n: 36, outcome: 'none' },
+  { id: 't1-hit', label: '緑「あるかも？」→ あった！', tier: 1, mask: QUIET, waiting: [], n: 28, outcome: 'hit' },
+  { id: 't2-none', label: '赤「リーチのチャンス！」→ なかった…', tier: 2, mask: COL3, waiting: [], n: 36, outcome: 'none' },
+  { id: 't2-reach', label: '赤「リーチのチャンス！」→ リーチ！', tier: 2, mask: COL3, waiting: [], n: 33, outcome: 'reach' },
+  { id: 't2-double', label: '赤「リーチのチャンス！」→ ダブルリーチ！', tier: 2, mask: DIAG4_ROW3, waiting: [24], n: 48, outcome: 'double' },
+  { id: 't2-bingo', label: '赤「リーチのチャンス！」→ ビンゴ！', tier: 2, mask: DIAG4_ROW3, waiting: [24], n: 65, outcome: 'bingo', rank: 6 },
+  { id: 't3-none', label: '金「ビンゴのチャンス！」→ なかった…（金でも、必ずではない）', tier: 3, mask: DIAG4, waiting: [24], n: 36, outcome: 'none' },
+  { id: 't3-bingo', label: '金「ビンゴのチャンス！」→ ビンゴ！', tier: 3, mask: DIAG4, waiting: [24], n: 65, outcome: 'bingo', rank: 3 },
+  // ---- 虹（自分のビンゴ確定）。確定は、発表の少し前に出る ----
+  { id: 't4-from0', label: '虹: 青のまま → 突然「ビンゴ確定！」→ ビンゴ！', tier: 4, flow: 0, mask: DIAG4, waiting: [24], n: 65, outcome: 'bingo', rank: 2 },
+  { id: 't4-from2', label: '虹: 赤まで上がる →「ビンゴ確定！」→ ビンゴ！', tier: 4, flow: 2, mask: DIAG4_ROW3, waiting: [24], n: 65, outcome: 'bingo', rank: 4 },
+  { id: 't4-from3', label: '虹: 金まで上がる →「ビンゴ確定！」→ ビンゴ！', tier: 4, flow: 3, mask: DIAG4, waiting: [24], n: 65, outcome: 'bingo', rank: 1 },
+  { id: 't4-any', label: '虹: 流れはくじ（権威と同じ）→「ビンゴ確定！」→ ビンゴ！', tier: 4, mask: DIAG4, waiting: [24], n: 65, outcome: 'bingo', rank: 1 },
   // ---- オリパの合図 ----
-  { id: 'revive-reach', label: 'どんでん返し: 青のまま → なかった…？ → 暗くなる → あった！ → リーチ！', venue: 0, tier: 0, mask: bits(2, 7, 12), waiting: [], n: 33, outcome: 'reach' },
-  { id: 'revive-bingo', label: 'どんでん返し: 緑のまま → なかった…？ → 暗くなる → あった！ → ビンゴ！', venue: 1, tier: 1, mask: DIAG4, waiting: [24], n: 65, outcome: 'bingo', rank: 5 },
+  { id: 'revive-reach', label: 'どんでん返し: 青のまま → なかった…？ → 暗くなる → あった！ → リーチ！', tier: 0, mask: COL3, waiting: [], n: 33, outcome: 'reach' },
+  { id: 'revive-bingo', label: 'どんでん返し: 緑のまま → なかった…？ → 暗くなる → あった！ → ビンゴ！', tier: 1, mask: DIAG4, waiting: [24], n: 65, outcome: 'bingo', rank: 5 },
 ]
 
 registerGallery(

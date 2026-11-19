@@ -1,7 +1,7 @@
 // 演出の共通の型と色。演出の部品はゲームの処理にも通信にも依存しない（後で使い回すため）
 
 export type { Tier } from '../core/show'
-export { HEAT_LABEL, MY_TIER_WORD, TIER_NAME, TIER_QUIET, TIER_SHAPE, TIER_WORD } from '../core/show'
+export { HEAT_LABEL, MY_TIER_WORD, TIER_NAME, TIER_QUIET, TIER_SHAPE } from '../core/show'
 export type { MachineStyle } from '../core/show'
 export type { Glow, Rarity } from '../core/prizes'
 import type { Tier } from '../core/show'
