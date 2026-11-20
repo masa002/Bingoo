@@ -85,6 +85,7 @@ const HERO_TEXT: Readonly<Record<Exclude<AoriOutcome, 'none'>, string>> = {
 }
 const OUT_POWER: Readonly<Record<AoriOutcome, number>> = { none: 0, hit: 0, reach: 1, double: 2, bingo: 3 }
 const FAIL_TEXT = 'なかった…' // 出た番号が、自分のカードにない
+const LOWER_FADE = 160 // 外れの札を出す前に、下の段の文を消す時間（演出上の ms）
 const UP_WORD = '期待度アップ！' // 途中で自分の色が上がる（オリパでいう昇格）
 const UP_TAG = `<em class="fxs-up">${UP_WORD}</em>`
 // カットインの頭に付ける札（「あなた」の印。自分のカードの話だと分かるように）
@@ -338,6 +339,7 @@ export class HandSpin {
   private e0 = 0
   private t0 = 0
   private msgText = ''
+  private lowerFade: Animation[] = [] // 外れの札を出す前に消した、下の段（hideLower）
   private flashed = false // 全面の光は 1 回の演出につき 1 回まで
   private beating = false
   private dusting = false
@@ -720,8 +722,11 @@ export class HandSpin {
     this.flashed = true
     this.el.classList.add('is-fail')
     this.fadeAura(tl, 400)
+    // 「出た番号は B9」を消し終えてから「なかった…？」を出す（同じ場所で文を重ねない）。プチュンの時刻は変えない
+    await this.hideLower(tl)
+    if (tl.cancelled) return
     const miss = this.missPlate(tl, '<b>なかった…？</b>')
-    await tl.wait(480)
+    await tl.wait(480 - LOWER_FADE)
     if (tl.cancelled) return
     // プチュン: 音が切れるところ（0.30 秒）で、画面が落ちきる
     sfx.puchun()
@@ -729,6 +734,7 @@ export class HandSpin {
     await tl.wait(850)
     if (tl.cancelled) return
     miss.remove()
+    this.showLower() // 暗い間に、下の段（「あと O65」など）を戻しておく
     this.el.classList.remove('is-fail')
     // 復活: 暗い中で底を蹴り、0.40 秒後に弾けて、明るさがゆっくり戻る
     sfx.revive()
@@ -1582,13 +1588,31 @@ export class HandSpin {
       const b = boxIn(p.lamp, this.el)
       this.onoma('プシュ～', b.x + b.w - 40, b.y - 8, tl)
     }
-    await tl.wait(still ? 150 : 420)
+    await tl.wait(still ? 0 : 420 - LOWER_FADE)
+    if (tl.cancelled) return
+    // 「出た番号は B9」を消し終えてから、同じ場所に次の文を出す（2 つの文を重ねない）
+    await this.hideLower(tl)
     if (tl.cancelled) return
     // 「B9 は なかった…」は、下のパネルの中に、不透明で水平に出す（カードには乗せない。外れは抽選の大半で出るので、
     // 毎回カードの数字が汚れて見えないように）。次につながる一言を添える
     this.missPlate(tl, `<b>${numHtml(label)} は ${FAIL_TEXT}</b><em>次に期待！</em>`)
     await tl.wait(still ? 1300 : 1500)
     if (!tl.cancelled) await this.retract(tl)
+  }
+
+  // 外れの札を出す前に、下の段（窓の下の一行と「あと O65」）を消し終える。札は同じ場所に出るので、
+  // 札がふわっと出てくる間に、前の文が透けて重なって見えないようにする。showLower で元に戻す
+  private async hideLower(tl: Timeline): Promise<void> {
+    const p = this.parts
+    if (!p) return
+    const nodes = [p.msg, p.wait].filter((n): n is HTMLElement => n !== null)
+    this.lowerFade = nodes.map((n) => n.animate([{ opacity: 0 }], { duration: Math.max(1, tl.ms(LOWER_FADE)), easing: 'ease-out', fill: 'forwards' }))
+    await tl.wait(LOWER_FADE) // 取り消されたら、すぐに抜ける
+  }
+
+  private showLower(): void {
+    this.lowerFade.forEach((a) => a.cancel())
+    this.lowerFade = []
   }
 
   // 外れの札（パネルの下の段。窓の下の一行と「あと O65」の位置を、不透明の札で覆う）
@@ -1812,6 +1836,7 @@ export class HandSpin {
     this.onLanded?.() // resolve() が待っていたら、先へ進めて抜けさせる（gen が変わっている）
     this.onLanded = null
     this.msgText = ''
+    this.lowerFade = [] // 消した要素ごと捨てたので、戻すものはない
     this.flashed = false
     this.beating = false
     this.dusting = false

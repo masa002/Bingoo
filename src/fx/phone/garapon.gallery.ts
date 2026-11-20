@@ -102,7 +102,23 @@ registerGallery(
       return playGarapon(host, { speed: tl.speed, balls: [{ color: 'gold', prize: 'ロボット掃除機' }], stats: { hits: 10, maxReach: 2, nearMiss: 2 }, outro, winners })
     },
   },
+  {
+    id: 'garapon-outro-many',
+    group: PHONE,
+    label: 'ガラポン: 当たった人が多いとき（9 人。特賞と自分は「ほか」に入れない）',
+    screen: 'phone',
+    play: (host, tl) => {
+      const outro = tl.wait(18000)
+      // 権威と同じく、良い景品ほど最後に出す
+      const rank = { white: 0, red: 1, gold: 2, rainbow: 3 }
+      const list = [...SAMPLE, ...MORE_NAMES.slice(0, 2).map((name) => ({ name, color: 'red' as BallColor, prize: 'ダブルチャンス賞 QUO カード', isMe: false }))]
+      list.sort((a, b) => rank[a.color] - rank[b.color])
+      const winners = list.map((w, i) => ({ ...w, at: 5000 + i * 900 }))
+      return playGarapon(host, { speed: tl.speed, balls: [{ color: 'red', prize: 'グルメカタログ' }], stats: { hits: 10, maxReach: 2, nearMiss: 2 }, outro, winners })
+    },
+  },
   final('garapon-final-prize', 'あなたの結果（参加しなかった人）: 景品あり', { hits: 15, maxReach: 2, nearMiss: 0, won: 'スマートウォッチ', rank: 4 }),
+  final('garapon-final-zero', 'あなたの結果（参加しなかった人）: リーチなし（0 の行は出さない）', { hits: 6, maxReach: 0, nearMiss: 0 }),
   final('garapon-final-rank', 'あなたの結果（参加しなかった人）: 景品なし・ビンゴ 第 12 位', { hits: 14, maxReach: 3, nearMiss: 1, rank: 12 }),
   final('garapon-final-none', 'あなたの結果（参加しなかった人）: 景品なし（また次の機会に！）', { hits: 9, maxReach: 2, nearMiss: 3 }),
   {

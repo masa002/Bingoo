@@ -501,6 +501,29 @@
   letter-spacing: 2px;
 }
 
+/* ログインの期限。ふだんは控えめに、残り 2 時間を切ったら目立たせる（その場でログインし直すボタンも出す） */
+.lh-expiry {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.lh-expiry.soon {
+  padding: 2px 4px 2px 12px;
+  border: 1px solid var(--gold);
+  border-radius: 12px;
+  background: #2a2208;
+  color: #ffe9a8;
+  font-weight: 700;
+}
+
+.lh-expiry .lh-btn {
+  font-size: 14px;
+}
+
 /* 接続の状態。つながっているときは小さく、切れているときは目立たせる */
 .lh-link {
   margin-left: auto;
@@ -751,8 +774,28 @@
   font-weight: 700;
 }
 
-.lh-table td:nth-child(n + 3) {
+/* No.・ランク・もらい方は折り返さない（名前と景品の名前は、長ければ折り返す） */
+.lh-table td:nth-child(2),
+.lh-table td:nth-child(n + 4) {
   white-space: nowrap;
+}
+
+/* カードの No.（スマホに出ている形のまま。桁をそろえて、見比べやすくする） */
+.lh-table td:nth-child(2) {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 一覧を取りに行ったら、ログインの期限が切れていた。その場でログインし直せる */
+.lh-results-auth,
+.lh-reset-csv {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+
+.lh-dialog-body .lh-reset-csv p {
+  margin-top: 0;
 }
 
 /* 仮想の参加者は、色を落として札を付ける（景品を渡す相手ではない） */

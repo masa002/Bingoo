@@ -4,7 +4,7 @@ import type { Rng } from '../core/rng'
 import { ApiError, type Api, type Link, type LinkState } from '../net/link'
 import type { Msg, MsgOf, Phase, Totals } from '../net/protocol'
 import { apiBase, connect, createApi } from '../net/remote'
-import type { CreateRes, LiveSettings, ResultRow } from '../net/wire'
+import type { CreateRes, LiveSettings, LoginRes, ResultRow } from '../net/wire'
 import { esc, fmt, h, q } from '../ui/dom'
 import './host.css'
 
@@ -334,11 +334,19 @@ export function mountHost(app: HTMLElement, params: URLSearchParams): void {
   let totp = false // 主催のログインに、認証アプリの 6 けたも要る（ゲームの状態から分かる）
   const login = (note: string) => showLogin(root, api, code, totp, note, enter)
 
-  const enter = (token: string) => {
-    const link = connect({ api: apiBase(), code, role: 'host', token })
-    const view: HostConsole = new HostConsole(root, api, link, code, token, (why) => {
+  const enter = (auth: LoginRes) => {
+    // つなぐときに付けるトークン。コンソールの中でログインし直したら、ここを書き換える
+    // （Link は、つなぎ直すたびにこの token を読む。書き換えておけば、そのあとのつなぎ直しが断られない）
+    const opts = { api: apiBase(), code, role: 'host' as const, token: auth.token }
+    const link = connect(opts)
+    const relogin = (res: LoginRes) => {
+      save(session, tokenKey(code), res)
+      opts.token = res.token
+    }
+    const view: HostConsole = new HostConsole(root, api, link, code, { ...auth, totp }, relogin, (why) => {
       view.destroy()
       link.close()
+      // 接続そのものが認証で断られた（つなぎ直しで断られた、など）。コンソールは使えないので、ログインからやり直す
       if (why === 'auth') {
         save(session, tokenKey(code), null)
         login('もう一度ログインしてください')
@@ -354,8 +362,8 @@ export function mountHost(app: HTMLElement, params: URLSearchParams): void {
       (state) => {
         if (!state) return message('このゲームは見つかりません', 'create')
         totp = state.totp
-        const saved = load<{ token: string; expiresAt: number }>(session, tokenKey(code))
-        if (saved?.token && saved.expiresAt > Date.now()) enter(saved.token)
+        const saved = load<LoginRes>(session, tokenKey(code))
+        if (saved?.token && saved.expiresAt > Date.now()) enter(saved)
         else login('')
       },
       (err: unknown) => message(say(err), 'retry'),
@@ -364,15 +372,9 @@ export function mountHost(app: HTMLElement, params: URLSearchParams): void {
   start()
 }
 
-function showLogin(root: HTMLElement, api: Api, code: string, totp: boolean, note: string, enter: (token: string) => void): void {
-  root.innerHTML = `
-    <main class="lh-card lh-narrow">
-      <p class="lh-brand">Bingoo</p>
-      <h1>主催コンソール</h1>
-      <p class="lh-code">コード <b>${esc(code)}</b></p>
-      <form class="lh-form" novalidate>
-        ${note ? `<p class="lh-lead">${note}</p>` : ''}
-        <label class="lh-field"><span>主催キー</span>
+// ログインの欄（主催キーと、認証アプリの 6 けた）。ログインの画面と、コンソールの中でログインし直す窓で同じものを使う
+function loginFieldsHtml(totp: boolean): string {
+  return `<label class="lh-field"><span>主催キー</span>
           <input type="password" name="hostKey" autocomplete="current-password" spellcheck="false" />
         </label>
         ${
@@ -382,7 +384,27 @@ function showLogin(root: HTMLElement, api: Api, code: string, totp: boolean, not
         </label>`
             : ''
         }
-        <p class="lh-error" role="alert" hidden></p>
+        <p class="lh-error" role="alert" hidden></p>`
+}
+
+// 入れた値を読む。足りなければ、知らせる文を返す
+function readLogin(form: HTMLElement, totp: boolean): { hostKey: string; totp?: string } | string {
+  const hostKey = q<HTMLInputElement>(form, '[name="hostKey"]').value.trim()
+  const digits = (form.querySelector<HTMLInputElement>('[name="totp"]')?.value ?? '').replace(/\D/g, '')
+  if (!hostKey) return '主催キーを入れてください'
+  if (totp && digits.length !== 6) return '認証アプリの 6 けたの数字を入れてください'
+  return { hostKey, ...(digits ? { totp: digits } : {}) }
+}
+
+function showLogin(root: HTMLElement, api: Api, code: string, totp: boolean, note: string, enter: (auth: LoginRes) => void): void {
+  root.innerHTML = `
+    <main class="lh-card lh-narrow">
+      <p class="lh-brand">Bingoo</p>
+      <h1>主催コンソール</h1>
+      <p class="lh-code">コード <b>${esc(code)}</b></p>
+      <form class="lh-form" novalidate>
+        ${note ? `<p class="lh-lead">${note}</p>` : ''}
+        ${loginFieldsHtml(totp)}
         <button class="lh-primary" type="submit">ログイン</button>
       </form>
     </main>`
@@ -398,17 +420,15 @@ function showLogin(root: HTMLElement, api: Api, code: string, totp: boolean, not
   form.addEventListener('submit', (e) => {
     e.preventDefault()
     if (submit.disabled) return
-    const hostKey = key.value.trim()
-    const digits = (form.querySelector<HTMLInputElement>('[name="totp"]')?.value ?? '').replace(/\D/g, '')
-    if (!hostKey) return fail('主催キーを入れてください')
-    if (totp && digits.length !== 6) return fail('認証アプリの 6 けたの数字を入れてください')
+    const req = readLogin(form, totp)
+    if (typeof req === 'string') return fail(req)
     fail('')
     submit.disabled = true
     submit.textContent = '確かめています…'
-    api.login(code, { hostKey, ...(digits ? { totp: digits } : {}) }).then(
+    api.login(code, req).then(
       (res) => {
         save(session, tokenKey(code), res)
-        enter(res.token)
+        enter(res)
       },
       (err: unknown) => {
         submit.disabled = false
@@ -421,10 +441,25 @@ function showLogin(root: HTMLElement, api: Api, code: string, totp: boolean, not
 
 const HOW: Record<ResultRow['how'], string> = { bingo: 'ビンゴ', challenge: '上位チャレンジ', 'double-chance': 'ダブルチャンス' }
 
+// カードの No.。スマホの上に出ている形（No.00042）のままにする（景品を渡すときに、見比べるだけで済むように）
+function cardNoText(n: number | undefined): string {
+  return typeof n === 'number' && n > 0 ? `No.${String(n).padStart(5, '0')}` : '–'
+}
+
+// ログインの期限の時刻（21:30）。今日でなければ「明日の 2:00」
+function clockText(at: number): string {
+  const d = new Date(at)
+  const hm = `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
+  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  const days = Math.round((day(d) - day(new Date())) / 86_400_000)
+  return days === 0 ? hm : days === 1 ? `明日の ${hm}` : `${d.getMonth() + 1}/${d.getDate()} ${hm}`
+}
+
 const CONSOLE_HTML = `
 <header class="lh-top">
   <b class="lh-brand">Bingoo</b><span class="lh-tag">主催コンソール</span>
   <span class="lh-game">コード <b data-k="code"></b></span>
+  <span class="lh-expiry"><span data-k="expiry"></span><button type="button" class="lh-btn lh-relogin" hidden>ログインし直す</button></span>
   <span class="lh-link" data-s="connecting">つないでいます…</span>
 </header>
 <div class="lh-grid">
@@ -471,9 +506,13 @@ const CONSOLE_HTML = `
         <button type="button" class="lh-btn lh-csv" disabled>CSV で保存</button>
       </div>
       <p class="lh-note lh-results-msg">まだ当選者はいません</p>
+      <div class="lh-warn lh-results-auth" hidden>
+        <p>もう一度ログインすると、一覧が見られます</p>
+        <button type="button" class="lh-btn lh-relogin">ログインし直す</button>
+      </div>
       <div class="lh-table" hidden>
         <table>
-          <thead><tr><th>名前</th><th>景品</th><th>ランク</th><th>もらい方</th></tr></thead>
+          <thead><tr><th>名前</th><th>No.</th><th>景品</th><th>ランク</th><th>もらい方</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -529,20 +568,31 @@ class HostConsole {
   private guardUntil = 0 // ボタンの名前が変わった直後は、少しの間だけ押せなくする
   private lastLabel = ''
 
+  private lastStep = '' // 最後に受け取った host の進行の位置。「次へ」に付けて送る（2 人の主催が同時に押しても、2 回進まないように）
+
   private rows: ResultRow[] = []
   private loading = false
   private again = false
+  private authLost = false // 一覧を取りに行ったら、ログインの期限が切れていた（コンソールの操作は、つながっている間は続けられる）
   private modalClose: (() => void) | null = null
   private dead = false // 片付けたあと（ログインの画面に戻ったあと）は、何も描かない
+
+  private token: string
+  private expiresAt: number
+  private readonly totp: boolean
 
   constructor(
     root: HTMLElement,
     private readonly api: Api,
     private readonly link: Link,
     private readonly code: string,
-    private readonly token: string,
+    auth: LoginRes & { totp: boolean },
+    private readonly onLogin: (res: LoginRes) => void, // コンソールの中でログインし直した
     private readonly onClosed: (why: NonNullable<LinkState['reason']>) => void,
   ) {
+    this.token = auth.token
+    this.expiresAt = auth.expiresAt
+    this.totp = auth.totp
     this.el = h('div', 'lh-console', CONSOLE_HTML)
     root.replaceChildren(this.el)
     this.$('[data-k="code"]').textContent = code
@@ -554,7 +604,11 @@ class HostConsole {
     this.bind()
     this.cleanup.push(link.hub.subscribe((m) => this.on(m)))
     this.cleanup.push(link.onState((s) => this.onLink(s)))
+    // ログインの期限の表示は、時刻で変わる（残り 2 時間を切ったら目立たせる）
+    const tick = setInterval(() => this.renderExpiry(), 30_000)
+    this.cleanup.push(() => clearInterval(tick))
     this.render()
+    this.renderExpiry()
   }
 
   destroy(): void {
@@ -620,6 +674,7 @@ class HostConsole {
     this.$('.lh-reset').addEventListener('click', () => this.askReset())
     this.$('.lh-reload').addEventListener('click', () => void this.loadResults())
     this.$('.lh-csv').addEventListener('click', () => this.saveCsv())
+    this.el.querySelectorAll<HTMLButtonElement>('.lh-relogin').forEach((b) => b.addEventListener('click', () => this.relogin()))
 
     // Space で「次へ」（デモと同じ）。文字を打っている間と、確かめの窓が出ている間は効かせない。
     // ボタンやチェックに残ったフォーカスが Space を横取りしないように、keyup も止める
@@ -649,7 +704,9 @@ class HostConsole {
   private next(): void {
     const btn = this.$<HTMLButtonElement>('.lh-next')
     if (btn.disabled) return
-    this.link.send({ type: 'next' })
+    // 押したときに見ていた進行の位置を付ける。サーバーは、いまの位置と違えば捨てる
+    // （もう 1 人の主催が先に押していたら、こちらの 1 回は効かない。2 回進まない）
+    this.link.send(this.lastStep ? { type: 'next', from: this.lastStep } : { type: 'next' })
     // 返事が来るまで押せなくする。続けて押すと、次の段階のボタン（「参加をしめきる」など）まで押したことになる
     this.awaiting = true
     this.later(2500, () => {
@@ -697,6 +754,7 @@ class HostConsole {
         const before = this.host
         this.host = m
         this.hostAt = performance.now()
+        this.lastStep = m.step
         this.ready = true
         this.awaiting = false
         this.players = m.players
@@ -836,7 +894,8 @@ class HostConsole {
     link.textContent = live ? 'つながっています' : this.linkState.status === 'retrying' ? 'つなぎ直しています…' : 'つないでいます…'
 
     // いまの状況の 1 行
-    let status = this.event ? this.event() : this.phaseStatus(f)
+    // 終わったら、終わりの言葉にする（進行の状態は、大画面への知らせより 0.7 秒ほど先に届く。その間に、前の「ガラポン中」を出さない）
+    let status = this.event && f.phase !== 'done' ? this.event() : this.phaseStatus(f)
     // 発表のあとは新しいメッセージが来ないので、合図待ちになったことはここで出す（デモと同じ）
     if (f.hold && f.phase === 'dc-spin') status = '当たった人を発表中 — 読み上げが終わったら「締めくくりへ」'
     // 切れている間はボタンを押せない。なぜ押せないのかを、いちばん読む場所に出す
@@ -892,9 +951,28 @@ class HostConsole {
     this.$('.lh-hash').textContent = this.hash ? `抽選順と景品の並びのハッシュ ${this.hash}` : ''
   }
 
+  // ログインの期限。ふだんは控えめに出し、残り 2 時間を切ったら目立たせて、その場でログインし直せるようにする。
+  // 期限が過ぎても、つながっている間は進行を続けられる（当選者の一覧を取るときだけ、ログインし直しが要る）
+  private renderExpiry(): void {
+    if (this.dead) return
+    const left = this.expiresAt - Date.now()
+    const box = this.$('.lh-expiry')
+    this.$('[data-k="expiry"]').textContent = left > 0 ? `ログインは ${clockText(this.expiresAt)} まで` : 'ログインの期限が切れました'
+    box.classList.toggle('soon', left < 2 * 3600_000)
+    this.$<HTMLButtonElement>('.lh-expiry .lh-relogin').hidden = left >= 2 * 3600_000
+  }
+
   // ---- 確かめの窓 -----------------------------------------------------------
 
-  private confirm(o: { title: string; body: string; ok: string; onOk: (body: HTMLElement) => void; setup?: (body: HTMLElement) => void }): void {
+  // onOk が Promise を返したときは、終わるまで待って、true なら閉じる（ログインし直す窓。まちがえたら、窓を出したまま知らせる）
+  private confirm(o: {
+    title: string
+    body: string
+    ok: string
+    danger?: boolean // 実行のボタンを赤い枠にする（取り返しのつかない操作）。ふだんは true
+    onOk: (body: HTMLElement) => void | Promise<boolean>
+    setup?: (body: HTMLElement) => void
+  }): void {
     const modal = this.$('.lh-modal')
     const body = this.$('.lh-dialog-body')
     const ok = this.$<HTMLButtonElement>('.lh-ok')
@@ -902,10 +980,13 @@ class HostConsole {
     this.$('#lh-dialog-title').textContent = o.title
     body.innerHTML = o.body
     ok.textContent = o.ok
-    o.setup?.(body)
+    ok.disabled = false
+    ok.classList.toggle('lh-danger', o.danger !== false)
     modal.hidden = false
-    // はじめは「やめる」にフォーカスを置く（Enter や Space を押しただけでは、実行にならないように）
+    // はじめは「やめる」にフォーカスを置く（Enter や Space を押しただけでは、実行にならないように）。
+    // 入れる欄がある窓は、setup で欄にフォーカスを移す
     cancel.focus()
+    o.setup?.(body)
     const close = () => {
       modal.hidden = true
       this.modalClose = null
@@ -917,19 +998,80 @@ class HostConsole {
       if (e.target === modal) close()
     }
     ok.onclick = () => {
-      o.onOk(body)
-      close()
+      if (ok.disabled) return
+      const done = o.onOk(body)
+      if (!(done instanceof Promise)) return close()
+      ok.disabled = true
+      void done.then((shut) => {
+        if (this.modalClose !== close) return // 待っている間に閉じられた
+        ok.disabled = false
+        if (shut) close()
+      })
     }
+  }
+
+  // コンソールを開いたまま、ログインし直す（会の途中で、ログインの画面に戻さない）
+  private relogin(): void {
+    this.confirm({
+      title: 'ログインし直す',
+      body: `<form class="lh-relogin-form" novalidate>${loginFieldsHtml(this.totp)}</form>`,
+      ok: 'ログイン',
+      danger: false,
+      setup: (body) => {
+        const form = q<HTMLFormElement>(body, 'form')
+        // 欄の中で Enter を押したら、ログインのボタンと同じ
+        form.addEventListener('submit', (e) => {
+          e.preventDefault()
+          this.$<HTMLButtonElement>('.lh-ok').click()
+        })
+        q<HTMLInputElement>(form, '[name="hostKey"]').focus()
+      },
+      onOk: async (body) => {
+        const error = q(body, '.lh-error')
+        const fail = (text: string) => {
+          error.textContent = text
+          error.hidden = !text
+          return false
+        }
+        const req = readLogin(body, this.totp)
+        if (typeof req === 'string') return fail(req)
+        fail('')
+        try {
+          const res = await this.api.login(this.code, req)
+          if (this.dead) return true
+          this.token = res.token
+          this.expiresAt = res.expiresAt
+          this.authLost = false
+          this.onLogin(res)
+          this.renderExpiry()
+          void this.loadResults()
+          return true
+        } catch (e) {
+          return fail(say(e))
+        }
+      },
+    })
   }
 
   private askReset(): void {
     const now = this.host?.settings // いまの景品の数と名前（サーバーから届いている）
     const t = this.totals
     const bots = this.host?.bots ?? 0
+    // 当選者がいるなら、消える前に一覧を保存できるようにする（一覧は、いまの分を取り直しておく）
+    const winners = this.rows.length > 0 || (t?.winners ?? 0) > 0
+    if (winners) void this.loadResults()
     this.confirm({
       title: '最初からやり直しますか？',
       body: `
         <p>番号も当選者も、ぜんぶ消えます。参加している人はそのまま残って、カードは配り直しになります。</p>
+        ${
+          winners
+            ? `<div class="lh-warn lh-reset-csv">
+          <p>当選者の一覧は消えます。残すなら、先に保存してください</p>
+          <button type="button" class="lh-btn lh-csv"${this.rows.length ? '' : ' disabled'}>CSV で保存</button>
+        </div>`
+            : ''
+        }
         ${bots ? `<p>仮想の参加者 ${fmt(bots)} 人も、そのまま残ります。</p>` : ''}
         <label class="lh-check lh-change"><input type="checkbox" /> 景品の数も変える</label>
         <div class="lh-counts" hidden>
@@ -941,6 +1083,7 @@ class HostConsole {
         const counts = q(body, '.lh-counts')
         bindCounts(counts, () => {})
         change.addEventListener('change', () => (counts.hidden = !change.checked))
+        body.querySelector('.lh-csv')?.addEventListener('click', () => this.saveCsv())
       },
       onOk: (body) => {
         if (!q<HTMLInputElement>(body, '.lh-change input').checked) {
@@ -970,12 +1113,16 @@ class HostConsole {
       const rows = await this.api.results(this.code, this.token)
       if (this.dead) return
       this.rows = rows
+      this.authLost = false
       this.renderResults('')
     } catch (e) {
       if (this.dead) return
-      // ログインの期限が切れていたら、ログインからやり直す
+      // ログインの期限が切れていた。会の途中なので、ログインの画面には戻さない（進行は、つながっている間は続けられる）。
+      // 一覧の欄で知らせて、その場でログインし直せるようにする。前に取れた一覧は、そのまま見せておく
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
-        this.onClosed('auth')
+        this.authLost = true
+        this.renderResults('')
+        this.renderExpiry()
         return
       }
       this.renderResults('一覧を取れませんでした。「更新」を押してください')
@@ -995,21 +1142,27 @@ class HostConsole {
     this.$('[data-k="resultCount"]').textContent = rows.length ? `${fmt(rows.length)} 人${bots ? `（うち仮想 ${fmt(bots)} 人）` : ''}` : ''
     const msg = this.$('.lh-results-msg')
     msg.textContent = error || 'まだ当選者はいません'
-    msg.hidden = !error && rows.length > 0
+    msg.hidden = this.authLost || (!error && rows.length > 0)
+    this.$('.lh-results-auth').hidden = !this.authLost
     this.$('.lh-table').hidden = rows.length === 0
-    this.$<HTMLButtonElement>('.lh-csv').disabled = rows.length === 0
+    // 一覧の欄と、やり直しの窓の「CSV で保存」
+    this.el.querySelectorAll<HTMLButtonElement>('.lh-csv').forEach((b) => (b.disabled = rows.length === 0))
     this.$('.lh-table tbody').innerHTML = rows
       .map(
         (r) =>
-          `<tr${r.bot ? ' class="bot"' : ''}><td>${esc(r.name)}${r.bot ? '<i>仮想</i>' : ''}</td><td>${esc(r.prize)}</td><td>${r.rarity ? `<b data-r="${r.rarity}">${r.rarity}</b>` : '–'}</td><td>${HOW[r.how] ?? ''}</td></tr>`,
+          `<tr${r.bot ? ' class="bot"' : ''}><td>${esc(r.name)}${r.bot ? '<i>仮想</i>' : ''}</td><td>${cardNoText(r.cardNo)}</td><td>${esc(r.prize)}</td><td>${r.rarity ? `<b data-r="${r.rarity}">${r.rarity}</b>` : '–'}</td><td>${HOW[r.how] ?? ''}</td></tr>`,
       )
       .join('')
   }
 
   private saveCsv(): void {
+    if (!this.rows.length) return
     // 名前は参加者が自由に入れた文字。表計算ソフトが式として読まないように、記号で始まるものには ' を付ける
     const cell = (s: string) => `"${(/^[=+\-@\t\r]/.test(s) ? `'${s}` : s).replace(/"/g, '""')}"`
-    const lines = [['名前', '景品', 'ランク', 'もらい方', '仮想'], ...this.rows.map((r) => [r.name, r.prize, r.rarity ?? '', HOW[r.how] ?? '', r.bot ? '仮想' : ''])]
+    const lines = [
+      ['名前', 'No.', '景品', 'ランク', 'もらい方', '仮想'],
+      ...this.rows.map((r) => [r.name, cardNoText(r.cardNo), r.prize, r.rarity ?? '', HOW[r.how] ?? '', r.bot ? '仮想' : '']),
+    ]
     // 先頭の BOM は、Excel で文字化けしないため
     const blob = new Blob(['﻿' + lines.map((l) => l.map(cell).join(',')).join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' })
     const a = h('a')

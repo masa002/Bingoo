@@ -51,6 +51,7 @@ export class AudioEngine {
   private noiseBuf: AudioBuffer | null = null
   private readonly held = new Set<AudioScheduledSourceNode>()
   private on = true
+  private wakeUntil = 0 // 操作に合わせて resume() を頼んでから、動き出すまでの猶予（performance.now() の時刻）
 
   // ブラウザは操作なしの再生を止めるので、最初のクリックで初期化する
   unlock(): void {
@@ -59,6 +60,10 @@ export class AudioEngine {
       if (!Ctor) return
       const ctx = new Ctor()
       this.ctx = ctx
+      // 画面に戻ったら、止まっていた音を動かし直す（iPhone は、裏に回ると止める。電話などで 'interrupted' にもなる）
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && this.on) this.wake(false)
+      })
       const limiter = ctx.createDynamicsCompressor()
       limiter.threshold.value = -8
       limiter.knee.value = 4
@@ -83,11 +88,26 @@ export class AudioEngine {
       ret.gain.value = 0.35
       this.reverbIn.connect(convolver).connect(ret).connect(this.master)
     }
-    if (this.ctx.state === 'suspended') void this.ctx.resume()
+    // 'suspended' だけでなく、iPhone の 'interrupted'（電話・Siri のあと）なども、動いていなければ動かす
+    this.wake(true)
   }
 
+  // 止まっている音の時計を動かす。gesture は、利用者の操作の中で呼んだとき（すぐ動き出す見込みが高い）
+  private wake(gesture: boolean): void {
+    const ctx = this.ctx
+    if (!ctx || ctx.state === 'running' || ctx.state === 'closed') return
+    // 操作の中で頼んだときは、動き出すまでの少しの間に鳴らした音も、予約しておく（押した瞬間の音を落とさない）
+    if (gesture) this.wakeUntil = performance.now() + 1500
+    ctx.resume().catch(() => {}) // 操作の外では断られることがある。次の操作で、もう一度頼む
+  }
+
+  // いま音を予約してよいか。止まっている間（裏に回った・'interrupted'）は、時計（currentTime）も止まっている。
+  // その間に予約した音は、動き出した瞬間にまとめて鳴ってしまうので、予約しない。
+  // BGM は先読みの幅だけ予約するしくみなので、止まっている間は何も積まれない（ここは見ない）
   get ready(): boolean {
-    return this.ctx !== null && this.master !== null && this.ctx.state !== 'closed'
+    const ctx = this.ctx
+    if (!ctx || !this.master || ctx.state === 'closed') return false
+    return ctx.state === 'running' || performance.now() < this.wakeUntil
   }
 
   get now(): number {
@@ -101,6 +121,7 @@ export class AudioEngine {
   set enabled(on: boolean) {
     this.on = on
     if (this.master && this.ctx) this.master.gain.setTargetAtTime(on ? 0.85 : 0, this.ctx.currentTime, 0.05)
+    if (on) this.wake(true) // 音を入れるのは、ふつうボタンを押したとき
   }
 
   // 効果音・BGM の出口。自前で組んだノードはここにつなぐ

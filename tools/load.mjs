@@ -838,6 +838,8 @@ class Player {
         const byIdx = (b._byIdx ??= new Map((b.entries ?? []).map((e) => [e.idx, e])))
         const mine = byIdx.get(this.idx)
         if (!mine?.rarity) break
+        // 本物のスマホと同じく、発表が画面に出たらすぐ「見ました」を送る（送らないスマホは、眠っているとみなされて、選ぶのを待ってもらえない）
+        this.at(at, () => c.send({ type: 'prizeSeen' }))
         const kind = mine.choice?.allowed && Math.random() < opt.challenge ? 'challenge' : 'receive'
         stats.choices++
         if (kind === 'challenge') stats.challenges++
@@ -933,7 +935,8 @@ function drive() {
   if (!driving || run.finished || !hostClient) return
   if (!run.overSeen || run.dcSeen || nowMs() - run.lastNext < 4000) return
   run.lastNext = nowMs()
-  hostClient.send({ type: 'next' })
+  // 本物の主催の画面と同じく、見ていた進行の位置を付ける（届くまでに進んでいたら、サーバーが捨てる）
+  hostClient.send(run.hostState?.step ? { type: 'next', from: run.hostState.step } : { type: 'next' })
 }
 
 function storm() {

@@ -692,15 +692,38 @@
   color: #fff;
 }
 
+/* 景品: 上の段に賞の名前（ダブルチャンス賞・上位賞・特賞。大画面と同じ）、下の段に品物の名前 */
 .fxg-wins li > small {
   flex: none;
-  max-width: 48%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  max-width: 52%;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2; /* 2 段でも行の高さ（32px）を変えない（一覧が上の「当たった人を発表中！」にかぶらないように） */
+  color: #ffd9a0;
+}
+
+.fxg-wins li > small > * {
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
-  font-weight: 800;
-  color: #ffd9a0;
+}
+
+.fxg-wins li > small > i {
+  font-style: normal;
+  color: #c9d2ff;
+}
+
+/* 特賞（虹の玉）は、一覧の下に必ず自分の行で出す。賞の名前を虹の文字にする */
+.fxg-wins li.top > small > i {
+  font-weight: 900;
+  background: linear-gradient(90deg, #ff5a5a, #ffb84d, #fff15a, #5aff8c, #5ad2ff, #a85aff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 /* 「あなた」の印（水色の札） */

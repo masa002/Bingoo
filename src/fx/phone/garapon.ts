@@ -36,6 +36,14 @@ export const BALL_INFO: Readonly<Record<BallColor, BallInfo>> = {
   rainbow: { name: '虹の玉', short: '虹', shape: '✦', word: '超大当たり！', color: '#ff5ad2' },
 }
 
+// 玉の色ごとの賞の名前（大画面の stage/doublechance.ts と同じ。色の名前だけでは、何の格か分からないため）
+export const AWARD_NAME: Readonly<Record<BallColor, string>> = { white: 'はずれ', red: 'ダブルチャンス賞', gold: '上位賞', rainbow: '特賞' }
+
+// 景品の名前の頭に賞の名前が付いていたら外す（賞の名前は別に出すので、重ねない。大画面と同じ）
+export function prizeItem(prize: string): string {
+  return prize.replace(/^(ダブルチャンス賞|特賞|上位賞|SR\s*賞)[\s　:：]*/, '') || prize
+}
+
 // 玉の要素。大きさは CSS 変数 --d で決める（既定 40px）
 export function ballHtml(color: BallColor, className = ''): string {
   return `<span class="fxg-ball ${className}" data-color="${color}"><i>${BALL_INFO[color].shape}</i></span>`
@@ -645,6 +653,10 @@ function resultHtml(s: GaraponStats, balls: readonly GaraponBall[]): string {
   if (s.won) prizes.set(s.won, 'red')
   for (const b of balls) if (b.color !== 'white' && b.prize) prizes.set(b.prize, b.color)
   const rank = s.rank && s.rank > 0 ? Math.round(s.rank) : 0
+  // 戦績の行。0 の行は出さない（「0 本」「0 回」は追い打ちになる）。1 行も残らなければ、表ごと出さない
+  const stat = (label: string, n: number, unit: string): string =>
+    n > 0 ? `<li><span>${label}</span><span><b data-n="${n}">0</b><small>${unit}</small></span></li>` : ''
+  const stats = stat('カードにあった番号', s.hits, '個') + stat('リーチ（最高）', s.maxReach, '本') + stat('あと 1 つで なかった', s.nearMiss, '回')
   const main = prizes.size
     ? `<div class="fxg-rs-lead fxg-in">おめでとう！</div>
       <div class="fxg-rs-prizes fxg-in" data-n="${Math.min(3, prizes.size)}">${[...prizes].slice(0, 3).map(([p, c]) => noshiHtml(c, p)).join('')}</div>`
@@ -654,11 +666,7 @@ function resultHtml(s: GaraponStats, balls: readonly GaraponBall[]): string {
     <div class="fxg-rs-title fxg-in"><span class="fxg-ol" data-text="あなたの結果"><b>あなたの結果</b></span></div>
     ${main}
     ${balls.length ? `<div class="fxg-rs-row fxg-in"><span>ガラポンで出た玉</span>${balls.map((b) => ballHtml(b.color)).join('')}</div>` : ''}
-    <ul class="fxg-rs-list fxg-in">
-      <li><span>カードにあった番号</span><span><b data-n="${s.hits}">0</b><small>個</small></span></li>
-      <li><span>リーチ（最高）</span><span><b data-n="${s.maxReach}">0</b><small>本</small></span></li>
-      <li><span>あと 1 つで なかった</span><span><b data-n="${s.nearMiss}">0</b><small>回</small></span></li>
-    </ul>
+    ${stats ? `<ul class="fxg-rs-list fxg-in">${stats}</ul>` : ''}
     <div class="fxg-rs-fin fxg-in"><b>おつかれさまでした</b><small>ご参加ありがとうございました</small></div>`
 }
 
@@ -737,6 +745,7 @@ class GaraponPlay {
   private readonly outro: Promise<void> | null
   private outroDone = false
   private readonly shownWins: GaraponWinner[] = [] // 大画面に出た、当たった人（出た順）
+  private readonly listedWins = new Set<GaraponWinner>() // 一覧に 1 度でも並べた人（新しく並んだ行だけを動かす）
   private wins: HTMLElement | null = null
 
   constructor(host: HTMLElement, o: GaraponOptions) {
@@ -1128,7 +1137,8 @@ class GaraponPlay {
     })
   }
 
-  // 当たった人の一覧（画面の下に、大画面と同じ並び。あふれた分は「ほか N 人」にまとめる）
+  // 当たった人の一覧（画面の下に、大画面と同じ並び。あふれた分は「ほか N 人」にまとめる）。
+  // 特賞（虹の玉）は、いちばんの見せ場なので「ほか」に入れず、一覧の下に必ず自分の行で出す（大画面と同じ）。自分の行も残す
   private renderWins(): void {
     if (this.phase !== 'wait' || !this.shownWins.length) return
     if (!this.wins) {
@@ -1138,16 +1148,26 @@ class GaraponPlay {
       this.wins.classList.add('on')
     }
     const all = this.shownWins
-    const rows = all.length > WIN_ROWS ? all.slice(0, WIN_ROWS - 1) : all
-    const rest = all.length - rows.length
+    const top = all.filter((w) => w.color === 'rainbow')
+    const others = all.filter((w) => w.color !== 'rainbow')
+    let rows = others
+    if (all.length > WIN_ROWS) {
+      // 「ほか N 人」の 1 行と、特賞・自分の行を除いた残りに、出た順に並べる
+      const room = Math.max(0, WIN_ROWS - 1 - top.length - (others.some((w) => w.isMe) ? 1 : 0))
+      let k = 0
+      rows = others.filter((w) => w.isMe || k++ < room)
+    }
+    const rest = others.length - rows.length
     this.wins.querySelector('.fxg-wins-h span b')!.textContent = String(all.length)
-    const list = this.wins.querySelector('ul')!
-    const had = list.querySelectorAll('li:not(.more)').length
-    const row = (w: GaraponWinner, i: number): string =>
-      `<li class="${[w.isMe ? 'me' : '', i >= had ? 'new' : ''].join(' ').trim()}">${ballHtml(w.color)}<b>${
-        w.isMe ? '<em>あなた</em>' : escapeHtml(w.name)
-      }</b><small>${escapeHtml(w.prize)}</small></li>`
-    list.innerHTML = rows.map(row).join('') + (rest > 0 ? `<li class="more">ほか ${rest} 人</li>` : '')
+    const row = (w: GaraponWinner): string => {
+      const cls = [w.isMe ? 'me' : '', w.color === 'rainbow' ? 'top' : '', this.listedWins.has(w) ? '' : 'new'].filter(Boolean).join(' ')
+      this.listedWins.add(w)
+      return `<li class="${cls}">${ballHtml(w.color)}<b>${w.isMe ? '<em>あなた</em>' : escapeHtml(w.name)}</b><small><i>${AWARD_NAME[w.color]}</i><span>${escapeHtml(
+        prizeItem(w.prize),
+      )}</span></small></li>`
+    }
+    this.wins.querySelector('ul')!.innerHTML =
+      rows.map(row).join('') + (rest > 0 ? `<li class="more">ほか ${rest} 人</li>` : '') + top.map(row).join('')
   }
 
   // ---- その人の結果と、締め ----

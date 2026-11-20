@@ -405,6 +405,17 @@
   font-size: 44px;
 }
 
+/* 古い iPhone（iOS 16.1 まで）は color-mix() が効かず、玉の地がまるごと消える。玉の色の上に、縁を暗くする影を重ねて描く
+   （前にふつうの色を並べる書き方は、ビルドで消されるので @supports で分ける） */
+@supports not (color: color-mix(in srgb, red, red)) {
+  .fxo-ball {
+    background:
+      radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.95) 0 10%, rgba(255, 255, 255, 0) 36%),
+      radial-gradient(circle at 50% 60%, rgba(0, 0, 0, 0) 0 55%, rgba(0, 0, 0, 0.4) 100%),
+      var(--c);
+  }
+}
+
 /* 動きを減らす設定では、くり返しの動きを止める */
 @media (prefers-reduced-motion: reduce) {
   .fxo *,

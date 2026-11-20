@@ -22,7 +22,6 @@ import {
   HOST_TOKEN_MS,
   checkHostToken,
   checkPlayerToken,
-  checkTotp,
   cleanName,
   hostKeyHash,
   hostToken,
@@ -33,6 +32,7 @@ import {
   safeEqual,
   tokenKey,
   totpUri,
+  totpWindow,
   type AppEnv,
 } from './auth'
 import type { RoomDO } from './room'
@@ -80,8 +80,9 @@ interface Meta {
   seq: number // 最後に振った通し番号
   lastP: number // 参加者の Room に最後に配った通し番号
   lastC: number // 'crew' の Room に最後に配った通し番号
-  fails: number // 主催のログインを続けて間違えた回数
+  fails: number // 主催のログインで、主催キーは合っていて 6 桁を続けて間違えた回数
   lockedUntil: number
+  totpLast: number // 最後にログインを通した、6 桁の時間枠の番号（この枠と、それより古い枠の 6 桁は断る）
 }
 
 // 作ってからこの時間がたったら、片付ける（参加者の名前を残しっぱなしにしない）
@@ -93,11 +94,14 @@ const BACKUP_MS = 5000
 const QUEUE_MAX = 50
 const LOGIN = { tries: 5, lockMs: 60000 }
 
+// Room への配信が一時的に失敗したら、少し待って同じ prev のまま送り直す（この間隔で、この回数まで）
+const RESEND_MS = [150, 500]
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (
   id INTEGER PRIMARY KEY CHECK (id = 1), code TEXT NOT NULL, secret TEXT NOT NULL, host_hash TEXT NOT NULL, totp TEXT,
   created INTEGER NOT NULL, seq INTEGER NOT NULL, last_p INTEGER NOT NULL, last_c INTEGER NOT NULL,
-  fails INTEGER NOT NULL, locked_until INTEGER NOT NULL
+  fails INTEGER NOT NULL, locked_until INTEGER NOT NULL, totp_last INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS seats (idx INTEGER PRIMARY KEY, name TEXT NOT NULL, card INTEGER NOT NULL, bot INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS state (part INTEGER PRIMARY KEY, body BLOB NOT NULL);
@@ -154,7 +158,7 @@ export class GameDO extends DurableObject<AppEnv> {
       const secret = newTotpSecret()
       const hostHash = await hostKeyHash(key, hostKey)
       const engine = await Engine.create(this.host, LEAD_MS, settings)
-      const meta: Meta = { code, key, hostHash, totp: secret, created: Date.now(), seq: 0, lastP: 0, lastC: 0, fails: 0, lockedUntil: 0 }
+      const meta: Meta = { code, key, hostHash, totp: secret, created: Date.now(), seq: 0, lastP: 0, lastC: 0, fails: 0, lockedUntil: 0, totpLast: 0 }
       const sql = this.ctx.storage.sql
       sql.exec(SCHEMA)
       sql.exec(
@@ -199,25 +203,34 @@ export class GameDO extends DurableObject<AppEnv> {
     })
   }
 
-  // 主催のログイン。5 回続けて間違えたら、1 分止める（主催キーの総当たりを防ぐ）
+  // 主催のログイン。主催キーが合っていて 6 桁を 5 回続けて間違えたら、1 分止める（6 桁の総当たりを防ぐ）。
+  // 主催キーの間違いは数えない: 数えると、大画面のコードを見ただけの人が、でたらめなキーを送り続けて本物の主催を締め出せる。
+  // 主催キーは約 79 bit あるので、数えなくても総当たりは間に合わない
   login(req: LoginReq): Promise<LoginRes | Fail | null> {
     return this.serial(async () => {
       const meta = this.load()
       if (!meta) return null
       const now = Date.now()
-      if (meta.lockedUntil > now) return { error: 'まちがいが続いたので、少し止めています。1 分待ってから、もう一度ためしてください', status: 429 }
       const keyOk = typeof req?.hostKey === 'string' && (await safeEqual(await hostKeyHash(meta.key, req.hostKey), meta.hostHash))
-      const totpOk = !meta.totp || (await checkTotp(meta.totp, req?.totp, now))
-      if (!keyOk || !totpOk) {
-        meta.fails++
-        if (meta.fails >= LOGIN.tries) {
-          meta.fails = 0
-          meta.lockedUntil = now + LOGIN.lockMs
+      if (!keyOk) return { error: '主催キーが違います', status: 401 }
+      if (meta.lockedUntil > now) return { error: 'まちがいが続いたので、少し止めています。1 分待ってから、もう一度ためしてください', status: 429 }
+      if (meta.totp) {
+        const win = await totpWindow(meta.totp, req?.totp, now)
+        if (win === null) {
+          meta.fails++
+          if (meta.fails >= LOGIN.tries) {
+            meta.fails = 0
+            meta.lockedUntil = now + LOGIN.lockMs
+          }
+          this.saveLogin(meta)
+          return { error: '6 桁の数字が違います', status: 401 }
         }
+        // 前に通した 6 桁（か、それより古い 6 桁）。見られた 6 桁を、もう一度使わせない。打ちまちがいではないので、数えない
+        if (win <= meta.totpLast) return { error: 'この 6 桁は、もう使われました。認証アプリの数字が変わってから、入れ直してください', status: 401 }
+        meta.totpLast = win
+        meta.fails = 0
         this.saveLogin(meta)
-        return { error: !keyOk ? '主催キーが違います' : '6 桁の数字が違います', status: 401 }
-      }
-      if (meta.fails) {
+      } else if (meta.fails) {
         meta.fails = 0
         this.saveLogin(meta)
       }
@@ -248,19 +261,23 @@ export class GameDO extends DurableObject<AppEnv> {
     })
   }
 
-  // 端末からの操作（Room が 50ms ほどためて、まとめて渡してくる）
+  // 端末からの操作（Room が 50ms ほどためて、まとめて渡してくる）。
+  // 参加者の操作は、Engine が受け付けたときだけ保存する（中身がおかしい・時機が外れている・同じ操作の連打では書かない）
   async commands(items: CmdItem[]): Promise<void> {
     await this.run(async (e) => {
+      let changed = false
       for (const { i, c } of items) {
         if (i === null) {
           const cmd = cleanHostCommand(c)
-          if (cmd) await e.command(cmd)
+          if (!cmd) continue
+          await e.command(cmd)
+          changed = true // 主催の操作は少ないので、届いたら保存する
         } else if (Number.isInteger(i)) {
           const cmd = cleanPhoneCommand(c)
-          if (cmd) e.player(i, cmd)
+          if (cmd && e.player(i, cmd)) changed = true
         }
       }
-      return [undefined, true]
+      return [undefined, changed]
     })
   }
 
@@ -343,6 +360,8 @@ export class GameDO extends DurableObject<AppEnv> {
     // 表を作るのは create のときだけ。でたらめなコードで呼ばれても、保存領域を使わない
     const exists = sql.exec("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'").toArray().length > 0
     const row = exists ? sql.exec('SELECT * FROM meta WHERE id = 1').toArray()[0] : undefined
+    // 2026-11-20 より前に作ったゲームの表には totp_last の列がない。足してから使う（いまのゲームを止めずに、そのまま続けられるように）
+    if (row && row.totp_last === undefined) sql.exec('ALTER TABLE meta ADD COLUMN totp_last INTEGER NOT NULL DEFAULT 0')
     this.meta = row
       ? {
           code: row.code as string,
@@ -355,6 +374,7 @@ export class GameDO extends DurableObject<AppEnv> {
           lastC: row.last_c as number,
           fails: row.fails as number,
           lockedUntil: row.locked_until as number,
+          totpLast: (row.totp_last as number | undefined) ?? 0,
         }
       : null
     return this.meta
@@ -418,14 +438,16 @@ export class GameDO extends DurableObject<AppEnv> {
       }
     }
 
+    // 書くのは、実際に変わった分だけ（状態が同じなら状態を、通し番号が進んでいなければ meta を書かない）
     if (save || out.length) {
       const sql = this.ctx.storage.sql
+      let wrote = false
       this.ctx.storage.transactionSync(() => {
         if (save === 'seats') this.saveSeats(e)
-        else if (save) this.saveState(e)
-        sql.exec('UPDATE meta SET seq = ?, last_p = ?, last_c = ? WHERE id = 1', meta.seq, meta.lastP, meta.lastC)
+        else if (save) wrote = this.saveState(e)
+        if (out.length) sql.exec('UPDATE meta SET seq = ?, last_p = ?, last_c = ? WHERE id = 1', meta.seq, meta.lastP, meta.lastC)
       })
-      if (save === true) this.backupSoon()
+      if (wrote) this.backupSoon()
     }
 
     if (crew.length) this.push(meta.code, CREW_SHARD, crew, prevC)
@@ -434,16 +456,18 @@ export class GameDO extends DurableObject<AppEnv> {
     })
   }
 
-  private saveState(e: Engine): void {
+  // 状態を書いた（前に書いたものから変わっていた）ら true
+  private saveState(e: Engine): boolean {
     const sql = this.ctx.storage.sql
     this.saveSeats(e)
     const text = JSON.stringify(e.dump())
-    if (text === this.stateText) return
+    if (text === this.stateText) return false
     this.stateText = text
     const bytes = enc.encode(text)
     const count = Math.max(1, Math.ceil(bytes.length / CHUNK))
     for (let i = 0; i < count; i++) sql.exec('INSERT OR REPLACE INTO state (part, body) VALUES (?, ?)', i, bytes.slice(i * CHUNK, (i + 1) * CHUNK).buffer)
     sql.exec('DELETE FROM state WHERE part >= ?', count)
+    return true
   }
 
   private saveSeats(e: Engine): void {
@@ -461,7 +485,7 @@ export class GameDO extends DurableObject<AppEnv> {
   }
 
   private saveLogin(meta: Meta): void {
-    this.ctx.storage.sql.exec('UPDATE meta SET fails = ?, locked_until = ? WHERE id = 1', meta.fails, meta.lockedUntil)
+    this.ctx.storage.sql.exec('UPDATE meta SET fails = ?, locked_until = ?, totp_last = ? WHERE id = 1', meta.fails, meta.lockedUntil, meta.totpLast)
   }
 
   // Engine の次の時刻と、片付けの時刻の、早いほうにアラームを掛ける
@@ -480,7 +504,9 @@ export class GameDO extends DurableObject<AppEnv> {
   }
 
   // Room ごとに順番を守って送る（前の分が終わってから次）。Room どうしは並列。
-  // 終わるのを待たない: Room が落ちていても、ゲームは止めない（端末は、つなぎ直しで追いつく）
+  // 終わるのを待たない: Room が落ちていても、ゲームは止めない（端末は、つなぎ直しで追いつく）。
+  // 通り道の一時的な失敗（retryable）なら、少し待って同じ prev のまま送り直す。届いていたのに返事だけが失われた場合も、
+  // Room は同じ配信の重なりを見分けて捨てるので、二重には流れない
   private push(code: string, shard: string, batch: Delivery[], prev: number): void {
     const chain = this.chains.get(shard) ?? { tail: Promise.resolve(), depth: 0 }
     this.chains.set(shard, chain)
@@ -491,11 +517,22 @@ export class GameDO extends DurableObject<AppEnv> {
     chain.depth++
     chain.tail = chain.tail.then(async () => {
       try {
-        const connected = await this.room(code, shard).deliver(batch, prev)
-        // 返事に、つながっている数が付いてくる（Game が入れ替わって数を忘れても、次の配信で戻る）
-        if (this.counts.get(shard) !== connected) void this.presence(shard, connected).catch(() => {})
-      } catch (err) {
-        console.error(`deliver to ${shard} failed`, err)
+        for (let attempt = 0; ; attempt++) {
+          try {
+            // 失敗のあとは、作り直した stub で送る（失敗した stub は、使えなくなっていることがある）
+            const connected = await this.room(code, shard).deliver(batch, prev)
+            // 返事に、つながっている数が付いてくる（Game が入れ替わって数を忘れても、次の配信で戻る）
+            if (this.counts.get(shard) !== connected) void this.presence(shard, connected).catch(() => {})
+            return
+          } catch (err) {
+            const wait = RESEND_MS[attempt]
+            if (wait === undefined || !(err as { retryable?: boolean })?.retryable || (err as { overloaded?: boolean })?.overloaded) {
+              console.error(`deliver to ${shard} failed`, err)
+              return
+            }
+            await new Promise((r) => setTimeout(r, wait))
+          }
+        }
       } finally {
         chain.depth--
       }
@@ -570,7 +607,9 @@ function cleanHostCommand(c: unknown): HostCommand | null {
   const x = c as Record<string, unknown>
   switch (x.type) {
     case 'next':
-      return { type: 'next' }
+      // from（押した画面が見ていた進行の位置）は短い文字列だけ通す。形がおかしければ、その「次へ」は捨てる（from なしで通すと、二重に進みうる）
+      if (x.from === undefined || x.from === null) return { type: 'next' }
+      return typeof x.from === 'string' && x.from.length <= 64 ? { type: 'next', from: x.from } : null
     case 'auto':
       return typeof x.on === 'boolean' ? { type: 'auto', on: x.on } : null
     case 'trigger':
@@ -593,6 +632,8 @@ function cleanPhoneCommand(c: unknown): PhoneCommand | null {
       return { type: 'questScore', score: typeof x.score === 'number' ? x.score : Number.NaN }
     case 'choice':
       return x.kind === 'receive' || x.kind === 'challenge' ? { type: 'choice', kind: x.kind } : null
+    case 'prizeSeen':
+      return { type: 'prizeSeen' }
     case 'entry':
       return { type: 'entry' }
     default:

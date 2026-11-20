@@ -1,5 +1,5 @@
 import { CREW_SHARD, MAX_PLAYERS, cleanSettings, shardOf, type CreateReq, type JoinReq, type LoginReq } from '../src/net/wire'
-import { cleanCode, newCode, safeEqual, type AppEnv } from './auth'
+import { cleanCode, newCode, readText, safeEqual, type AppEnv } from './auth'
 import type { Fail, GameDO } from './game'
 
 // Worker の入口。/api を、ゲームの進行役（GameDO）と接続の受け口（RoomDO）に振り分ける。
@@ -11,7 +11,10 @@ export { RoomDO } from './room'
 // GitHub Pages に置いた画面からも使えるように、/api はどこからでも呼べるようにする（認証はトークンで、Cookie は使わない）
 const CORS = { 'access-control-allow-origin': '*' }
 const PREFLIGHT = { ...CORS, 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'content-type', 'access-control-max-age': '86400' }
+// 本文の長さの上限。文字数で 512K まで（景品の名前を上限いっぱいに入れた設定でも、20 万文字ほど）。
+// 読む前に断るための上限はバイト数で、日本語は 1 文字 3 バイトなので、その分ゆとりを持たせる
 const BODY_MAX = 512 * 1024
+const BODY_MAX_BYTES = 2 * 1024 * 1024
 
 function json(body: unknown, status = 200, cache = 'no-store'): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': cache } })
@@ -34,8 +37,9 @@ function gameOf(env: AppEnv, code: string): DurableObjectStub<GameDO> {
 }
 
 async function readBody(request: Request): Promise<Record<string, unknown> | null> {
-  const text = await request.text()
-  if (text.length > BODY_MAX) return null
+  // 大きすぎる本文は、読む前（content-length）か、読んでいる途中で断る（全部をメモリに読みこまない）
+  const text = await readText(request, BODY_MAX_BYTES)
+  if (text === null || text.length > BODY_MAX) return null
   try {
     const body: unknown = JSON.parse(text)
     return body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : null

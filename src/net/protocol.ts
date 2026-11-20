@@ -89,6 +89,7 @@ export type Msg =
       phase: Phase
       busy: boolean // 抽選やイベントの最中（「次へ」は効かない）
       hold: string | null // 説明の画面などで主催の合図を待っているときの、ボタンの名前
+      step: string // 進行の位置（phase と段階を合わせた文字列）。「次へ」に from として付けて送り返す
       auto: boolean
       players: number // 参加した人数（仮想の参加者を含む）
       bots: number // そのうち、リハーサル用の仮想の参加者
@@ -201,4 +202,7 @@ export type PhoneCommand =
   // 叩いている途中の数（本番だけ。2 秒おきくらい）。大画面の「会場で叩いた数」に足すだけで、結果には使わない
   | { type: 'questProgress'; score: number }
   | { type: 'choice'; kind: 'receive' | 'challenge' }
+  // 景品の発表（prizeTime）に自分が入っていたら、受け取ってすぐ 1 回送る（スマホが起きていることをサーバーに知らせる）。
+  // サーバーは、これを送ってこなかった人（眠っている・つながっていないスマホ）の選択は待たずに「受け取る」扱いにする
+  | { type: 'prizeSeen' }
   | { type: 'entry' }

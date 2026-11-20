@@ -71,6 +71,67 @@ input {
   height: 100vh;
 }
 
+/* 画面の部品を読み込めなかったときの知らせ（main.ts）。本番のひと言の画面（live.css の .lv-page）と同じ見た目 */
+.load-failed {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+  background: radial-gradient(ellipse at 50% 34%, #16204a 0%, #0a0f24 58%, #05070f 100%);
+  text-align: center;
+}
+
+.load-failed-box {
+  width: 100%;
+  max-width: 360px;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+}
+
+.load-failed-logo {
+  font-size: 46px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: var(--gold);
+  background: var(--rainbow-face);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.load-failed-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.load-failed-text {
+  margin: 0;
+  color: #c9d2ff;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.load-failed button {
+  width: 100%;
+  margin-top: 8px;
+  padding: 18px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--primary);
+  color: var(--primary-ink);
+  font-size: 24px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -321,6 +382,7 @@ input {
 
 .chip-bingo.hot {
   border-color: var(--gold);
+  background: #423d3a; /* color-mix が使えないブラウザ用（下と同じ色） */
   background: color-mix(in srgb, var(--gold) 22%, #0f1738);
 }
 
@@ -520,12 +582,14 @@ input {
   gap: 6px;
 }
 
+/* 字は大画面の下限（28px）より大きく。マス（約 112×46px）からはみ出さない 34px にする */
 .st-row > div {
   height: 46px;
   border-radius: 8px;
   display: grid;
   place-items: center;
-  font-size: 26px;
+  font-size: 34px;
+  line-height: 1;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
@@ -908,8 +972,8 @@ input {
   color: #fff;
 }
 
-/* まだ出ていないときの「--」は控えめに */
-.ph-latest-n:not(:has(.fxn)) {
+/* まだ出ていないときの「--」は控えめに（none は ui/phone.ts が付ける。古い iPhone では :has() が効かないので、クラスで分ける） */
+.ph-latest-n.none {
   font-size: 26px;
   color: #4d5888;
 }
@@ -1238,24 +1302,30 @@ input {
   font-style: normal;
 }
 
+/* 名前の行の下に、もう 1 行（特賞の人など）を出すときは 3 行まで */
+.ph-news.tall {
+  -webkit-line-clamp: 3;
+}
+
 /* 知らせと景品が両方出ていて、下が足りないとき（ゲームの終わりごろ）: 出た番号の欄を詰め、これまでの番号を 1 行にする。
-   出来事が出ているときは、会場の数字の行を省く（出来事のほうを残す） */
-.phone:has(.ph-note.on):has(.ph-prize.on) .ph-drawn {
+   出来事が出ているときは、会場の数字の行を省く（出来事のほうを残す）。
+   tight・tight-news は ui/phone.ts が付ける（古い iPhone（iOS 15.3 まで）では :has() が効かないので、クラスで切りかえる） */
+.phone.tight .ph-drawn {
   padding-top: 6px;
   padding-bottom: 7px;
 }
 
-.phone:has(.ph-note.on):has(.ph-prize.on) .ph-latest-n {
+.phone.tight .ph-latest-n {
   height: 36px;
   margin-top: 2px;
   font-size: 30px;
 }
 
-.phone:has(.ph-note.on):has(.ph-prize.on) .ph-history {
+.phone.tight .ph-history {
   max-height: 22px;
 }
 
-.phone:has(.ph-note.on):has(.ph-prize.on) .ph-venue:has(.ph-news.on) .ph-stats {
+.phone.tight-news .ph-stats {
   display: none;
 }
 
@@ -1663,6 +1733,7 @@ button:disabled {
   padding: 0.25em 0.7em;
   border-radius: 0.5em;
   border-left: 0.35em solid var(--tc);
+  background: #0f1738; /* color-mix が使えないブラウザ（古い iPhone）では、色の帯（左の線）だけで見分ける */
   background: color-mix(in srgb, var(--tc) 16%, #0f1738);
 }
 

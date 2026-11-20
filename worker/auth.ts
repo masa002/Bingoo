@@ -66,6 +66,36 @@ export function cleanName(raw: unknown): string | null {
   return cleanText(raw, NAME_MAX) || null
 }
 
+// ---- 届いた本文 -------------------------------------------------------------
+
+// 本文を、多くても max バイトまで読む。長すぎれば null。
+// content-length が書いてあれば、読む前に断る。書いていなくても（分けて送られてくる本文）、読みながら数えて、超えたところでやめる
+export async function readText(request: Request, max: number): Promise<string | null> {
+  const declared = request.headers.get('content-length')
+  if (declared !== null && !(Number(declared) <= max)) return null
+  if (!request.body) return ''
+  const reader = request.body.getReader()
+  const parts: Uint8Array[] = []
+  let size = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.byteLength
+    if (size > max) {
+      await reader.cancel().catch(() => {})
+      return null
+    }
+    parts.push(value)
+  }
+  const bytes = new Uint8Array(size)
+  let at = 0
+  for (const p of parts) {
+    bytes.set(p, at)
+    at += p.byteLength
+  }
+  return new TextDecoder().decode(bytes)
+}
+
 // ---- 文字列の変換 -----------------------------------------------------------
 
 function toHex(bytes: Uint8Array): string {
@@ -211,16 +241,18 @@ async function totpAt(secret: string, counter: number): Promise<string> {
   return String(value % 1000000).padStart(6, '0')
 }
 
-// 6 桁の数字を確かめる。端末の時計のずれを見込んで、前後 1 つの時間枠まで許す
-export async function checkTotp(secret: string, code: unknown, now: number): Promise<boolean> {
-  if (typeof code !== 'string') return false
+// 6 桁の数字を確かめる。端末の時計のずれを見込んで、前後 1 つの時間枠まで許す。
+// 当たった時間枠の番号を返す（いくつも当たったら、いちばん新しい枠）。当たらなければ null。
+// 呼ぶ側は、前に通した枠と同じか古い枠の 6 桁を断る（同じ 6 桁で 2 回入れないように）
+export async function totpWindow(secret: string, code: unknown, now: number): Promise<number | null> {
+  if (typeof code !== 'string') return null
   const digits = code.replace(/\s/g, '')
-  if (!/^\d{6}$/.test(digits)) return false
+  if (!/^\d{6}$/.test(digits)) return null
   const counter = Math.floor(now / TOTP_STEP_MS)
-  let ok = false
+  let hit: number | null = null
   for (const d of [-1, 0, 1]) {
     // 当たっても途中でやめない（どの枠で当たったかを、かかる時間から知られないように）
-    if (await safeEqual(await totpAt(secret, counter + d), digits)) ok = true
+    if (await safeEqual(await totpAt(secret, counter + d), digits)) hit = counter + d
   }
-  return ok
+  return hit
 }

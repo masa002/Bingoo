@@ -1,7 +1,7 @@
 import { FREE_CELL, labelOf, popcount, waitingCells } from '../core/card'
 import { CAN, CH_FREE, CH_LINES, Game, challengeChance, dumpGame, restoreGame, type GameDump, type Impact, type Player } from '../core/game'
 import { fakeName } from '../core/names'
-import { PrizeStock, RANKS, commitHash, doubleChancePrizes, packLook, type BallColor, type Prize, type Rarity, type StockDump } from '../core/prizes'
+import { HELD_REASON, PrizeStock, RANKS, addHold, commitHash, doubleChancePrizes, packLook, type BallColor, type Holds, type Prize, type Rarity, type StockDump } from '../core/prizes'
 import { Rng } from '../core/rng'
 import { drawTiming, personalTier, pickStyle, venueBeats, type MachineStyle, type PersonalOutcome } from '../core/show'
 import type { ChoiceOffer, LiveState, Msg, MsgOf, Phase, PhoneCommand, PrizeEntry, Totals, Who } from '../net/protocol'
@@ -41,6 +41,10 @@ const LAST_ONE = { dropAt: 6500, durationMs: 11000 }
 const MAX_MOLES = 5
 // 景品の「受け取る／上位チャレンジ」の選択を待つ長さの上限（スマホの側は、開封のあと 10 秒で「受け取る」になる）
 const CHOICE_MAX = 40000
+// 当たった人のスマホは、景品の発表（prizeTime）を受け取ったらすぐ「見ました」（prizeSeen）を送る。
+// 発表が画面に出てから、この時間たっても届かない人（眠っている・つながっていないスマホ）は、選ぶのを待たずに「受け取る」扱いにする。
+// ふつうは 1 秒もかからずに届く。通信の遅れと、受け口（Room）がまとめて渡すまでの 50ms を見込んで、長めにとる
+const SEEN_MS = 5000
 const DC_ENTRY_S = 30
 const OUTCOME: readonly PersonalOutcome[] = ['none', 'hit', 'reach', 'bingo']
 const COLOR_RANK: Record<BallColor, number> = { white: 0, red: 1, gold: 2, rainbow: 3 }
@@ -54,8 +58,10 @@ type Step =
   | { k: 'spin'; until: number; n: number; final: boolean; resultMs: number }
   | { k: 'result'; until: number; final: boolean; bingoIdx: number[]; challengeIdx: number[] }
   | { k: 'lastOneBrief'; until: number; entries: PrizeEntry[]; final: boolean }
-  | { k: 'lastOne'; until: number; entries: PrizeEntry[]; chose: [number, Choice][] }
-  | { k: 'choice'; until: number; entries: PrizeEntry[]; chose: [number, Choice][] }
+  // seen: 発表を見たと知らせてきた当選者（prizeSeen）。この変更の前に保存した状態にはない（そのときは、今までどおり全員を待つ）
+  | { k: 'lastOne'; until: number; entries: PrizeEntry[]; chose: [number, Choice][]; seen?: number[] }
+  // seenBy: 「見ました」を待つ締め切り（それまでは、まだ届いていない人も待つ）。end: 選ぶのを待つ締め切り
+  | { k: 'choice'; until: number; entries: PrizeEntry[]; chose: [number, Choice][]; seen?: number[]; seenBy?: number; end?: number }
   | { k: 'deal'; until: number }
   | { k: 'wild'; until: number }
   | { k: 'questBrief'; until: number; quest: QuestData }
@@ -143,6 +149,7 @@ export class Engine {
   private joinedDue: number | null = null
   private hostDue: number | null = null
   private lastHost = ''
+  private lastStep = ''
   private totalsKey = ''
   private totalsCache: Totals | null = null
 
@@ -316,6 +323,7 @@ export class Engine {
       phase: this.phase,
       busy: s.k !== 'idle' && s.k !== 'auto',
       hold: s.k === 'questBrief' || s.k === 'lastOneBrief' ? 'スタート ▶' : s.k === 'dcEntry' ? '参加をしめきる ▶' : s.k === 'dcHold' ? '締めくくりへ ▶' : null,
+      step: this.stepKey(),
       auto: this.auto,
       players: this.game.size,
       bots: this.bots.size,
@@ -327,10 +335,20 @@ export class Engine {
     }
   }
 
+  // 進行の位置（主催の画面に host の step として送り、「次へ」に from として付けて返してもらう）。
+  // 押したあとで位置が変わっていたら（ほかの主催が先に押した）、その「次へ」は捨てる。
+  // 同じ段でも、抽選の回数と、配り直し・イベントの数（rev）で区別する（前の回の「次へ」が、あとから届いても効かないように）。
+  // 自動進行の、次の抽選までの間（auto）は、待っている（idle）のと同じに数える（自動進行を切りかえただけで、押した「次へ」を捨てないように）
+  private stepKey(): string {
+    const k = this.step.k === 'auto' ? 'idle' : this.step.k
+    return `${this.phase}:${k}:${this.game.drawCount}:${this.rev}`
+  }
+
   // 当選者の一覧（景品の受け渡しに使う）
   results(): ResultRow[] {
     return [...this.prizeOf].map(([idx, x]) => ({
       name: this.game.players[idx].name,
+      cardNo: this.game.players[idx].cardNo,
       rarity: x.how === 'double-chance' && x.prize.id >= 1000 ? null : x.prize.rarity,
       prize: x.prize.name,
       how: x.how,
@@ -370,9 +388,13 @@ export class Engine {
   // 主催の操作
   async command(cmd: HostCommand): Promise<void> {
     this.t = this.host.now()
+    let resend = false
     switch (cmd.type) {
       case 'next':
-        this.next()
+        // 押した画面が見ていた位置（from）と、いまの位置が違う: ほかの主催が先に押して、もう進んでいる。
+        // この「次へ」は捨てて、いまの状態を主催に送り直す（押した画面が、古い位置のまま取り残されないように）
+        if (cmd.from !== undefined && cmd.from !== this.stepKey()) resend = true
+        else this.next()
         break
       case 'auto':
         this.auto = cmd.on
@@ -411,42 +433,53 @@ export class Engine {
         break
       }
     }
-    this.done()
+    this.done(resend)
   }
 
-  // 参加者の操作。端末から届く値は信用しない
-  player(idx: number, cmd: PhoneCommand): void {
+  // 参加者の操作。端末から届く値は信用しない。
+  // 何か変わったら true（保存する側は、false なら書かない。同じ操作の連打や、時機の外れた操作で、保存の回数を増やさないように）
+  player(idx: number, cmd: PhoneCommand): boolean {
     this.t = this.host.now()
     const p = this.game.players[idx]
-    if (!p || this.bots.has(idx)) return
+    if (!p || this.bots.has(idx)) return false
     const s = this.step
     switch (cmd.type) {
       case 'join':
       case 'questProgress':
-        return
+        return false
       case 'questScore': {
-        if (s.k !== 'questPlay' && s.k !== 'questGrace') return
+        if (s.k !== 'questPlay' && s.k !== 'questGrace') return false
         const q = s.quest
-        if (q.scores[idx] !== -1) return // 1 人 1 回だけ（あとから入った人の分は、数えない）
+        if (q.scores[idx] !== -1) return false // 1 人 1 回だけ（あとから入った人の分は、数えない）
         q.scores[idx] = Number.isFinite(cmd.score) ? Math.min(QUEST.maxScore, Math.max(0, Math.round(cmd.score))) : 0
         q.waiting--
         if (s.k === 'questGrace' && q.waiting <= 0) this.finishQuest(q)
         break
       }
+      case 'prizeSeen': {
+        // 当たった人のスマホが、景品の発表を受け取った（起きている）。この人の選択は、締め切りまで待つ
+        if (s.k !== 'choice' && s.k !== 'lastOne') return false
+        if (!s.seen || s.seen.includes(idx) || !s.entries.some((e) => e.idx === idx && e.rarity)) return false
+        s.seen.push(idx)
+        break
+      }
       case 'choice': {
-        if (s.k !== 'choice' && s.k !== 'lastOne') return
-        if (cmd.kind !== 'receive' && cmd.kind !== 'challenge') return
-        if (!this.pending.has(idx) || !s.entries.some((e) => e.idx === idx) || s.chose.some(([i]) => i === idx)) return
+        if (s.k !== 'choice' && s.k !== 'lastOne') return false
+        if (cmd.kind !== 'receive' && cmd.kind !== 'challenge') return false
+        if (!this.pending.has(idx) || !s.entries.some((e) => e.idx === idx) || s.chose.some(([i]) => i === idx)) return false
         s.chose.push([idx, cmd.kind])
-        if (s.k === 'choice' && this.choiceWaiting(s.entries, s.chose) === 0) this.applyChoices(s.entries, s.chose)
+        if (s.k === 'choice' && this.choiceWaiting(s) === 0) this.applyChoices(s.entries, s.chose)
         break
       }
       case 'entry':
-        if (s.k !== 'dcEntry' || this.prizeOf.has(idx)) return
+        if (s.k !== 'dcEntry' || this.prizeOf.has(idx) || this.entrants.has(idx)) return false
         this.entrants.add(idx) // 人数は、次の 1 秒ごとの知らせでまとめて配る
         break
+      default:
+        return false
     }
     this.done()
+    return true
   }
 
   // 受け口から届く、叩いている途中の数の合計（大画面の「会場で叩いた数」に使うだけ。保存しなくてよい）
@@ -465,13 +498,16 @@ export class Engine {
 
   // ---- 進行 -----------------------------------------------------------------
 
-  // 入口の終わりに呼ぶ: 主催の画面を更新して、次に起こしてもらう時刻を決める
-  private done(): void {
-    if (this.hostDue === null) {
+  // 入口の終わりに呼ぶ: 主催の画面を更新して、次に起こしてもらう時刻を決める。
+  // 参加・接続の数だけの変化は 1 秒に 1 回にまとめる（hostDue）。進行の位置が変わったときは、すぐ送る（主催の「次へ」の from が古くならないように）。
+  // force: 変わっていなくても送る（捨てた「次へ」を押した画面に、いまの位置を知らせ直す）
+  private done(force = false): void {
+    if (force || this.hostDue === null || this.stepKey() !== this.lastStep) {
       const state = this.hostState()
       const text = JSON.stringify(state)
-      if (text !== this.lastHost) {
+      if (force || text !== this.lastHost) {
         this.lastHost = text
+        this.lastStep = state.step
         this.host.emit({ at: this.host.now(), to: 'host', msg: state })
       }
     }
@@ -574,8 +610,13 @@ export class Engine {
       case 'lastOneBrief':
         return this.prizeTime(s.entries, s.final, true)
       case 'lastOne':
-        return this.awaitChoices(s.entries, s.chose, true)
+        return this.awaitChoices(s.entries, s.chose, s.seen, true)
       case 'choice':
+        // 「見ました」を待つ時間が終わった。見たと知らせてきた人がまだ選んでいれば、選び終わるまで（長くても end まで）待つ
+        if (s.end !== undefined && s.until < s.end && this.choiceWaiting(s) > 0) {
+          this.step = { ...s, until: s.end }
+          return
+        }
         return this.applyChoices(s.entries, s.chose)
       case 'deal':
         return this.endDraw()
@@ -751,29 +792,35 @@ export class Engine {
   private finishQuest(q: QuestData): void {
     const g = this.game
     this.rev++
-    const scores = g.players.map((p) => Math.max(0, q.scores[p.idx] ?? 0))
-    // 守れる数（bar）は、会場全体の叩いた数の下から ratio の割合のところ。狙われた人のうち bar に届かなかった人がやられる
-    const sorted = [...scores].sort((a, b) => a - b)
-    const bar = sorted[Math.min(sorted.length - 1, Math.floor(q.ratio * sorted.length))]
+    // 叩いた数（届かなかった人は -1）。届かなかった本物の参加者（つなぎ直しの途中・眠っていたスマホ・あとから入った人）は、
+    // 挑んでいないので、やられる側にも、守れる数（bar）の計算にも入れない（失うのは、自分が挑んだ結果としてだけ）。
+    // 仮想の参加者の数は、始めるときに決めてある
+    const got = g.players.map((p) => q.scores[p.idx] ?? -1)
+    const scores = got.map((x) => Math.max(0, x))
+    // 守れる数（bar）は、数が届いた人の叩いた数の下から ratio の割合のところ。狙われた人のうち bar に届かなかった人がやられる
+    const sorted = got.filter((x) => x >= 0).sort((a, b) => a - b)
+    const bar = sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(q.ratio * sorted.length))] : 0
     const aim = new Map(q.aim)
-    const losers = new Set([...aim.keys()].filter((idx) => scores[idx] < bar))
+    const losers = new Set([...aim.keys()].filter((idx) => got[idx] >= 0 && got[idx] < bar))
     const before = g.players.map((p) => p.reach)
     let lostReach = 0
     for (const idx of losers) if (g.fillByMole(idx, aim.get(idx)!)) lostReach++
-    // 順位は、自分より多く叩いた人の数 + 1
+    // 順位は、自分より多く叩いた人の数 + 1（数が届かなかった人は数えず、その人にも順位を付けない）
     const more = new Array<number>(QUEST.maxScore + 2).fill(0)
-    for (const s of scores) more[s]++
+    for (const s of got) if (s >= 0) more[s]++
     for (let s = QUEST.maxScore; s >= 0; s--) more[s] += more[s + 1]
     const personal = new Map<number, Record<string, unknown>>()
     for (const p of this.humans()) {
       const score = scores[p.idx]
       const lost = losers.has(p.idx)
+      const rank = got[p.idx] >= 0 ? more[score + 1] + 1 : 0
       personal.set(p.idx, {
-        me: { score, target: true, lost, cell: q.cell[p.idx] ?? null, need: lost ? bar - score : 0, rank: more[score + 1] + 1, reachBefore: before[p.idx], reachAfter: p.reach },
+        me: { score, target: true, lost, cell: q.cell[p.idx] ?? null, need: lost ? bar - score : 0, rank, reachBefore: before[p.idx], reachAfter: p.reach },
       })
     }
-    const top = scores
+    const top = got
       .map((score, idx) => ({ idx, score }))
+      .filter((x) => x.score >= 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, 3)
       .map((x) => ({ ...this.who(x.idx), score: x.score }))
@@ -874,11 +921,15 @@ export class Engine {
     const entries: PrizeEntry[] = []
     // 選択画面に出す見込みは、この回で 1 回だけ計算する
     const drawsLeft = Math.round(g.estimateDrawsUntil(this.stock.lowerLeft, this.rng, g.size > 3000 ? 4 : 8))
+    // この回に挑戦を出した人の分（挑戦中の人の分と合わせて、在庫に取っておく）
+    const batch: Holds = { SR: 0, UR: 0, back: 0 }
     // 上位チャレンジの成功者が先（リスクを取った人を優先する）
     for (const idx of this.rng.shuffle([...challengeIdx])) {
       const target = g.players[idx].challenge!.target
       g.endChallenge(idx)
-      entries.push(this.entry(idx, 'challenge', this.stock.takeAtLeast(target), target, final, drawsLeft))
+      // 挑戦を出すときに取っておいたので、ふつうは target 以上が残っている。それでもなければ、下のランクでも渡す（成功した人を手ぶらにしない）
+      const prize = this.stock.takeAtLeast(target) ?? this.stock.takeAtMost(target)
+      entries.push(this.entry(idx, 'challenge', prize, target, final, drawsLeft, batch))
     }
     // 通常のビンゴ。同じ回の当選者の並びは乱数で決める（参加順だと早く参加した人が有利になる）。
     // 下位が足りなければ 1 つ上のランクへ。上まで全部なくなったときだけラストワン争奪で外れる
@@ -894,7 +945,7 @@ export class Engine {
         lastOne = true
         this.balls.set(idx, 3)
       }
-      entries.push(this.entry(idx, 'normal', prize, from, final, drawsLeft))
+      entries.push(this.entry(idx, 'normal', prize, from, final, drawsLeft, batch))
     }
     // ラストワン争奪は、同じ回に上がった人がそれぞれスマホでガラポンを回す（結果はくじで、上の並びで決まっている）。
     // 先に説明の画面を出して、司会の「スタート」を待つ
@@ -912,21 +963,31 @@ export class Engine {
 
   private prizeTime(entries: PrizeEntry[], final: boolean, lastOne: boolean): void {
     this.send({ type: 'prizeTime', entries, lastOne: lastOne ? LAST_ONE : null, final })
-    if (lastOne) this.step = { k: 'lastOne', until: this.t + LAST_ONE.durationMs, entries, chose: [] }
-    else this.awaitChoices(entries, [], false)
+    if (lastOne) this.step = { k: 'lastOne', until: this.t + LAST_ONE.durationMs, entries, chose: [], seen: [] }
+    else this.awaitChoices(entries, [], [], false)
   }
 
-  // まだ選んでいない、本物の当選者の数
-  private choiceWaiting(entries: PrizeEntry[], chose: [number, Choice][]): number {
-    return entries.filter((e) => e.rarity && !this.bots.has(e.idx) && !chose.some(([i]) => i === e.idx)).length
+  // 選ぶのを待っている、本物の当選者の数。待つのは、まだ選んでいない人のうち、発表を見たと知らせてきた人だけ
+  // （「見ました」の締め切り seenBy までは、まだ知らせの届いていない人も待つ。seen がない古い状態では、全員を待つ）
+  private choiceWaiting(s: Extract<Step, { k: 'choice' }>): number {
+    const early = s.seenBy !== undefined && this.t < s.seenBy
+    return s.entries.filter((e) => e.rarity && !this.bots.has(e.idx) && !s.chose.some(([i]) => i === e.idx) && (!s.seen || early || s.seen.includes(e.idx))).length
   }
 
-  // 当たった人がスマホでパックを開けて、受け取るか上位チャレンジかを選ぶのを待つ
-  private awaitChoices(entries: PrizeEntry[], chose: [number, Choice][], afterLastOne: boolean): void {
-    const waiting = this.choiceWaiting(entries, chose)
-    if (afterLastOne && entries.some((e) => e.rarity && !this.bots.has(e.idx)) && waiting === 0) return this.applyChoices(entries, chose)
-    const until = waiting ? this.t + CHOICE_MAX + this.lead : this.t + (afterLastOne ? 1500 : 3600)
-    this.step = { k: 'choice', until, entries, chose }
+  // 当たった人がスマホでパックを開けて、受け取るか上位チャレンジかを選ぶのを待つ。
+  // 眠っている・つながっていないスマホは選べないので、「見ました」が来なかった人は待たない（受け取る扱い）
+  private awaitChoices(entries: PrizeEntry[], chose: [number, Choice][], seen: number[] | undefined, afterLastOne: boolean): void {
+    if (!entries.some((e) => e.rarity && !this.bots.has(e.idx))) {
+      // 本物の当選者がいない: 大画面で発表を見せる分だけ待つ
+      this.step = { k: 'choice', until: this.t + (afterLastOne ? 1500 : 3600), entries, chose, seen }
+      return
+    }
+    const end = this.t + CHOICE_MAX + this.lead
+    // ラストワン争奪のあとは、発表から 11 秒たっている。起きているスマホからは、もう「見ました」が届いている
+    const seenBy = afterLastOne || !seen ? undefined : this.t + this.lead + SEEN_MS
+    const s: Extract<Step, { k: 'choice' }> = { k: 'choice', until: seenBy ?? end, entries, chose, seen, seenBy, end }
+    this.step = s
+    if (afterLastOne && this.choiceWaiting(s) === 0) this.applyChoices(entries, chose)
   }
 
   // 選択を反映する。挑む人は景品を在庫に戻し、まだ出ていない数字で作った 3×3 のカードをもらう。
@@ -956,7 +1017,7 @@ export class Engine {
     else this.endDraw()
   }
 
-  private entry(idx: number, kind: 'normal' | 'challenge', prize: Prize | null, from: Rarity | null, final: boolean, drawsLeft: number): PrizeEntry {
+  private entry(idx: number, kind: 'normal' | 'challenge', prize: Prize | null, from: Rarity | null, final: boolean, drawsLeft: number, batch: Holds): PrizeEntry {
     if (prize) this.pending.set(idx, prize)
     const look = packLook(prize?.rarity ?? null, this.rng)
     const up = prize && from && RANKS.indexOf(prize.rarity) > RANKS.indexOf(from)
@@ -970,18 +1031,22 @@ export class Engine {
       glow: look.glow,
       upgrade: look.upgrade,
       rankUp: up ? { from: from!, to: prize!.rarity } : undefined,
-      choice: prize ? this.offer(prize.rarity, final, drawsLeft) : undefined,
+      choice: prize ? this.offer(prize.rarity, final, drawsLeft, batch) : undefined,
     }
   }
 
-  // 受け取るか上位チャレンジかの選択。C・R なら SR を、SR なら UR を狙える（UR は最上位なので選択なし）
-  private offer(rarity: Rarity, final: boolean, drawsLeft: number): ChoiceOffer | undefined {
+  // 受け取るか上位チャレンジかの選択。C・R なら SR を、SR なら UR を狙える（UR は最上位なので選択なし）。
+  // 出すのは、挑戦中の人と、この回に先に挑戦を出した人（batch）の分を取っておいても、まだ足りるときだけ
+  // （全員が成功しても、全員に景品を渡せるように）。出したら batch に足す
+  private offer(rarity: Rarity, final: boolean, drawsLeft: number, batch: Holds): ChoiceOffer | undefined {
     const target: Rarity | null = rarity === 'C' || rarity === 'R' ? 'SR' : rarity === 'SR' ? 'UR' : null
     if (!target) return undefined
     if (final) return { allowed: false, target, reason: '最後の回なので、チャレンジはありません' }
     if (!this.stock.hasAtLeast(target)) return { allowed: false, target, reason: '狙える景品が残っていません' }
     const chance = challengeChance(drawsLeft, this.game.remaining().length)
     if (chance < 0.03) return { allowed: false, target, chance, reason: '終盤なので、もう間に合いません' }
+    if (!this.stock.canHold(target, rarity, this.game.holds(batch))) return { allowed: false, target, chance, reason: HELD_REASON }
+    addHold(batch, target, rarity)
     return { allowed: true, target, chance }
   }
 

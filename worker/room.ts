@@ -1,6 +1,6 @@
 import { Server, type Connection, type ConnectionContext, type WSMessage } from 'partyserver'
 import { CREW_SHARD, KEEPALIVE, QUEST_MAX_SCORE, RESUME_MS, RING_SIZE, frameText, shardOf, type Control, type Delivery, type Role } from '../src/net/wire'
-import { checkHostToken, checkPlayerToken, tokenKey, type AppEnv } from './auth'
+import { checkHostToken, checkPlayerToken, readText, tokenKey, type AppEnv } from './auth'
 import type { CmdItem, GameDO } from './game'
 
 // 接続の受け口。参加者 800 人ごとに 1 つ（名前は `${code}:p0` など）と、大画面・主催用の 1 つ（`${code}:crew`）。
@@ -43,6 +43,20 @@ const SSE_BEAT_MS = 15000
 const SSE_BACKLOG = 400 // SSE の端末が受け取りきれずに、これだけたまったら切る
 const CMD_QUEUE = 5000
 const UP_MAX = { player: 512, stage: 512, host: 512 * 1024 } // 端末から届く 1 通の長さの上限（文字）
+const UP_BYTES = 3 // sse・poll の POST は、読む前にバイト数で断る（日本語は 1 文字 3 バイト）
+// 1 本の接続（参加者は 1 人ごと）から受け取る数の上限（時計合わせの ping と、操作を合わせて数える）。
+// ふつうのスマホは、つないだ直後の時計合わせで 1 秒に 5 通、そのあとは 2 分ごとに 3 通と、
+// モグラ撃退の途中の数が 2 秒おき、ほかの操作は 1 回の会で数十回だけ。主催も、ボタンを押した分だけ。
+// その何倍もとっておく: 続けて 40 通まで、ならして 1 秒に 4 通まで（10 秒静かにしていれば、40 通に戻る）。
+// 超えた分は捨てる。超えたまま 200 通送ってきたら、明らかな連打なので、その接続を切る
+const RATE = { burst: 40, perSec: 4, kick: 200 }
+
+// 受け取れる数の残り（RATE）
+interface Bucket {
+  tokens: number
+  at: number
+  over: number // 超えて捨てた数（しばらく静かにして、満タンに戻ったら 0 に戻す）
+}
 
 const enc = new TextEncoder()
 
@@ -85,6 +99,8 @@ export class RoomDO extends Server<AppEnv> {
 
   private cmdQ: CmdItem[] = []
   private cmdTimer: ReturnType<typeof setTimeout> | null = null
+  // 受け取れる数の残り。参加者は人ごと（つなぎ直しても同じ）、大画面・主催は接続ごと。眠ると消える（満タンから始め直すだけ）
+  private readonly buckets = new Map<string, Bucket>()
 
   private readonly quest = new Map<number, number>() // 人 → 叩いている途中の数
   private questTimer: ReturnType<typeof setTimeout> | null = null
@@ -194,6 +210,7 @@ export class RoomDO extends Server<AppEnv> {
   private drop(peer: Peer): void {
     if (this.peers.get(peer.id) !== peer) return
     this.peers.delete(peer.id)
+    this.buckets.delete(`c:${peer.id}`)
     if (this.byIdx.get(peer.idx) === peer) this.byIdx.delete(peer.idx)
     if (this.sseTimer && ![...this.peers.values()].some((p) => p.beat)) {
       clearInterval(this.sseTimer)
@@ -345,6 +362,10 @@ export class RoomDO extends Server<AppEnv> {
   // 配信。prev は、Game がこの Room にこの前に配った最後の通し番号。返すのは、いまつながっている数
   async deliver(batch: Delivery[], prev: number): Promise<number> {
     this.wake()
+    // もう受け取った配信が、重ねて届いた（Game が、返事を受け取れずに送り直した）。取りこぼしではないので、捨てるだけ。
+    // 覚えている分に同じ番号があるときだけ（Game の番号が巻き戻ったときは、下の取りこぼしとして扱って、配り直す）
+    const tail = batch[batch.length - 1]
+    if (tail && this.lastSeq !== null && tail.s <= this.lastSeq && this.ring.some((d) => d.s === tail.s)) return this.peers.size
     const gap = this.lastSeq !== null && prev !== this.lastSeq
     if (this.floor === null || gap) {
       this.ring = []
@@ -433,10 +454,13 @@ export class RoomDO extends Server<AppEnv> {
   }
 
   onMessage(c: Connection<Att>, message: WSMessage): void {
-    if (typeof message !== 'string') return
     // ふだんは、眠ったままの自動の返事が先に答える。ここに来るのは、その設定が効く前の分だけ
     if (message === KEEPALIVE.ping) return c.send(KEEPALIVE.pong)
     const peer = this.peers.get(c.id)
+    // 連打を止める（中身を読む前に数える）
+    const ok = this.allow(peer?.role === 'player' ? `p${peer.idx}` : `c:${c.id}`)
+    if (ok === 'kick') return this.cut(c, peer)
+    if (!ok || typeof message !== 'string') return
     if (message.length > UP_MAX[peer?.role ?? 'stage']) return
     let up: { t?: unknown; c?: unknown; cmd?: unknown }
     try {
@@ -462,6 +486,31 @@ export class RoomDO extends Server<AppEnv> {
   }
 
   // ---- 端末からの操作 -------------------------------------------------------
+
+  // 1 通受け取ってよいか（RATE）。'kick' は、超えたまま送り続けているので、接続を切る
+  private allow(key: string): boolean | 'kick' {
+    const now = Date.now()
+    let b = this.buckets.get(key)
+    if (!b) this.buckets.set(key, (b = { tokens: RATE.burst, at: now, over: 0 }))
+    b.tokens = Math.min(RATE.burst, b.tokens + ((now - b.at) / 1000) * RATE.perSec)
+    b.at = now
+    if (b.tokens >= RATE.burst) b.over = 0
+    if (b.tokens >= 1) {
+      b.tokens--
+      return true
+    }
+    return ++b.over >= RATE.kick ? 'kick' : false
+  }
+
+  // 連打の続く接続を切る（ふつうの端末は、ここまで来ない）。端末はつなぎ直してくるが、参加者の残りの数は人ごとなので、続ければまた切られる
+  private cut(c: Connection<Att>, peer: Peer | undefined): void {
+    console.error(`${this.name}: closed a flooding connection (${peer ? `${peer.role} ${peer.idx}` : 'unknown'})`)
+    if (peer) this.drop(peer)
+    this.buckets.delete(`c:${c.id}`)
+    try {
+      c.close(1008, 'too many messages')
+    } catch {}
+  }
 
   // 役割を付けて、Game に渡す列に足す（中身は Game が確かめる）。
   // 主催の操作は主催の接続からだけ、参加者の操作は参加者の接続からだけ: i が null のものだけが主催の操作として扱われる
@@ -588,13 +637,19 @@ export class RoomDO extends Server<AppEnv> {
     const who = await this.identify(q)
     if (who === 'closed') return json('{"error":"このゲームは見つかりません"}', 404)
     if (who === 'auth') return json(q.get('role') === 'host' ? '{"error":"もう一度ログインしてください"}' : '{"error":"もう一度参加してください"}', 401)
-    const text = await request.text()
+    // 大きすぎる本文は、読む前（content-length）か、読んでいる途中で断る
+    const text = await readText(request, UP_MAX[who.role] * UP_BYTES)
     let body: { cmds?: unknown } | null = null
     try {
-      if (text.length <= UP_MAX[who.role]) body = JSON.parse(text)
+      if (text !== null && text.length <= UP_MAX[who.role]) body = JSON.parse(text)
     } catch {}
     if (!body || !Array.isArray(body.cmds)) return json('{"error":"送られた内容を読めませんでした"}', 400)
-    for (const c of body.cmds.slice(0, 32)) this.accept(who.role, who.idx, c)
+    // 連打の上限は、ws と同じ数え方（参加者は人ごと。主催は sse・poll の分をまとめて）。超えた分は捨てて、429 で知らせる（端末は送り直さない）
+    const key = who.role === 'player' ? `p${who.idx}` : `h:${who.role}`
+    for (const c of body.cmds.slice(0, 32)) {
+      if (this.allow(key) !== true) return json('{"error":"送る回数が多すぎます。少し待ってください"}', 429)
+      this.accept(who.role, who.idx, c)
+    }
     return json('{"ok":true}')
   }
 }

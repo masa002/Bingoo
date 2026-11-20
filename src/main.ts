@@ -16,9 +16,25 @@ const params = new URLSearchParams(location.search)
 
 // ?g=CODE（参加者・大画面・主催コンソール）と ?host（ゲームを作る）は、サーバーにつなぐ本番の画面。
 // ?gallery で、演出と音を 1 つずつ確かめるギャラリーを開く。何も付けなければ、いままでのデモ
-if (params.has('g') || params.has('host')) void import('./live/main').then((m) => m.mountLive(app, params))
-else if (params.has('gallery')) void import('./gallery/main').then((m) => m.mountGallery(app))
+if (params.has('g') || params.has('host')) void import('./live/main').then((m) => m.mountLive(app, params), loadFailed)
+else if (params.has('gallery')) void import('./gallery/main').then((m) => m.mountGallery(app), loadFailed)
 else startDemo()
+
+// 画面の部品を読み込めなかった（会場の Wi-Fi が混んでいる、など）。何も出ないままにしない。
+// 本番の画面のひと言の画面（live/main.ts の page）と同じ見た目にしたいが、その部品が読めなかったので、ここで最小限に作る
+function loadFailed(e: unknown): void {
+  console.error(e)
+  const box = document.createElement('div')
+  box.className = 'load-failed'
+  box.innerHTML = `<div class="load-failed-box">
+      <div class="load-failed-logo">BINGOO</div>
+      <p class="load-failed-title">読み込めませんでした</p>
+      <p class="load-failed-text">電波のいい場所で、もう一度ためしてね</p>
+      <button type="button">もう一度</button>
+    </div>`
+  box.querySelector('button')!.addEventListener('click', () => location.reload())
+  app.replaceChildren(box)
+}
 
 function startDemo(): void {
   app.innerHTML = `

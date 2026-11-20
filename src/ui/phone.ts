@@ -6,7 +6,7 @@ import type { Rarity } from '../core/prizes'
 import type { Clock } from '../demo/clock'
 import { playBingo, playReach, playWildResult, type AoriOutcome } from '../fx/phone/aori'
 import { CardView } from '../fx/phone/card'
-import { askEntry, playFinalResult, playGarapon } from '../fx/phone/garapon'
+import { AWARD_NAME, BALL_INFO, askEntry, playFinalResult, playGarapon } from '../fx/phone/garapon'
 import { openLastOneBrief, playLastOneGarapon } from '../fx/phone/lastone'
 import { askChoice, playChallengeResult, playChallengeStart, playPackOpen } from '../fx/phone/prize'
 import { MoleQuest } from '../fx/phone/quest'
@@ -39,7 +39,7 @@ const PHONE_HTML = `
 <div class="ph-cardhost"></div>
 <div class="ph-rule"></div>
 <div class="ph-drawn">
-  <div class="ph-latest"><small>いま出た番号</small><b class="ph-latest-n">--</b></div>
+  <div class="ph-latest"><small>いま出た番号</small><b class="ph-latest-n none">--</b></div>
   <div class="ph-past"><small>これまで <b class="ph-drawn-n">0</b> 個</small><div class="ph-history"></div></div>
 </div>
 <div class="ph-note"></div>
@@ -165,6 +165,8 @@ export class PhoneView {
   private venueDraw = 0 // 会場のようすに出した、いちばん新しい抽選（古い抽選の結果で上書きしない）
   private prizeHead = '' // いちばん新しい抽選の見出し（「(O)61 ビンゴ 2 人！」）。景品が決まったときに、そのまま使う
   private timers: number[] = [] // 会場のようすを、大画面に合わせて遅れて出す予定（新しいゲームで取り消す）
+  private game = '' // いまのゲーム（シードと山の控え）。景品の発表を見たと送ったかを、ゲームをまたいで取り違えないように
+  private seenPrize = '' // 「景品の発表を見た」を送った発表（つなぎ直しで同じ発表が届いても、2 回は送らない）
 
   constructor(
     host: HTMLElement,
@@ -286,7 +288,10 @@ export class PhoneView {
       case 'prizeTime': {
         this.closeLastOneBrief()
         const mine = m.entries.find((e) => e.isMe)
-        if (mine) void this.onMyPrize(mine, m.lastOne ? { ...m.lastOne, entries: m.entries } : null)
+        if (mine) {
+          this.sendPrizeSeen(mine)
+          void this.onMyPrize(mine, m.lastOne ? { ...m.lastOne, entries: m.entries } : null)
+        }
         void this.prizeNews(m)
         return
       }
@@ -340,6 +345,8 @@ export class PhoneView {
     this.clearChallenge()
     this.name = m.me.name
     this.cardNo = m.me.cardNo
+    this.game = `${m.seed}/${m.deckHash}`
+    if (!m.drawn.length) this.seenPrize = '' // まだ番号が出ていない（新しいゲーム）: 景品の発表は、まだない
     this.cells = deriveCard(m.seed, m.me.cardNo)
     this.mask = FREE_MASK
     this.filled = 0
@@ -468,6 +475,16 @@ export class PhoneView {
     el.textContent = text
     el.classList.toggle('on', text !== '')
     if (text && ms !== undefined) this.noteTimer = window.setTimeout(() => this.setNote(''), this.clock.scale(ms))
+    this.fitBottom()
+  }
+
+  // 知らせと景品が両方出ていて、下が足りないとき（ゲームの終わりごろ）は、出た番号の欄を詰める（styles.css の .phone.tight）。
+  // 出来事も出ていれば、会場の数字の行を省く（tight-news）。古い iPhone（iOS 15.3 まで）は :has() が効かないので、クラスで切りかえる
+  private fitBottom(): void {
+    const on = (s: string) => this.$(s).classList.contains('on')
+    const tight = on('.ph-note') && on('.ph-prize')
+    this.root.classList.toggle('tight', tight)
+    this.root.classList.toggle('tight-news', tight && on('.ph-news'))
   }
 
   // 受け取った景品は、画面に出したままにする（会場で引き換えるときに見せられるように）
@@ -481,6 +498,7 @@ export class PhoneView {
         : `<small><span>あなたの景品</span>${rarity ? `<em>${RARITY_NAME[rarity]}</em>` : ''}</small><div>${
             rarity ? `<i data-r="${rarity}">${rarity}</i>` : ''
           }<b>${esc(prize)}</b></div>`
+    this.fitBottom()
   }
 
   // deal を false にすると、カードを配る動きを省く（すぐにカードのマスの位置を測る演出が続くとき）
@@ -542,9 +560,11 @@ export class PhoneView {
       .join('')
   }
 
-  // いま出た番号（null で「--」）
+  // いま出た番号（null で「--」。none のクラスで控えめにする。古い iPhone では :has() が効かないので、クラスで分ける）
   private setLatest(n: number | null): void {
-    this.$('.ph-latest-n').innerHTML = n === null ? '--' : numHtml(n)
+    const el = this.$('.ph-latest-n')
+    el.innerHTML = n === null ? '--' : numHtml(n)
+    el.classList.toggle('none', n === null)
   }
 
   // ---- 全員確定（虹玉）の自分の結果 ------------------------------------------
@@ -819,6 +839,27 @@ export class PhoneView {
 
   // ---- 景品と上位チャレンジ -------------------------------------------------
 
+  // 景品の発表に自分が入っていたら、受け取ってすぐ「見た」を送る（開封の演出の終わりは待たない）。
+  // サーバーは、これを送ってきた人（スマホが起きている人）の選択だけを待つ。眠っているスマホのために、全員を待たせない。
+  // つなぎ直しで同じ発表がもう一度届いても、送るのは 1 回まで（同じゲームの、同じ回の、同じ種類の当たりは 1 つだけ）
+  private sendPrizeSeen(e: PrizeEntry, key = `${this.game}#${this.history.length}#${e.kind}`): void {
+    if (key === this.seenPrize) return
+    // 画面が裏に回っている（ほかのアプリを見ている）間は、まだ見ていないので送らない。表に戻ったときに送る
+    // （その前につなぎ直したら、同じゲームの状態ではなくなるので送らない）
+    if (document.visibilityState === 'hidden') {
+      const gen = this.generation
+      const back = () => {
+        if (document.visibilityState === 'hidden') return
+        document.removeEventListener('visibilitychange', back)
+        if (gen === this.generation) this.sendPrizeSeen(e, key)
+      }
+      document.addEventListener('visibilitychange', back)
+      return
+    }
+    this.seenPrize = key
+    this.send({ type: 'prizeSeen' })
+  }
+
   private async onMyPrize(e: PrizeEntry, lastOne: { dropAt: number; durationMs: number; entries: PrizeEntry[] } | null): Promise<void> {
     const gen = this.generation
     if (lastOne && e.kind === 'normal') {
@@ -942,14 +983,20 @@ export class PhoneView {
     // エントリーしないまま締め切られたときは、残っているエントリー画面を閉じて、発表を待つ。当たった人は、会場のようすの欄に出す
     this.root.querySelectorAll('.fxg').forEach((n) => n.remove())
     this.setNote(DC_SPIN_NOTE)
-    winners.forEach((w, i) =>
-      this.later(w.at, () => this.setNews(`<b>ダブルチャンス 当たった人</b>${this.namesHtml(winners.slice(0, i + 1), i + 1)}`)),
-    )
+    winners.forEach((w, i) => this.later(w.at, () => this.dcNews(winners.slice(0, i + 1))))
     await this.dcEnded
     if (gen !== this.generation) return
     this.setNote('')
     // 締めの音は、景品を獲得済みの人のときは大画面が鳴らしている（デモでは同じ PC から鳴るので、重ねない。本番は自分のスマホで鳴らす）
     await playFinalResult(this.root, { speed: this.speed, stats: this.finalStats(), sound: this.live || this.dcEligible })
+  }
+
+  // 会場のようすの「ダブルチャンス 当たった人」。特賞（虹の玉）の人は「ほか」に入れず、必ず別の行で出す（いちばんの見せ場）
+  private dcNews(list: readonly (Who & { color: BallColor })[]): void {
+    const top = list.filter((w) => w.color === 'rainbow')
+    const others = list.filter((w) => w.color !== 'rainbow')
+    const award = top.length ? `<em class="ph-news-sub">${BALL_INFO.rainbow.shape} ${AWARD_NAME.rainbow} ${top.map((w) => whoHtml(w)).join(SEP)}</em>` : ''
+    this.setNews(`<b>ダブルチャンス 当たった人</b>${others.length ? this.namesHtml(others) : ''}${award}`, false, top.length > 0)
   }
 
   private finalStats() {
@@ -974,13 +1021,16 @@ export class PhoneView {
     this.$('.ph-count').textContent = n > 0 ? `参加 ${fmt(n)} 人` : ''
   }
 
-  // いちばん新しい出来事（1〜2 行）。big は、ビンゴが出たときなど、少しだけ目立たせる
-  private setNews(html: string, big = false): void {
+  // いちばん新しい出来事（1〜2 行）。big は、ビンゴが出たときなど、少しだけ目立たせる。
+  // tall は、名前の行の下に、もう 1 行（特賞の人など、「ほか」に入れたくない行）を出すとき（3 行まで）
+  private setNews(html: string, big = false, tall = false): void {
     const el = this.$('.ph-news')
     el.innerHTML = html
     el.classList.toggle('on', html !== '')
     el.classList.toggle('big', big)
+    el.classList.toggle('tall', tall)
     if (html) replay(el, 'pop')
+    this.fitBottom()
   }
 
   // 名前の並び（NAMES_MAX 人まで。あとは「ほか N 人」）。自分は「あなた」の札

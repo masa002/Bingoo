@@ -1,7 +1,7 @@
 import { FREE_CELL, LINES, labelOf, popcount, waitingCells } from '../core/card'
 import { CH_FREE, CH_LINES, Game, challengeChance, type Impact } from '../core/game'
 import { fakeName } from '../core/names'
-import { PrizeStock, RANKS, commitHash, doubleChancePrizes, packLook, type Prize, type Rarity } from '../core/prizes'
+import { HELD_REASON, PrizeStock, RANKS, addHold, commitHash, doubleChancePrizes, packLook, type Holds, type Prize, type Rarity } from '../core/prizes'
 import { Rng } from '../core/rng'
 import {
   TIER_NAME,
@@ -147,6 +147,7 @@ export class DemoAuthority {
       this.questScore?.(score)
     }
     else if (cmd.type === 'choice') this.choiceNow?.(cmd.kind)
+    // prizeSeen（景品の発表を見た）は本番のサーバーが使う知らせ。デモでは、自分の選択はいつも待つので、何もしない
     else if (cmd.type === 'entry' && this.phase === 'dc-entry' && !this.entrants.has(0)) {
       this.entrants.add(0)
       this.hub.publish({ type: 'dcEntrants', count: this.entrants.size })
@@ -312,22 +313,24 @@ export class DemoAuthority {
     await playEnd
     stopTicks()
     if (gen !== this.generation) return
-    const myScore = await Promise.race([mine, this.clock.wait(QUEST.grace).then(() => 0)])
+    // 自分の数が届かなかった（画面が裏に回っていた、など）ときは null。挑んでいないので、
+    // やられる側にも、守れる数（bar）の計算にも入れない（失うのは、自分が挑んだ結果としてだけ。本番と同じ）
+    const myScore = await Promise.race([mine, this.clock.wait(QUEST.grace).then(() => null)])
     this.questScore = null
     if (gen !== this.generation) return
-    scores.set(0, myScore)
+    if (myScore !== null) scores.set(0, myScore)
 
     // 守れる数（bar）は、会場全体の叩いた数の下から ratio の割合のところ。狙われた人のうち bar に届かなかった人がやられる。
     // 狙われた人が 1 人でも自分の叩いた数で決まり、狙われた人が多ければ、やられるのはほぼ ratio の割合になる
     const sorted = [...scores.values()].sort((a, b) => a - b)
     const bar = sorted[Math.min(sorted.length - 1, Math.floor(ratio * sorted.length))]
-    const losers = new Set([...aim.keys()].filter((idx) => scores.get(idx)! < bar))
+    const losers = new Set([...aim.keys()].filter((idx) => scores.has(idx) && scores.get(idx)! < bar))
     const before = g.me.reach
     let lostReach = 0
     for (const idx of losers) if (g.fillByMole(idx, aim.get(idx)!)) lostReach++
-    const need = losers.has(0) ? bar - myScore : 0
-    let rank = 1
-    for (const s of scores.values()) if (s > myScore) rank++
+    const need = myScore !== null && losers.has(0) ? bar - myScore : 0
+    let rank = myScore === null ? 0 : 1 // 数が届かなかったときは、順位を付けない
+    if (myScore !== null) for (const s of scores.values()) if (s > myScore) rank++
     const top = [...scores]
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3)
@@ -335,13 +338,13 @@ export class DemoAuthority {
     this.hub.publish({
       type: 'questResult',
       kind: 'mole',
-      total: botTotal + myScore,
+      total: botTotal + (myScore ?? 0),
       targets: aim.size,
       defended: aim.size - losers.size,
       lost: losers.size,
       lostReach,
       top,
-      me: { score: myScore, target: true, lost: losers.has(0), cell: mine0.cell, need, rank, reachBefore: before, reachAfter: g.me.reach },
+      me: { score: myScore ?? 0, target: true, lost: losers.has(0), cell: mine0.cell, need, rank, reachBefore: before, reachAfter: g.me.reach },
       totals: this.totals(),
       resultMs: QUEST.result,
     })
@@ -476,11 +479,15 @@ export class DemoAuthority {
   private async prizePhase(result: Impact, final: boolean, gen: number): Promise<void> {
     const g = this.game
     const entries: PrizeEntry[] = []
+    // この回に挑戦を出した人の分（挑戦中の人の分と合わせて、在庫に取っておく）
+    const batch: Holds = { SR: 0, UR: 0, back: 0 }
     // 上位チャレンジの成功者が先（リスクを取った人を優先する）
     for (const idx of this.rng.shuffle([...result.challengeIdx])) {
       const target = g.players[idx].challenge!.target
       g.endChallenge(idx)
-      entries.push(this.entry(idx, 'challenge', this.stock.takeAtLeast(target), target, final))
+      // 挑戦を出すときに取っておいたので、ふつうは target 以上が残っている。それでもなければ、下のランクでも渡す（成功した人を手ぶらにしない）
+      const prize = this.stock.takeAtLeast(target) ?? this.stock.takeAtMost(target)
+      entries.push(this.entry(idx, 'challenge', prize, target, final, batch))
     }
     // 通常のビンゴ。同じ回の当選者の並びは乱数で決める（参加順だと早く参加した人が有利になる）。
     // 下位が足りなければ 1 つ上のランクへ。上まで全部なくなったときだけラストワン争奪で外れる
@@ -496,7 +503,7 @@ export class DemoAuthority {
         lastOne = true
         this.balls.set(idx, 3)
       }
-      entries.push(this.entry(idx, 'normal', prize, from, final))
+      entries.push(this.entry(idx, 'normal', prize, from, final, batch))
     }
     // 自分が当たっていれば、パックの開封と選択を待つ（スマホから choice が届く）。
     // チャレンジ成功の人はラストワン争奪の演出中に選び終えることもあるので、配る前から受け取れるようにしておく
@@ -551,7 +558,7 @@ export class DemoAuthority {
     if (challengers.some((c) => c.isMe)) await this.clock.wait(3000)
   }
 
-  private entry(idx: number, kind: 'normal' | 'challenge', prize: Prize | null, from: Rarity | null, final: boolean): PrizeEntry {
+  private entry(idx: number, kind: 'normal' | 'challenge', prize: Prize | null, from: Rarity | null, final: boolean, batch: Holds): PrizeEntry {
     const p = this.game.players[idx]
     if (prize) this.pending.set(idx, prize)
     const look = packLook(prize?.rarity ?? null, this.rng)
@@ -566,12 +573,14 @@ export class DemoAuthority {
       glow: look.glow,
       upgrade: look.upgrade,
       rankUp: up ? { from: from!, to: prize!.rarity } : undefined,
-      choice: prize ? this.offer(prize.rarity, final) : undefined,
+      choice: prize ? this.offer(prize.rarity, final, batch) : undefined,
     }
   }
 
-  // 受け取るか上位チャレンジかの選択。C・R なら SR を、SR なら UR を狙える（UR は最上位なので選択なし）
-  private offer(rarity: Rarity, final: boolean): ChoiceOffer | undefined {
+  // 受け取るか上位チャレンジかの選択。C・R なら SR を、SR なら UR を狙える（UR は最上位なので選択なし）。
+  // 出すのは、挑戦中の人と、この回に先に挑戦を出した人（batch）の分を取っておいても、まだ足りるときだけ
+  // （全員が成功しても、全員に景品を渡せるように）。出したら batch に足す
+  private offer(rarity: Rarity, final: boolean, batch: Holds): ChoiceOffer | undefined {
     const target: Rarity | null = rarity === 'C' || rarity === 'R' ? 'SR' : rarity === 'SR' ? 'UR' : null
     if (!target) return undefined
     if (final) return { allowed: false, target, reason: '最後の回なので、チャレンジはありません' }
@@ -579,6 +588,8 @@ export class DemoAuthority {
     const k = Math.round(this.game.estimateDrawsUntil(this.stock.lowerLeft, this.rng))
     const chance = challengeChance(k, this.game.remaining().length)
     if (chance < 0.03) return { allowed: false, target, chance, reason: '終盤なので、もう間に合いません' }
+    if (!this.stock.canHold(target, rarity, this.game.holds(batch))) return { allowed: false, target, chance, reason: HELD_REASON }
+    addHold(batch, target, rarity)
     return { allowed: true, target, chance }
   }
 

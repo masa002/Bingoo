@@ -1,5 +1,5 @@
 import { FREE_CELL, FREE_MASK, LINES, deriveCard, lineState, popcount } from './card'
-import type { Rarity } from './prizes'
+import type { Holds, Rarity } from './prizes'
 import { Rng } from './rng'
 
 // 上位チャレンジの 3×3 カード。マスの位置は「行×3＋列」で、中央（4）が FREE
@@ -318,6 +318,14 @@ export class Game {
 
   activeChallengers(): number[] {
     return [...this.challengers]
+  }
+
+  // 挑戦中の人が成功したときに渡す分の取り置き（狙うランクごとの人数）に、plus（同じ回に挑戦を出した人の分）を足したもの。
+  // 上位チャレンジを出すかの判断に使う（PrizeStock.canHold）
+  holds(plus: Holds = { SR: 0, UR: 0, back: 0 }): Holds {
+    const h: Holds = { ...plus }
+    for (const idx of this.challengers) h[this.players[idx].challenge!.target === 'UR' ? 'UR' : 'SR']++
+    return h
   }
 
   // 新規ビンゴが合計 target 人に達するまでの、残りの抽選回数の見込み（このあとの順番をランダムに何通りか試す）

@@ -11,6 +11,8 @@ import './live.css'
 
 export function mountLive(app: HTMLElement, params: URLSearchParams): void {
   const view = params.get('view')
+  // 本番の画面は、どれも画面いっぱいに自分で敷く。後ろのページが動かないようにする（live.css の html.lv-on）
+  document.documentElement.classList.add('lv-on')
   // 画面ごとに、読み込みを別々の関数にしておく。1 つの if 〜 else に並べると、ビルドのときに 1 つの式にまとめられて、
   // 「先に読み込む CSS」の一覧が最初の 1 つの分だけになる（主催コンソールの CSS が読み込まれなかった）
   const screens = {

@@ -748,6 +748,113 @@
   font-size: 6cqw;
 }
 
+/* 古い iPhone（iOS 15）は cqw が効かず、文字がすべて 15px になる。390px のスマホに置いたときの大きさを px で書いておく
+   （5×5 は横幅 358px、3×3 は 294px の 1% を 1cqw として計算）。
+   cqw の前に px を並べる書き方は、ビルドで px のほうが消されるので、@supports で分ける */
+@supports not (width: 1cqw) {
+  .fxc-head {
+    gap: 6px;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+  }
+
+  .fxc-head span {
+    font-size: 26.7px;
+    line-height: 35.8px;
+  }
+
+  .fxc-title {
+    gap: 8.2px;
+    height: 37.3px;
+    margin-bottom: 4.9px;
+  }
+
+  .fxc-title b {
+    font-size: 22.6px;
+  }
+
+  .fxc-title i {
+    font-size: 13px;
+  }
+
+  .fxc-grid {
+    gap: var(--fxc-gap, 6px);
+  }
+
+  .fxc-num {
+    font-size: 24.7px;
+  }
+
+  .fxc-cell.is-free .fxc-num {
+    font-size: 13px;
+    letter-spacing: 0.7px;
+  }
+
+  .fxc-cell.is-free .fxc-num::before {
+    font-size: 21.5px;
+  }
+
+  .fxc-cell.is-line .fxc-face::before {
+    font-size: 10px;
+  }
+
+  .fxc-cell.is-wild .fxc-face::before {
+    font-size: 10.7px;
+  }
+
+  .fxc.is-dealing .fxc-back {
+    font-size: 17.9px;
+  }
+
+  .fxc-cover em {
+    font-size: 52px;
+    margin-bottom: 6.5px;
+  }
+
+  .fxc-cover b {
+    font-size: 29.4px;
+  }
+
+  .fxc-cover small {
+    margin-top: 3.2px;
+    font-size: 13px;
+    letter-spacing: 2.4px;
+  }
+
+  .fxc-onoma {
+    font-size: 14.7px;
+  }
+
+  .fxc[data-size='3'] {
+    --fxc-gap: 7.4px;
+  }
+
+  .fxc[data-size='3'] .fxc-num {
+    font-size: 35.9px;
+  }
+
+  .fxc[data-size='3'] .fxc-cell.is-free .fxc-num {
+    font-size: 13px;
+  }
+
+  .fxc[data-size='3'] .fxc-cell.is-free .fxc-num::before {
+    font-size: 32.3px;
+  }
+
+  .fxc[data-size='3'] .fxc-cell.is-line .fxc-face::before,
+  .fxc[data-size='3'] .fxc-cell.is-wild .fxc-face::before {
+    font-size: 12.9px;
+  }
+
+  .fxc[data-size='3'].is-dealing .fxc-back {
+    font-size: 27.6px;
+  }
+
+  .fxc[data-size='3'] .fxc-onoma {
+    font-size: 17.6px;
+  }
+}
+
 /* 動きを減らす設定では、くり返しの動きを止めて色と文字だけで伝える */
 @media (prefers-reduced-motion: reduce) {
   .fxc,

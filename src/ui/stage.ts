@@ -245,8 +245,15 @@ export class StageView {
       this.showOverlay(finHtml(m.totals, m.totals.upperLeft))
     } else if (phase === 'done') {
       this.showClosing(false)
+    } else if (phase === 'dc-entry') {
+      // ダブルチャンスの受付中: 受付の画面を、残りの秒数で出し直す（スマホで「参加する」を押してもらう間に、案内が要る）。
+      // 参加の人数は、受付の間 1 秒ごとに届く知らせ（dcEntrants）で追いつく
+      this.setScene('cooldown')
+      this.eventOn()
+      this.dc = new DoubleChanceStage(this.root, { speed: this.clock.speed })
+      this.dc.entry(Math.max(0, m.live?.dcLeftMs ?? 0) / 1000)
     } else {
-      this.setScene('cooldown') // ダブルチャンスの途中。ガラポンの画面は、dcSpin が来たら出す
+      this.setScene('cooldown') // ガラポンの途中。ガラポンの画面は、dcSpin が来たら出す
     }
   }
 

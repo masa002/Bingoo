@@ -30,6 +30,25 @@ export interface StockDump {
   nextId: number
 }
 
+// 上位チャレンジの取り置き。挑戦中の人（と、同じ回に挑戦を出した人）が成功したときに渡す景品を、在庫の中に取っておく。
+// SR を狙う人には SR か UR、UR を狙う人には UR が要る。だから「UR の数 ≥ UR を狙う人」と「SR と UR の数 ≥ 狙う人の全員」の両方で確かめる
+// （この 2 つが成り立っていれば、だれがどの順に成功しても、全員に渡せる。SR を狙う人は、SR がなくなったら UR をもらう）
+export interface Holds {
+  SR: number // SR を狙う人の数
+  UR: number // UR を狙う人の数
+  back: number // 挑むときに在庫へ戻る SR の数（同じ回に、SR を手放して UR に挑む人）
+}
+
+// 取り置きで足りないときに、選択の画面に出す理由（上位チャレンジのボタンの下に小さく出る）
+export const HELD_REASON = '残りの景品は、ほかの人の挑戦の分です'
+
+// 取り置きに 1 人分を足す（target を狙って、give を手放す人）
+export function addHold(h: Holds, target: Rarity, give: Rarity): void {
+  if (target === 'UR') h.UR++
+  else h.SR++
+  if (give === 'SR') h.back++
+}
+
 const DC_NAMES = ['ダブルチャンス賞 お菓子セット', 'ダブルチャンス賞 QUO カード', 'ダブルチャンス賞 ご当地グルメ']
 
 // 景品の在庫。下位（C・R）は通常のビンゴ、上位（SR・UR）は上位チャレンジ用。
@@ -86,9 +105,27 @@ export class PrizeStock {
     return null
   }
 
+  // 指定のランクから下へ 1 つ（上のランクがもうないときの、手ぶらにしないための残り物）
+  takeAtMost(r: Rarity): Prize | null {
+    for (let i = RANKS.indexOf(r); i >= 0; i--) {
+      const p = this.lists[RANKS[i]].pop()
+      if (p) return p
+    }
+    return null
+  }
+
   // 指定のランク以上が残っているか（上位チャレンジを出してよいかの判断に使う）
   hasAtLeast(r: Rarity): boolean {
     return RANKS.slice(RANKS.indexOf(r)).some((x) => this.left(x) > 0)
+  }
+
+  // target（SR か UR）を狙う上位チャレンジを、もう 1 つ出せるか。holds は、もう取っておいてある分。
+  // give は、挑む人が手放す景品のランク（SR を手放して UR に挑む人なら、その SR も在庫に戻る）
+  canHold(target: Rarity, give: Rarity, holds: Holds): boolean {
+    const after = { ...holds }
+    addHold(after, target, give)
+    const ur = this.left('UR')
+    return ur >= after.UR && this.left('SR') + ur + after.back >= after.SR + after.UR
   }
 
   // 上位チャレンジに挑んだ人が手放した景品を在庫に戻す

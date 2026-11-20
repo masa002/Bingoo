@@ -56,7 +56,9 @@ export const KEEPALIVE = { ping: 'ping', pong: 'pong' } as const
 // ---- 端末 → サーバー --------------------------------------------------------
 
 export type HostCommand =
-  | { type: 'next' } // 「次へ」「スタート」「参加をしめきる」「締めくくりへ」
+  // 「次へ」「スタート」「参加をしめきる」「締めくくりへ」。from は、押したときに主催の画面が見ていた進行の位置（host の step）。
+  // サーバーのいまの位置と違えば捨てる（2 人の主催がほぼ同時に押しても、2 回進まないように）。from がなければ、いつでも進める（デモ・試験用）
+  | { type: 'next'; from?: string }
   | { type: 'auto'; on: boolean } // 自動進行
   | { type: 'trigger'; kind: 'wild' | 'mole' | null } // 次の「次へ」でイベントを起こす（null で取り消す）
   | { type: 'bots'; count: number } // リハーサル用の仮想の参加者を足す（受付中だけ）
@@ -177,6 +179,7 @@ export interface PollRes {
 
 export interface ResultRow {
   name: string
+  cardNo: number // カードの No.（スマホの上に出ている番号。景品を渡すときに、スマホを見せてもらって確かめる）
   rarity: Rarity | null
   prize: string
   how: 'bingo' | 'challenge' | 'double-chance'
